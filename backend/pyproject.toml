@@ -1,0 +1,29 @@
+[project]
+name = "boasi-s-backend"
+version = "0.1.0"
+description = "boasi_s — локальная научная RAG-платформа (PaperQA2 + Ollama)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+addopts = "-m 'not integration'"
+markers = ["integration: требует живого Ollama (медленные тесты)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF", "ANN"]
+ignore = [
+    "B008",    # Depends() в аргументах — идиома FastAPI
+    "RUF001", "RUF002", "RUF003",  # неоднозначные юникод-символы в строках (русский текст)
+    "UP042",   # str + Enum поддерживается целевым Python 3.11
+    "ANN401",  # Any сознателен в точках интеграции с paperqa/litellm
+]
+
+[tool.ruff.lint.per-file-ignores]
+# В тестах аннотации фикстур избыточны, assert вместо S101
+"tests/*" = ["ANN", "E501", "S101", "B011", "ASYNC240"]

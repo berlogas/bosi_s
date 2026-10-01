@@ -1,0 +1,17 @@
+{
+  "st_model": "st-multi-qa-MiniLM-L6-cos-v1",
+  "add_seconds": {
+    "biomass.md": 25.53,
+    "biomass_barents_2024.csv": 2.93,
+    "PaperQA2.pdf": 12.61
+  },
+  "chunks_per_doc": {
+    "biomass.md": 1,
+    "biomass_barents_2024.csv": 1,
+    "PaperQA2.pdf": 27
+  },
+  "total_chunks": 29,
+  "embedding_dims": 384,
+  "chunks_with_cyrillic": 1,
+  "failed_step": "aget_evidence -> litellm.Timeout (60s default); исправлено в 06/07 (timeout=3600)"
+}

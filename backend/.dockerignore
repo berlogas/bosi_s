@@ -1,0 +1,9 @@
+.venv/
+data/
+.test_data/
+.spike_pqa_home/
+spikes/
+docs/
+*.md
+.git/
+frontend/

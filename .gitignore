@@ -1,0 +1,12 @@
+.venv/
+.spike_pqa_home/
+spikes/_tmp_*
+spikes/fixture_state.json
+*.pyc
+__pycache__/
+.env
+data/
+.test_data/
+backups/
+backend/.pytest_cache/
+.hf-cache/

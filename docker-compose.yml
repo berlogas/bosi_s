@@ -1,0 +1,54 @@
+# boasi_s — локальный стек. Продакшн-переопределение: docker-compose.prod.yml
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: boasi-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: boasi-backend
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file: [.env]
+    environment:
+      DATA_DIR: /data
+      DATABASE_URL: sqlite:////data/boasi.sqlite3
+      PQA_HOME: /data/pqa
+      OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - boasi_data:/data
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: boasi-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      API_URL: http://backend:8000
+    ports:
+      - "127.0.0.1:8501:8501"
+
+volumes:
+  ollama_models:
+  boasi_data:

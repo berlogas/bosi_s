@@ -1,0 +1,32 @@
+# Продакшн-переопределение: GPU для Ollama, автозапуск, лимиты ресурсов.
+# Использование: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  ollama:
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_NUM_PARALLEL: "4"
+      OLLAMA_MAX_LOADED_MODELS: "2"
+    volumes:
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    labels:
+      - "com.docker.compose.project=boasi"
+
+  backend:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

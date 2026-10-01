@@ -1,0 +1,43 @@
+{
+  "model": "ollama/qwen2.5:3b",
+  "embedding": "st-multi-qa-MiniLM-L6-cos-v1",
+  "evidence_k": 4,
+  "settings_md5": "017c19123464b0b59e4e7275df370230",
+  "index_seconds": {
+    "biomass.md": 36.0,
+    "biomass_barents_2024.csv": 2.89,
+    "PaperQA2.pdf": 11.88
+  },
+  "evidence_seconds": 309.85,
+  "query_seconds": 374.42,
+  "question": "Какие методы измерения биомассы водорослей используются в Баренцевом море?",
+  "answer": "In the Barren Sea, three primary methods are employed for measuring algal biomass: the chlorophyll-a method, glass-fiber filter (GF/F) technique, and dry matter loss (DMS). The chlorophyll-a method relies on extracting water with methanol followed by spectrophotometric measurements at 664 nm and 647 nm. Glass-fiber filters involve filtering a known volume of water, drying it at 60°C, and weighing precisely using accurate scales (0.1 mg). The dry matter loss method requires the incineration of the filter at 450°C for four hours to determine organic content, including carbonates. An optical luminescence spectrophotometer is used as a calibration tool against specific types of biomass, while CTD sondes provide only temperature and salinity data.\n\nThe pqac-39104f42 file contains observations on algal biomass in the Barren Sea at the end of 2024. The methods mentioned there are 'GF/F' and 'Chl-a'. (biomass_notes lines 0-0, biomass_data_2024 lines 0-7)",
+  "formatted_answer": "Question: Какие методы измерения биомассы водорослей используются в Баренцевом море?\n\nIn the Barren Sea, three primary methods are employed for measuring algal biomass: the chlorophyll-a method, glass-fiber filter (GF/F) technique, and dry matter loss (DMS). The chlorophyll-a method relies on extracting water with methanol followed by spectrophotometric measurements at 664 nm and 647 nm. Glass-fiber filters involve filtering a known volume of water, drying it at 60°C, and weighing precisely using accurate scales (0.1 mg). The dry matter loss method requires the incineration of the filter at 450°C for four hours to determine organic content, including carbonates. An optical luminescence spectrophotometer is used as a calibration tool against specific types of biomass, while CTD sondes provide only temperature and salinity data.\n\nThe pqac-39104f42 file contains observations on algal biomass in the Barren Sea at the end of 2024. The methods mentioned there are 'GF/F' and 'Chl-a'. (biomass_notes lines 0-0, biomass_data_2024 lines 0-7)\n\nReferences\n\n1. (biomass_notes lines 0-0): biomass.md (спайк boasi_s)\n\n2. (biomass_data_2024 lines 0-7): biomass_barents_2024.csv (спайк boasi_s)",
+  "references": "1. (biomass_notes lines 0-0): biomass.md (спайк boasi_s)\n\n2. (biomass_data_2024 lines 0-7): biomass_barents_2024.csv (спайк boasi_s)",
+  "has_successful_answer": null,
+  "cost": 0.0,
+  "token_counts": {
+    "ollama/qwen2.5:3b": [
+      3521,
+      772
+    ]
+  },
+  "contexts": [
+    {
+      "score": 10,
+      "docname": "biomass_notes",
+      "citation": "biomass.md (спайк boasi_s)",
+      "name": "biomass_notes lines 0-0",
+      "chunk_head": "# Методы измерения биомассы (заметки исследователя)\n\nИзмерение биомассы водорослей в Баренцевом море выполняется тремя базовыми методами.\n\n## 1. Хлорофилл-а метод\nЭкстракция метанолом, спектрофотометр",
+      "summary": "Для измерения биомассы водорослей в Баренцевом море используют три основные метода: хлорофилл-а метод, стеклянные фильтры (GF/F) и сожжение и потеря сухого вещества (ДСВ). Хлорофилл-а метод основан на экстракции воды метанолом и спектрофотометрии на 664 нм и 647 нм. Стеклянные фильтры включают фильтрацию известного объема воды, сушку при 60 °C и весовое счисление на точных весах (0.1 мг). Метод ДСВ требует прокаливания фильтра при 450 °C за 4 часа для измерения содержания органического вещества, включая карбонаты. Применяется оптический датчик люминесценции для калибровки по конкретному виду биомассы, но CTD-зонд предоставляет только температуру и солёность воды."
+    },
+    {
+      "score": 5,
+      "docname": "biomass_data_2024",
+      "citation": "biomass_barents_2024.csv (спайк boasi_s)",
+      "name": "biomass_data_2024 lines 0-7",
+      "chunk_head": "station,date,depth_m,temperature_c,salinity_psu,chla_ug_l,biomass_mg_dw_l,method\nBS-1,2024-03-15,0,3.1,34.8,1.24,320,GF/F\nBS-1,2024-03-15,50,2.9,34.9,1.18,305,GF/F\nBS-2,2024-04-20,0,4.2,34.6,0.87,215,",
+      "summary": "В данном файле содержатся данные о наблюдении биомассы водорослей в Баренцево море на конец 2024 года. Методы измерения представлены как 'GF/F' и 'Chl-a'. Значение 'GF/F' используется для двух записей, а 'Chl-a' используется для трех записей."
+    }
+  ]
+}

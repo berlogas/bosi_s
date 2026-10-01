@@ -1,0 +1,34 @@
+{
+  "aadd_file_docname": "uploaded_notes",
+  "baseline_evidence": [
+    [
+      10,
+      "uploaded_notes",
+      "uploaded_notes lines 0-0"
+    ],
+    [
+      8,
+      "biomass_data",
+      "biomass_data lines 0-7"
+    ]
+  ],
+  "pickle_ok": true,
+  "restore_seconds": 7.334,
+  "identical_after_restore": true,
+  "delete_returns": [
+    "None",
+    "None",
+    "None"
+  ],
+  "duplicate_add": {
+    "first": "dup",
+    "second": null,
+    "third": null,
+    "docs": 1,
+    "texts": 1
+  },
+  "after_clear": {
+    "docs": 0,
+    "texts": 0
+  }
+}

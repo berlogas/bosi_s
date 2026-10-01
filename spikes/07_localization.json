@@ -1,0 +1,107 @@
+{
+  "default_system": "Answer in a direct and concise tone. Your audience is an expert, so be highly specific. If there are ambiguous terms or acronyms, first define them.",
+  "default_qa_len": 1067,
+  "evidence_seconds": 285.1,
+  "variant_a_system": {
+    "seconds": 122.4,
+    "answer": "Question: Какие методы измерения биомассы водорослей используются в Баренцевом море?\n\nВ Баренцевом море используются два метода измерения биомассы водорослей: хлорофилл-а метод и метод с использованием стеклянных фильтров (GF/F). Хлорофилл-а метод основан на спектрофотометрии метанола, в то время как метод с использованием стеклянных фильтров включает фильтрацию воды и ее сушку для измерения биомассы зоопланктона. Эти данные представлены в наборе данных о биомассе водорослей из Баренцевого моря (biomass_data_2024 lines 0-7).\n\nReferences\n\n1. (biomass_data_2024 lines 0-7): biomass_barents_2024.csv (спайк)"
+  },
+  "variant_b_qa": {
+    "seconds": 146.9,
+    "answer": "Question: Какие методы измерения биомассы водорослей используются в Баренцевом море?\n\nВ Баренцевом море используются два метода измерения биомассы водорослей: хлорофилл-а метод и стеклянные фильтры (GF/F). Хлорофилл-а метод основан на спектрофотометрии метанола, в то время как GF/F использует фильтрацию воды и сушку для измерения биомассы зоопланктона. Метод хлорофилла-а является оптическим методом, который калибруется по биомассе конкретного вида водорослей (см. (biomass_data_2024 lines 0-7)). Метод стеклянных фильтров же основывается на физическом измерении воды и ее частиц (см. (biomass_notes lines 0-0)).\n\nТаким образом, в данном наборе данных о биомассе водорослей из Баренцевого моря методы измерения указаны в столбце 'method', и данные показывают использование только двух методов: хлорофилл-а и стеклянные фильтры (см. (biomass_data_2024 lines 0-7)).\n\nReferences\n\n1. (biomass_data_2024 lines 0-7): biomass_barents_2024.csv (спайк)\n\n2. (biomass_notes lines 0-0): biomass.md (спайк)"
+  },
+  "fast_profile": {
+    "llm": "gpt-4o-2024-11-20",
+    "llm_config": null,
+    "summary_llm": "gpt-4o-2024-11-20",
+    "summary_llm_config": null,
+    "embedding": "text-embedding-3-small",
+    "embedding_config": null,
+    "temperature": 0.0,
+    "batch_size": 1,
+    "texts_index_mmr_lambda": 1.0,
+    "verbosity": 0,
+    "answer": {
+      "evidence_k": 5,
+      "evidence_retrieval": true,
+      "evidence_relevance_score_cutoff": 1,
+      "evidence_summary_length": "25 to 50 words",
+      "evidence_skip_summary": false,
+      "evidence_text_only_fallback": false,
+      "answer_max_sources": 3,
+      "max_answer_attempts": null,
+      "answer_length": "50 to 100 words",
+      "max_concurrent_requests": 5,
+      "answer_filter_extra_background": false,
+      "get_evidence_if_no_contexts": true,
+      "group_contexts_by_question": false,
+      "skip_evidence_citation_strip": false
+    },
+    "parsing": {
+      "page_size_limit": 1280000,
+      "use_doc_details": false,
+      "reader_config": {
+        "chunk_chars": 5000,
+        "overlap": 250
+      },
+      "multimodal": 1,
+      "citation_prompt": "Provide the citation for the following text in MLA Format. Do not write an introductory sentence. Do not fabricate a DOI such as '10.xxxx' if one cannot be found, just leave it out of the citation. If reporting date accessed, the current year is 2026\n\n{text}\n\nCitation:",
+      "structured_citation_prompt": "Extract the title, authors, and doi as a JSON from this MLA citation. If any field can not be found, return it as null. Use title, authors, and doi as keys, author's value should be a list of authors. {citation}\n\nCitation JSON:",
+      "disable_doc_valid_check": false,
+      "defer_embedding": false,
+      "doc_filters": null,
+      "use_human_readable_clinical_trials": false,
+      "enrichment_llm": "gpt-4o-2024-11-20",
+      "enrichment_llm_config": null,
+      "enrichment_page_radius": 1,
+      "enrichment_prompt": "You are analyzing an image, formula, or table from a scientific document. Provide a detailed description that will be used to answer questions about its content. Focus on key elements, data, relationships, variables, and scientific insights visible in the image. It's especially important to document referential information such as figure/table numbers, labels, plot colors, or legends.\n\nText co-located with the media may be associated with other media or unrelated content, so do not just blindly quote referential information. The smaller the image, the more likely co-located text is unrelated. To restate, often the co-located text is several pages of content, so only use aspects relevant to accompanying image, formula, or table.\n\nHere's a few failure modes with possible resolutions:\n- The media was a logo or icon, so the text is unrelated. In this case, briefly describe the media as a logo or icon, and do not mention other unrelated surrounding text.\n- The media was display type, so the text is probably unrelated. The display type can be spread over several lines. In this case, briefly describe the media as display type, and do not mention other unrelated surrounding text.\n- The media is a margin box or design element, so the text is unrelated. In this case, briefly describe the media as decorative, and do not mention other unrelated surrounding text.\n- The media came from a bad PDF read, so it's garbled. In this case, describe the media as garbled, state why it's considered garbled, and do not mention other unrelated surrounding text.\n- The media is a subfigure or a subtable. In this case, make sure to only detail the subfigure or subtable, not the entire figure or table. Do not mention other unrelated surrounding text.\n\nIMPORTANT: Start your response with exactly one of these labels:\n- 'RELEVANT:' if the media contains scientific content (e.g. figures, charts, tables, equations, diagrams, data visualizations) that could help answer scientific questions, or if you're unsure of relevance (e.g. garbled/corrupted content).\n- 'IRRELEVANT:' if the media content is not useful for scientific question-answer (e.g. journal logo, icon, display type/typography, decorative element, design element, margin box, is blank).\n\nAfter the label, provide your description.\n\n{context_text}Label relevance, describe the media, and if uncertain on a description please state why:",
+      "parse_pdf": "paperqa_pypdf.reader.parse_pdf_to_pages"
+    },
+    "prompts": {
+      "summary": "Summarize the excerpt below to help answer a question.\n\nExcerpt from {citation}\n\n---\n\n{text}\n\n---\n\nQuestion: {question}\n\nDo not directly answer the question, instead summarize to give evidence to help answer the question. Stay detailed; report specific numbers, equations, or direct quotes (marked with quotation marks). Reply \"Not applicable\" if the excerpt is irrelevant. At the end of your response, provide an integer score from 1-10 on a newline indicating relevance to question. Do not explain your score.\n\nRelevant Information Summary ({summary_length}):",
+      "qa": "Answer the question below with the context.\n\nContext:\n\n{context}\n\n---\n\nQuestion: {question}\n\nWrite an answer based on the context. If the context provides insufficient information reply \"I cannot answer.\" For each part of your answer, indicate which sources most support it via citation keys at the end of sentences, like {example_citation}. Only cite from the context above and only use the citation keys from the context.\n\n## Valid citation examples, only use comma/space delimited parentheticals:\n- (pqac-d79ef6fa, pqac-0f650d59)\n- (pqac-d79ef6fa)\n## Invalid citation examples:\n- (pqac-d79ef6fa and pqac-0f650d59)\n- (pqac-d79ef6fa;pqac-0f650d59)\n- (pqac-d79ef6fa-pqac-0f650d59)\n- pqac-d79ef6fa and pqac-0f650d59\n- Example's work (pqac-d79ef6fa)\n- (pages pqac-d79ef6fa)\n- Author et al. (2023)\n\nDo not concatenate citation keys, just use them as is. Write in the style of a scientific article, with concise sentences and coherent paragraphs. This answer will be used directly, so do not add any extraneous information.\n\n{prior_answer_prompt}Answer ({answer_length}):",
+      "answer_iteration_prompt": "You are iterating on a prior answer, with a potentially different context:\n\n{prior_answer}\n\nCreate a new answer only using context keys and data from the included context. You can not use context keys from the prior answer which are not also included in the above context.\n\n",
+      "select": "Select papers that may help answer the question below. Papers are listed as $KEY: $PAPER_INFO. Return a list of keys, separated by commas. Return \"None\", if no papers are applicable. Choose papers that are relevant, from reputable sources, and timely (if the question requires timely information).\n\nQuestion: {question}\n\nPapers: {papers}\n\nSelected keys:",
+      "pre": null,
+      "post": null,
+      "system": "Answer in a direct and concise tone. Your audience is an expert, so be highly specific. If there are ambiguous terms or acronyms, first define them.",
+      "use_json": false,
+      "summary_json": "Excerpt from {citation}\n\n---\n\n{text}\n\n---\n\nQuestion: {question}",
+      "summary_json_system": "Provide a summary of the relevant information that could help answer the question based on the excerpt. Your summary, combined with many others, will be given to the model to generate an answer. Respond with the following JSON format:\n\n{{\n  \"summary\": \"...\",\n  \"relevance_score\": 0-10\n}}\n\nwhere `summary` is relevant information from the text - {summary_length}. `relevance_score` is an integer 0-10 for the relevance of `summary` to the question.\n\nThe excerpt may or may not contain relevant information. If not, leave `summary` empty, and make `relevance_score` be 0.",
+      "context_outer": "{context_str}\n\nValid Keys: {valid_keys}",
+      "context_inner": "{name}: {text}"
+    },
+    "agent": {
+      "agent_llm": "gpt-4o-2024-11-20",
+      "agent_llm_config": null,
+      "agent_type": "fake",
+      "agent_config": null,
+      "agent_system_prompt": "You are a helpful AI assistant.",
+      "agent_prompt": "Use the tools to answer the question: {question}\n\nWhen the answer looks sufficient, you can terminate by calling the {complete_tool_name} tool. If the answer does not look sufficient, and you have already tried to answer several times with different evidence, terminate by calling the {complete_tool_name} tool. The current status of evidence/papers/cost is {status}",
+      "return_paper_metadata": false,
+      "search_count": 8,
+      "agent_evidence_n": 1,
+      "timeout": 500.0,
+      "tool_names": null,
+      "max_timesteps": null,
+      "index": {
+        "name": null,
+        "paper_directory": "N:\\Development\\boasi_s",
+        "manifest_file": null,
+        "index_directory": "C:\\Users\\Homo\\.pqa\\indexes",
+        "use_absolute_paper_directory": false,
+        "recurse_subdirectories": true,
+        "concurrency": 5,
+        "batch_size": 1,
+        "sync_with_paper_directory": true
+      },
+      "rebuild_index": true
+    },
+    "md5": "a85ce75d135d2c4a611459c0ef4a4dd3"
+  },
+  "fast_run": {
+    "evidence_seconds": 604.7,
+    "answer_seconds": 565.0,
+    "answer": "Question: Какие методы измерения биомассы водорослей используются в Баренцевом море?\n\nI cannot answer this question due to insufficient information.."
+  }
+}

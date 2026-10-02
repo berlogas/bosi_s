@@ -91,7 +91,10 @@ class AuditLogOut(ORMModel):
     user_agent: str | None
     ok: bool
     meta: dict[str, Any] | None
-    ts: datetime
+    # Имя поля совпадает с моделью (created_at). Раньше здесь было `ts`, и при
+    # from_attributes сериализация падала: «AuditLog has no attribute 'ts'» —
+    # вкладка «Аудит» отдавала 500.
+    created_at: datetime
 
 
 # --------------------------------------------------------------------------- sessions

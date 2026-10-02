@@ -161,7 +161,7 @@ def _audit(client) -> None:
         st.error(exc.message)
         return
     st.dataframe([{
-        "время": (e.get("ts") or "")[:19],
+        "время": (e.get("created_at") or "")[:19],
         "кто": e.get("actor_username") or "—",
         "действие": e.get("action"),
         "цель": e.get("target_type") or "",

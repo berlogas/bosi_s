@@ -160,12 +160,12 @@ def list_audit(
 ) -> list[Any]:
     from app.db.models import AuditLog
 
-    q = select(AuditLog).order_by(AuditLog.ts.desc())
+    q = select(AuditLog).order_by(AuditLog.created_at.desc())
     if action:
         q = q.where(AuditLog.action.ilike(f"%{action}%"))
     if target_type:
         q = q.where(AuditLog.target_type == target_type)
     if since:
-        q = q.where(AuditLog.ts >= since)
+        q = q.where(AuditLog.created_at >= since)
     q = q.offset(offset).limit(limit)
     return list(db.scalars(q))

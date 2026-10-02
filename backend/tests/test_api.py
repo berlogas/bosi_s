@@ -141,3 +141,49 @@ async def test_locks_endpoint(client) -> None:
     response = await client.get("/api/health/locks")
     assert response.status_code == 200
     assert "global_index" in response.json()
+
+async def test_admin_audit_endpoint_works(client, admin_user) -> None:
+    """Вкладка «Аудит»: сортировка и разбор даты обращаются к реальным колонкам.
+
+    Раньше здесь стояло AuditLog.ts, которого в модели нет — эндпоинт отдавал
+    500, а интерфейс падал. Тесты это пропускали: маршрут не был запрошен.
+    """
+    data = await _login(client, "admin", "admin-pass-123")
+    headers = {"Authorization": f"Bearer {data['tokens']['access_token']}"}
+
+    response = await client.get("/api/admin/audit?limit=5", headers=headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body, "журнал не должен быть пустым после входа"
+    entry = body[0]
+    assert {"created_at", "action", "ok", "actor_username"} <= set(entry)
+
+
+async def test_admin_audit_filters_by_action(client, admin_user) -> None:
+    data = await _login(client, "admin", "admin-pass-123")
+    headers = {"Authorization": f"Bearer {data['tokens']['access_token']}"}
+
+    response = await client.get("/api/admin/audit?action=auth.login&limit=10",
+                                headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert all(e["action"] == "auth.login" for e in response.json())
+
+
+async def test_admin_audit_filter_by_date(client, admin_user) -> None:
+    """Фильтр по since тоже идёт по колонке created_at."""
+    from datetime import timedelta
+
+    from app.db.models import utcnow
+
+    data = await _login(client, "admin", "admin-pass-123")
+    headers = {"Authorization": f"Bearer {data['tokens']['access_token']}"}
+    future = (utcnow() + timedelta(days=1)).isoformat()
+
+    # параметром, а не строкой URL: «+» в ISO-дате иначе станет пробелом
+    response = await client.get("/api/admin/audit", headers=headers,
+                                params={"since": future})
+
+    assert response.status_code == 200, response.text
+    assert response.json() == []

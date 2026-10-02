@@ -221,8 +221,46 @@ print_urls() {
   printf '  %sСостояние:%s  ./scripts/start.sh status\n' "$DIM" "$OFF"
   printf '  %sОстановить:%s ./scripts/start.sh stop\n' "$DIM" "$OFF"
   echo
-  printf '  Первый вход: учётной записи нет — создайте администратора:\n'
-  printf '    %s backend/scripts/create_admin.py admin\n' "$PY"
+  print_login_hint
+}
+
+# Подсказка по первому входу. Раньше печаталась безусловно и говорила
+# «учётной записи нет», даже когда админ давно существовал. Теперь смотрим
+# в БД и показываем реальное состояние.
+print_login_hint() {
+  local admins
+  admins="$(list_admins)"
+
+  if [ -n "$admins" ]; then
+    printf '  Вход готов: %s\n' "$admins"
+    printf '  %sЗабыли пароль:%s ./scripts/start.sh password <логин>\n' "$DIM" "$OFF"
+  else
+    echo
+    printf '  Учётных записей нет — создайте администратора:\n'
+    printf '    ./scripts/start.sh admin <логин>\n'
+    printf '  %sWindows:%s scripts\\start.bat admin <логин>\n' "$DIM" "$OFF"
+  fi
+}
+
+# Активные администраторы из БД. Пустая строка — записей нет либо БД ещё
+# не создана (первый запуск); это не повод для ошибки.
+list_admins() {
+  (
+    cd backend 2>/dev/null || return 0
+    "$PY" -c 'import sys
+sys.path.insert(0, ".")
+try:
+    from app.db.models import Role, User
+    from app.db.session import get_session_factory
+    with get_session_factory()() as db:
+        names = [u.username for u in db.query(User)
+            .filter(User.role == Role.admin, User.is_active.is_(True))
+            .order_by(User.created_at)]
+    print(", ".join(names))
+except Exception:
+    print("")'
+ 2>/dev/null
+  )
 }
 
 stop_all() {

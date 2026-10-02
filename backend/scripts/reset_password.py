@@ -4,7 +4,8 @@
 Нужно, когда пароль забыт или утерян: через интерфейс это невозможно —
 вход требует пароля, а создание пользователей доступно только админу.
 
-    python backend/scripts/reset_password.py ivanov
+    python backend/scripts/reset_password.py                 # показать, кто есть
+    python backend/scripts/reset_password.py ivanov          # спросит пароль
     python backend/scripts/reset_password.py ivanov --password "новый-пароль"
     python backend/scripts/reset_password.py --list
 
@@ -32,13 +33,24 @@ def list_users() -> int:
     with get_session_factory()() as db:
         users = db.query(User).order_by(User.created_at).all()
         if not users:
-            print("Пользователей нет.")
+            print("Пользователей нет. Создайте администратора:")
+            print("    backend/scripts/create_admin.py <логин>")
             return 1
         print(f"Пользователей: {len(users)}\n")
         for user in users:
             state = "активен" if user.is_active else "ЗАБЛОКИРОВАН"
-            last = user.last_login_at.strftime("%Y-%m-%d %H:%M") if user.last_login_at else "ни разу"
-            print(f"  {user.username:<20} {user.role.value:<11} {state:<12} создан {user.created_at:%Y-%m-%d}  вход: {last}")
+            last = (user.last_login_at.strftime("%Y-%m-%d %H:%M")
+                    if user.last_login_at else "ни разу")
+            print(f"  {user.username:<20} {user.role.value:<11} {state:<14} "
+                  f"создан {user.created_at:%Y-%m-%d}   вход: {last}")
+    return 0
+
+
+def show_usage() -> int:
+    print("Укажите логин. Кого можно выбрать — выше.")
+    print("Сброс пароля конкретному пользователю:")
+    print('    reset_password.py <логин>')
+    print('    reset_password.py <логин> --password "новый-пароль"')
     return 0
 
 
@@ -70,6 +82,7 @@ def reset(username: str, password: str | None) -> int:
         db.commit()
         print(f"Пароль пользователя «{username}» изменён.")
         print(f"Отозвано активных refresh-токенов: {revoked}")
+        print("Можно входить: http://127.0.0.1:8501")
     return 0
 
 
@@ -77,14 +90,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Восстановление пароля")
     parser.add_argument("username", nargs="?", help="Логин пользователя")
     parser.add_argument("--password", help="Новый пароль (иначе спросит интерактивно)")
-    parser.add_argument("--list", action="store_true", help="Показать всех пользователей")
+    parser.add_argument("--list", action="store_true", help="Показать пользователей")
     args = parser.parse_args()
 
     if args.list:
         return list_users()
     if not args.username:
-        parser.print_help()
-        return 1
+        list_users()
+        print()
+        return show_usage()
     return reset(args.username, args.password)
 
 

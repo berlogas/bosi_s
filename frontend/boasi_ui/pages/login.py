@@ -55,8 +55,9 @@ def render() -> None:
         st.error(exc.message)
         if exc.status == 401:
             st.caption("Сессия истекла — войдите заново.")
-        st.caption("Забыли пароль? "
-                   "`./scripts/start.sh password <логин>`")
+        st.caption("Забыли пароль? Выполните в терминале: "
+                   "`./scripts/start.sh password <ваш логин>` "
+                   "(без логина команда покажет, кто есть)")
         return
 
     state.set_login(user)

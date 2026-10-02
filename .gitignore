@@ -13,3 +13,9 @@ backend/.pytest_cache/
 
 # временные файлы отладки
 .tmp_cmp.txt
+
+# артефакты тестов в корне (каталог сценария Фазы 5)
+scenario/
+backend/.ruff_cache/
+backend/.pytest_cache/
+backend/.hf-cache/

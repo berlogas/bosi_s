@@ -20,7 +20,7 @@ mkdir -p "$RUN_DIR" "$LOG_DIR"
 
 # ------------------------------------------------------------------ конфигурация
 API_PORT="${API_PORT:-8000}"
-UI_PORT="${UI_PORT:-8501}"
+UI_PORT="${UI_PORT:-80}"
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
 
 # Python: Windows и Linux различаются путём к интерпретатору
@@ -164,8 +164,15 @@ start_manual() {
   if pid_of frontend >/dev/null 2>&1; then
     ok "Frontend уже запущен (pid $(pid_of frontend))"
   else
+    # Порт 80 может быть занят другим приложением (IIS, Skype, nginx).
+    # Тогда не отказываем, а переходим на 8501 и говорим об этом.
     if port_busy "$UI_PORT"; then
-      die "Порт $UI_PORT занят."
+      if [ "$UI_PORT" = "80" ] && ! port_busy 8501; then
+        warn "Порт 80 занят другим приложением — интерфейс будет на 8501"
+        UI_PORT=8501
+      else
+        die "Порт $UI_PORT занят."
+      fi
     fi
     step "Запуск интерфейса на порту $UI_PORT"
     (
@@ -378,7 +385,7 @@ case "${1:-start}" in
   ./scripts/start.sh test         прогнать тесты
 
 Переменные окружения:
-  API_PORT=8000  UI_PORT=8501  OLLAMA_URL=http://127.0.0.1:11434
+  API_PORT=8000  UI_PORT=80  OLLAMA_URL=http://127.0.0.1:11434
 USAGE
     ;;
   *) die "Неизвестная команда: $1 (./scripts/start.sh help)" ;;

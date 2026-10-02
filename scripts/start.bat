@@ -105,10 +105,15 @@ REM Открываем интерфейс в браузере. К этому м�
 REM дождался ответа /_stcore/health, то есть страница готова к открытию.
 REM NO_BROWSER=1 — открывать не надо (автоматические проверки, CI).
 if not "%NO_BROWSER%"=="1" (
-    if "%UI_PORT%"=="" set "UI_PORT=8501"
+    if "%UI_PORT%"=="" set "UI_PORT=80"
     echo.
-    echo   Открываю http://127.0.0.1:%UI_PORT%
-    start "" "http://127.0.0.1:%UI_PORT%"
+    if "%UI_PORT%"=="80" (
+        echo   Открываю http://127.0.0.1
+        start "" "http://127.0.0.1"
+    ) else (
+        echo   Открываю http://127.0.0.1:%UI_PORT%
+        start "" "http://127.0.0.1:%UI_PORT%"
+    )
 )
 
 if "%INTERACTIVE%"=="1" (

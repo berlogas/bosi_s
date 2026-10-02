@@ -82,7 +82,7 @@ def reset(username: str, password: str | None) -> int:
         db.commit()
         print(f"Пароль пользователя «{username}» изменён.")
         print(f"Отозвано активных refresh-токенов: {revoked}")
-        print("Можно входить: http://127.0.0.1:8501")
+        print("Можно входить: http://127.0.0.1")
     return 0
 
 

@@ -43,7 +43,7 @@ make health          # http://127.0.0.1:8000/api/health
 make create-admin
 ```
 
-URL: <http://127.0.0.1:8501>.
+URL: <http://127.0.0.1> (порт 80).
 
 ## 3. Что где лежит
 

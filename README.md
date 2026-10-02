@@ -19,7 +19,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"   # в SECRET_KEY
 ./scripts/start.sh                                            # или ./scripts/start.sh docker
 ```
 
-UI: <http://127.0.0.1:8501> · API: <http://127.0.0.1:8000/api/docs>
+UI: <http://127.0.0.1> · API: <http://127.0.0.1:8000/api/docs>
 
 Остановить — `./scripts/start.sh stop`, состояние — `./scripts/start.sh status`.
 

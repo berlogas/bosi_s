@@ -16,14 +16,15 @@
 ```bash
 cp .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"   # в SECRET_KEY
-make pull-models
-make up
-make create-admin
+./scripts/start.sh                                            # или ./scripts/start.sh docker
 ```
 
 UI: <http://127.0.0.1:8501> · API: <http://127.0.0.1:8000/api/docs>
 
-Подробности — [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Остановить — `./scripts/start.sh stop`, состояние — `./scripts/start.sh status`.
+
+**Пошаговая инструкция:** [docs/LAUNCH.md](docs/LAUNCH.md).
+Развёртывание и бэкапы: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Документация
 
@@ -33,6 +34,7 @@ UI: <http://127.0.0.1:8501> · API: <http://127.0.0.1:8000/api/docs>
 | [PLAN.md](PLAN.md) | План работ по фазам и статус каждой |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Исследователю: сессии, категории документов, режимы поиска, проекты |
 | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Администратору: пользователи, глобальная база, аудит, регламент |
+| [docs/LAUNCH.md](docs/LAUNCH.md) | **Как запустить**: скрипты, порты, типичные ошибки |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Развёртывание, бэкап, диагностика, hardening |
 | [docs/SPICE_REPORT.md](docs/SPICE_REPORT.md) | Предварительное исследование PaperQA2 |
 | `docs/PHASE*_REPORT.md` | Отчёты по фазам: что сделано, какие грабли встретились |

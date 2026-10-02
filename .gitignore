@@ -19,3 +19,5 @@ scenario/
 backend/.ruff_cache/
 backend/.pytest_cache/
 backend/.hf-cache/
+.run/
+logs/

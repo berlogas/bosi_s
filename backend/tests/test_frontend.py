@@ -219,7 +219,7 @@ def test_empty_credentials_warn(fake_api) -> None:
     at = _app()
     at.button(key="login_submit").click().run()
 
-    assert any("Введите логин" in w.value for w in at.warning)
+    assert any("Заполните оба поля" in w.value for w in at.warning)
 
 
 # --------------------------------------------------------------------------- дашборд
@@ -288,3 +288,54 @@ def test_upload_file_registers_document(fake_api) -> None:
     # находим загрузчик файлов и отправляем файл
     uploader = at.get("file_uploader")
     assert uploader is not None
+
+# --------------------------------------------------------------------------- форма входа
+def test_login_form_has_username_and_password_fields(fake_api) -> None:
+    """Форма входа обязана быть на экране: поля логина и пароля."""
+    at = _app()
+
+    assert not at.exception, at.exception
+    assert at.text_input(key="login_username") is not None
+    assert at.text_input(key="login_password") is not None
+    assert at.button(key="login_submit") is not None
+    assert len(at.get("form")) == 1, "вход должен быть одной формой"
+
+
+def test_login_screen_offers_password_recovery(fake_api) -> None:
+    """На экране входа есть подсказка, как восстановить пароль."""
+    at = _app()
+
+    labels = [e.label for e in at.expander]
+    assert any("Нет доступа" in label for label in labels), labels
+
+def test_empty_form_shows_warning(fake_api) -> None:
+    at = _app()
+    at.button(key="login_submit").click().run()
+
+    assert any("Заполните оба поля" in w.value for w in at.warning)
+
+
+def test_failed_login_keeps_on_login_screen(fake_api) -> None:
+    """После неудачи остаёмся на входе и видим причину."""
+    at = _app()
+    at.text_input(key="login_username").set_value("ivanov")
+    at.text_input(key="login_password").set_value("wrong")
+    at.run()
+    at.button(key="login_submit").click().run()
+
+    assert not at.exception, at.exception
+    assert any("Неверный логин" in e.value for e in at.error)
+    assert at.text_input(key="login_username") is not None, "форма должна остаться"
+
+
+def test_successful_login_switches_to_dashboard(fake_api) -> None:
+    at = _app()
+    at.text_input(key="login_username").set_value("ivanov")
+    at.text_input(key="login_password").set_value("correct-pass")
+    at.run()
+    at.button(key="login_submit").click().run()
+
+    assert not at.exception, at.exception
+    remaining = [t.label for t in at.text_input]
+    assert "Логин" not in remaining, "после входа форма исчезает"
+    assert any("Дашборд" in m.value for m in at.markdown)

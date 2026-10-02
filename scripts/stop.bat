@@ -45,4 +45,3 @@ if not defined BASH (
 
 "!BASH!" "scripts/start.sh" stop
 echo.
-pause

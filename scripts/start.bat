@@ -80,7 +80,10 @@ echo.
 "!BASH!" "scripts/start.sh" %*
 set "RC=%ERRORLEVEL%"
 
-echo.
-if not "%RC%"=="0" echo   Код возврата: %RC%
-pause
+REM Пауза только при ошибке: иначе окно "висит" и кажется, что запуск не идёт.
+if not "%RC%"=="0" (
+    echo.
+    echo   Запуск не удался, код возврата: %RC%
+    pause
+)
 exit /b %RC%

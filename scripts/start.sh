@@ -316,6 +316,12 @@ case "${1:-start}" in
   logs)          show_logs "${2:-backend}" ;;
   models)        pull_models ;;
   admin)         shift; create_admin "$@" ;;
+  users)         "$PY" backend/scripts/reset_password.py --list ;;
+  password)      shift
+                 if [ -z "${1:-}" ]; then
+                   die "Укажите логин: ./scripts/start.sh password <login>"
+                 fi
+                 "$PY" backend/scripts/reset_password.py "$@" ;;
   test)          cd backend && "$PY" -m pytest -q ;;
   help|-h|--help)
     cat << 'USAGE'
@@ -329,6 +335,8 @@ case "${1:-start}" in
   ./scripts/start.sh logs backend хвост логов (frontend)
   ./scripts/start.sh models       скачать модели Ollama
   ./scripts/start.sh admin <login> создать администратора
+  ./scripts/start.sh users        список пользователей
+  ./scripts/start.sh password <login> [новый-пароль]  сброс пароля
   ./scripts/start.sh test         прогнать тесты
 
 Переменные окружения:

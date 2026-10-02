@@ -119,6 +119,9 @@ def render_page(name: str, renderer) -> None:
     try:
         renderer()
     except ApiError as exc:
+        # Ошибки сервера тоже пишем в лог: по одной трассировке в браузере
+        # причина не читается, а по логу — да.
+        log.warning("Страница %s: ошибка API %s — %s", name, exc.status, exc.message)
         st.error(exc.message or "Ошибка обращения к серверу")
         if exc.detail:
             st.caption(f"Подробности: {exc.detail}")

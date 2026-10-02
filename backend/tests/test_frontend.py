@@ -339,3 +339,104 @@ def test_successful_login_switches_to_dashboard(fake_api) -> None:
     remaining = [t.label for t in at.text_input]
     assert "Логин" not in remaining, "после входа форма исчезает"
     assert any("Дашборд" in m.value for m in at.markdown)
+
+
+# --------------------------------------------------------------------------- устойчивость
+def test_failing_page_does_not_crash_app(monkeypatch) -> None:
+    """Упавшая страница не должна ронять весь интерфейс.
+
+    Раньше исключение всплывало прямо в `main()`, и пользователь видел
+    только `File "app.py", line 90, in <module>` — что и не говорило, что
+    именно сломалось. Теперь на месте страницы появляется понятное сообщение.
+    """
+    import boasi_ui.pages.dashboard as dashboard_module
+    from streamlit.testing.v1 import AppTest
+
+
+    class AuthedApi:
+        token = "test-token"      # иначе main() откроет страницу входа
+        user = RESEARCHER
+
+        def health(self):
+            return {"status": "ok", "llm_model": "stub", "embedding_model": "stub",
+                    "ollama": {"reachable": False}}
+
+        @property
+        def is_admin(self):
+            return False
+
+    def boom():
+        raise RuntimeError("здесь что-то сломалось")
+
+    monkeypatch.setattr(dashboard_module, "render", boom)
+
+    at = AppTest.from_file(app_path, default_timeout=30)
+    at.run()
+    at.session_state["api"] = AuthedApi()
+    at.session_state["page"] = "dashboard"
+    at.run()
+
+    assert not at.exception, f"приложение не должно падать: {at.exception}"
+    assert any("не отрисовалась" in e.value for e in at.error)
+    assert any("RuntimeError" in e.value for e in at.error)
+
+
+def test_api_error_on_page_is_shown_as_message(monkeypatch) -> None:
+    """Ошибка API на странице — понятное сообщение, а не трассировка."""
+    import boasi_ui.pages.dashboard as dashboard_module
+    from boasi_ui.api import ApiError
+    from streamlit.testing.v1 import AppTest
+
+    def raise_api_error():
+        raise ApiError("Достигнут лимит документов (50)", status=409)
+
+    monkeypatch.setattr(dashboard_module, "render", raise_api_error)
+
+    class AuthedApi:
+        token = "test-token"
+        user = RESEARCHER
+
+        def health(self):
+            return {"status": "ok", "llm_model": "stub", "embedding_model": "stub",
+                    "ollama": {"reachable": False}}
+
+        @property
+        def is_admin(self):
+            return False
+
+    at = AppTest.from_file(app_path, default_timeout=30)
+    at.run()
+    at.session_state["api"] = AuthedApi()
+    at.session_state["page"] = "dashboard"
+    at.run()
+
+    assert not at.exception, at.exception
+    assert any("Достигнут лимит" in e.value for e in at.error)
+
+
+def test_sidebar_failure_does_not_crash_app() -> None:
+    """Сбой боковой панели не должен ронять приложение.
+
+    Панель вне границы страниц: ошибка проверки здоровья раньше обрушила бы
+    весь интерфейс целиком.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    class BrokenApi:
+        token = "t"
+        user = RESEARCHER
+
+        @property
+        def is_admin(self):
+            return False
+
+        def health(self):
+            raise RuntimeError("панель сломалась")
+
+    at = AppTest.from_file(app_path, default_timeout=30)
+    at.run()
+    at.session_state["api"] = BrokenApi()
+    at.session_state["page"] = "login"
+    at.run()
+
+    assert not at.exception, f"приложение не должно падать: {at.exception}"

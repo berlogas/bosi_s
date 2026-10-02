@@ -7,8 +7,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+import traceback
+from pathlib import Path
 
 import streamlit as st
 
@@ -17,6 +20,32 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from boasi_ui import state  # noqa: E402
 from boasi_ui.api import ApiClient, ApiError  # noqa: E402
 from boasi_ui.pages import admin, dashboard, login, workspace  # noqa: E402
+
+log = logging.getLogger("boasi.frontend")
+
+
+def _setup_logging() -> None:
+    """Писать логи интерфейса и в консоль, и в logs/frontend.log.
+
+    Без файла трассировка упавшей страницы терялась: Streamlit отправляет её
+    в браузер, а в stdout остаётся пусто.
+    """
+    log.setLevel(logging.INFO)
+    if log.handlers:
+        return
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    stream = logging.StreamHandler(sys.stdout)
+    stream.setFormatter(fmt)
+    log.addHandler(stream)
+    root = Path(__file__).resolve().parents[1] / "logs"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(root / "frontend.log", encoding="utf-8")
+        file_handler.setFormatter(fmt)
+        log.addHandler(file_handler)
+    except OSError:
+        # без прав на запись работаем только с консолью
+        pass
 
 st.set_page_config(page_title="boasi_s", page_icon="📚", layout="wide",
                    initial_sidebar_state="expanded")
@@ -73,18 +102,50 @@ def sidebar() -> None:
             st.warning(exc.message)
 
 
+def render_page(name: str, renderer) -> None:
+    """Отрисовать страницу, не давая одной упавшей вкладке обрушить всё.
+
+    Раньше исключение из любой страницы всплывало прямо в `main()`, и
+    пользователь видел только `File "app.py", line 90, in <module>` —
+    без указания, что именно сломалось. Теперь ошибка показывается на
+    месте: понятный текст, код ошибки и технические подробности под раскрытием.
+    """
+    try:
+        renderer()
+    except ApiError as exc:
+        st.error(exc.message or "Ошибка обращения к серверу")
+        if exc.detail:
+            st.caption(f"Подробности: {exc.detail}")
+    except Exception as exc:  # noqa: BLE001 — граница доверия к странице
+        log.exception("Страница %s: непредвиденная ошибка", name)
+        st.error(f"Страница «{name}» не отрисовалась: "
+                 f"{type(exc).__name__}: {exc}")
+        st.caption("Подробности — в logs/frontend.log и logs/backend.log. "
+                   "Чтобы вернуться, откройте другую вкладку или перезапустите "
+                   "интерфейс.")
+        with st.expander("Технические подробности"):
+            st.code(traceback.format_exc())
+
+
 def main() -> None:
-    sidebar()
+    _setup_logging()
+    # Боковая панель вне границы страниц: падение здесь обрушило бы всё
+    # приложение, поэтому она тоже защищена.
+    try:
+        sidebar()
+    except Exception:  # noqa: BLE001
+        log.exception("Боковая панель: непредвиденная ошибка")
+        st.sidebar.caption("Панель недоступна — проверьте соединение с сервером.")
     page = st.session_state.get("page") or ("dashboard"
                                             if state.is_authenticated() else "login")
     if page == "login" or not state.is_authenticated():
-        login.render()
+        render_page("Вход", login.render)
     elif page == "admin":
-        admin.render()
+        render_page("Администрирование", admin.render)
     elif page == "workspace":
-        workspace.render()
+        render_page("Сессия", workspace.render)
     else:
-        dashboard.render()
+        render_page("Дашборд", dashboard.render)
 
 
 main()

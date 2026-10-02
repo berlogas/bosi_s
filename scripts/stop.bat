@@ -5,6 +5,12 @@ REM Git Bash ищется так же, как в start.bat (WSL-овский bas
 setlocal enabledelayedexpansion
 cd /d "%~dp0.."
 
+REM Пауза только при запуске двойным кликом (в %cmdcmdline% нет /c).
+set "INTERACTIVE=1"
+REM /c:"..." — литеральный поиск: без двоеточия findstr принял бы
+REM /c за собственный переключатель и детектор всегда давал бы "интерактивно".
+echo %cmdcmdline% | findstr /i /c:"/c" >nul && set "INTERACTIVE=0"
+
 set "BASH="
 for %%P in (
     "%ProgramFiles%\Git\bin\bash.exe"
@@ -45,3 +51,8 @@ if not defined BASH (
 
 "!BASH!" "scripts/start.sh" stop
 echo.
+if "%INTERACTIVE%"=="1" (
+    echo   Службы остановлены. Это окно можно закрыть.
+    echo.
+    pause
+)

@@ -339,6 +339,17 @@ pull_models() {
   fi
 }
 
+# Последние ошибки интерфейса — то, что пользователю нужно приложить к
+# сообщению об ошибке.
+show_errors() {
+  file="$LOG_DIR/frontend.log"
+  [ -f "$file" ] || { echo "Лог интерфейса ещё не создан: $file"; return 0; }
+  printf '  %sОшибки интерфейса (%s)%s
+
+' "$DIM" "$file" "$OFF"
+  grep -A 12 -E "ERROR|Traceback" "$file" | tail -60 || echo "  ошибок не зафиксировано"
+}
+
 show_logs() {
   which="${1:-backend}"
   file="$LOG_DIR/$which.log"
@@ -359,6 +370,7 @@ case "${1:-start}" in
   restart)       stop_all; echo; start_manual ;;
   status)        status_all ;;
   logs)          show_logs "${2:-backend}" ;;
+  errors)        show_errors ;;
   models)        pull_models ;;
   admin)         shift; create_admin "$@" ;;
   users)         "$PY" backend/scripts/reset_password.py --list ;;
@@ -378,6 +390,7 @@ case "${1:-start}" in
   ./scripts/start.sh restart      перезапустить
   ./scripts/start.sh status       состояние компонентов
   ./scripts/start.sh logs backend хвост логов (frontend)
+  ./scripts/start.sh errors       ошибки интерфейса с трассировками
   ./scripts/start.sh models       скачать модели Ollama
   ./scripts/start.sh admin <login> создать администратора
   ./scripts/start.sh users        список пользователей

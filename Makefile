@@ -3,7 +3,7 @@ PY ?= .venv/Scripts/python.exe
 PYTHON ?= .venv/Scripts/python      # Linux/macOS
 BACKEND := backend
 
-.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup restore pull-models
+.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup restore pull-models reindex metrics health
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -39,9 +39,20 @@ models: ## скачать модели Ollama для локальной разр
 	ollama pull qwen2.5:3b
 	ollama pull nomic-embed-text
 
-pull-models: ## предзагрузить модели в том Ollama (для оффлайн-работы контура)
+# Список моделей берётся из .env (LLM_MODEL / EMBEDDING_MODEL) или из MODELS.
+pull-models: ## предзагрузить модели Ollama в том (для оффлайн-работы контура)
 	docker compose up -d ollama
-	docker compose exec -T ollama ollama pull $(or $(MODEL),qwen2.5:3b)
+	@./scripts/pull_models.sh
+
+reindex: ## переиндексация глобальной базы
+	curl -fsS -X POST http://127.0.0.1:8000/api/admin/documents/reindex 	  -H "Authorization: Bearer $$ADMIN_TOKEN" || echo "нужен ADMIN_TOKEN"
+	@echo "см. docs/OPERATIONS.md"
+
+metrics: ## показать метрики платформы
+	@curl -fsS http://127.0.0.1:8000/api/metrics.json || echo "backend не запущен"
+
+health: ## проверка состояния стека
+	@curl -fsS http://127.0.0.1:8000/api/health || echo "backend не запущен"
 
 up: ## поднять весь стек в Docker
 	docker compose up -d --build

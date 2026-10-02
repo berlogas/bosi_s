@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.core.errors import ForbiddenError
+from app.core.errors import ForbiddenError, TooManyRequestsError
+from app.core.rate_limit import login_limiter
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -47,12 +48,27 @@ def _client_meta(request: Request) -> dict[str, str | None]:
 async def login(payload: LoginRequest, request: Request,
                 db: Session = Depends(get_db)) -> LoginResponse:
     settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+
+    # Фаза 9: защита от перебора. Считаем только неудачные попытки,
+    # чтобы медленный, но честный пользователь не попал под блокировку.
+    if login_limiter.is_blocked(payload.username, ip):
+        audit(db, action="auth.login_blocked", ok=False, username=payload.username,
+              **_client_meta(request))
+        raise TooManyRequestsError(
+            "Слишком много неудачных попыток входа. Попробуйте позже.",
+            meta={"retry_after_seconds": settings.login_lockout_seconds},
+        )
+
     user = get_user_by_username(db, payload.username)
 
     if user is None or not verify_password(payload.password, user.hashed_password):
+        attempts = login_limiter.record_failure(payload.username, ip)
         audit(db, action="auth.login", actor=user, ok=False,
-              reason="bad_credentials", **_client_meta(request))
+              reason="bad_credentials", attempts=attempts, **_client_meta(request))
         raise ForbiddenError("Неверный логин или пароль")
+
+    login_limiter.reset(payload.username, ip)
 
     if not user.is_active:
         raise ForbiddenError("Пользователь отключён")

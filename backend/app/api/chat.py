@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -75,6 +76,61 @@ async def chat_query(payload: ChatQueryRequest, request: Request,
         sources=result.sources, references=result.references,
         mode=payload.mode, query=payload.query,
         from_cache=result.from_cache, stats=result.stats)
+
+
+@router.post("/query-async")
+async def chat_query_async(payload: ChatQueryRequest, request: Request,
+                           user: User = Depends(get_current_user),
+                           db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Фоновый вопрос: отдаём task_id, UI опрашивает /api/tasks/{id}.
+
+    На dev-машине ответ занимает минуты, поэтому синхронный POST /query
+    (он остаётся для скриптов и тестов) дополняется фоновым режимом.
+    """
+    from app.services.tasks import Task, tasks
+
+    if not payload.session_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "session_id обязателен для chat/query")
+    session = get_owned_session(db, payload.session_id, user)
+    ensure_writable(session)
+
+    async def body(task: Task) -> dict[str, Any]:
+        # прогресс по этапам: поиск по коллекциям -> rerank -> генерация
+        task.step = "поиск по глобальной базе и сессии"
+        task.progress = 20
+        fusion = RagFusionService()
+        result = await fusion.answer(
+            db, query=payload.query, session_id=session.id, mode=payload.mode,
+            k=payload.k or 10, max_sources=payload.max_sources or 5,
+            use_cache=not payload.no_cache)
+        task.progress = 100
+        task.step = "готово"
+        messages_repo.save_exchange(
+            db, user=user, question=payload.query,
+            answer=result.answer.formatted_answer, session_id=session.id,
+            mode=payload.mode, sources=result.sources,
+            cost=result.answer.cost, duration_seconds=result.answer.seconds,
+            token_counts=result.answer.token_counts)
+        touch_session(db, session, action_type="chat",
+                      action_label=f"Вопрос: {payload.query[:60]}",
+                      snapshot={"tab": "chat"})
+        leases.touch(session.id, 600)
+        return {
+            "answer": result.answer.formatted_answer,
+            "sources": result.sources,
+            "references": result.references,
+            "from_cache": result.from_cache,
+            "stats": result.stats,
+        }
+
+    task = tasks.submit(body, kind="chat",
+                        title=f"Вопрос: {payload.query[:50]}",
+                        user_id=user.id, session_id=session.id)
+    audit(db, action="chat.query_async", actor=user, target_type="session",
+          target_id=session.id, ip=_ip(request), task=task.id,
+          mode=payload.mode.value)
+    return {"task_id": task.id}
 
 
 @router.post("/quick-query", response_model=QuickQueryResponse)

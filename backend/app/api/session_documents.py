@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 import anyio
@@ -41,6 +40,7 @@ from app.api.serializers import (
     document_from_row,
     link_out,
 )
+from app.core.safety import validate_session_import
 from app.core.security import get_current_user, require_researcher
 from app.db.models import (
     Document,
@@ -184,10 +184,9 @@ async def add_document_path(
     raw_path = str(payload.get("path") or "").strip()
     if not raw_path:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Не указан путь к файлу")
-    path = Path(raw_path)
-    is_file = await anyio.to_thread.run_sync(lambda: path.exists() and path.is_file())
-    if not is_file:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Файл не найден: {path.name}")
+    # ТЗ (Фаза 9): нельзя выйти за пределы каталога сессии.
+    path = await anyio.to_thread.run_sync(
+        validate_session_import, session_id, raw_path)
 
     category = _parse_category(payload.get("category"))
     tags = _parse_tags(payload.get("tags"))

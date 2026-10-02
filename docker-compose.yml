@@ -1,4 +1,7 @@
 # boasi_s — локальный стек. Продакшн-переопределение: docker-compose.prod.yml
+#
+# Модели Ollama тянутся заранее: `make pull-models`. Без них платформа
+# стартует, но не сможет отвечать (см. docs/OPERATIONS.md).
 services:
   ollama:
     image: ollama/ollama:latest
@@ -43,6 +46,12 @@ services:
       timeout: 10s
       retries: 5
       start_period: 180s
+    # Ограничения dev-машины (8 CPU, без GPU). В проде — docker-compose.prod.yml
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
 
   frontend:
     build:
@@ -63,6 +72,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
 
 volumes:
   ollama_models:

@@ -40,6 +40,13 @@ class ConflictError(AppError):
     code = "limit_exceeded"
 
 
+class TooManyRequestsError(AppError):
+    """Превышен лимит попыток (rate-limit логина)."""
+
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "rate_limited"
+
+
 class UpstreamError(AppError):
     """Ollama недоступен или вернул ошибку."""
 

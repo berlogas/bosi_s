@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.api.serializers import document_from_ref, document_from_row
 from app.core.errors import NotFoundError
+from app.core.safety import validate_global_import
 from app.core.security import require_admin
 from app.db.models import (
     Document,
@@ -129,6 +130,11 @@ async def bulk_add(payload: dict[str, Any], request: Request,
     if len(paths) > limit:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             f"За один раз не больше {limit} файлов")
+    allowed = [str(p) for p in
+               await anyio.to_thread.run_sync(lambda plist: [
+                   str(validate_global_import(str(item), must_exist=False))
+                   for item in plist], paths)]
+    paths = allowed
     missing = [p for p in paths
                if not await anyio.to_thread.run_sync(Path(str(p)).exists)]
     if missing:
@@ -150,6 +156,61 @@ async def bulk_add(payload: dict[str, Any], request: Request,
     )
 
 
+@router.post("/bulk-async")
+async def bulk_async(payload: dict[str, Any], request: Request,
+                     admin: User = Depends(require_admin),
+                     db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Фоновая индексация пачки: UI получает task_id и следит за прогрессом.
+
+    Индексация одного PDF занимает секунды-минуты, поэтому держать HTTP-запрос
+    открытым нельзя — UI «висит спиннером» и не может отменить операцию.
+    """
+    from app.services.tasks import Task, tasks
+
+    paths = payload.get("paths") or []
+    if not isinstance(paths, list) or not paths:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Ожидается список `paths`")
+    if len(paths) > 200:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "За один раз не больше 200 файлов")
+    present = await anyio.to_thread.run_sync(
+        lambda: [str(p) for p in paths if Path(str(p)).is_file()])
+    existing = present
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ни один файл не найден")
+
+    tag_list = [str(t).strip() for t in (payload.get("tags") or []) if str(t).strip()]
+
+    async def body(task: Task) -> dict[str, Any]:
+        service = _service()
+        added: list[dict[str, Any]] = []
+        failed: list[dict[str, str]] = []
+        for index, path in enumerate(existing, start=1):
+            tasks.report(task, int(100 * (index - 1) / len(existing)),
+                          f"файл {index}/{len(existing)}: {Path(path).name}")
+            try:
+                ref = await service.add_file(Path(path))
+            except Exception as exc:  # один плохой файл не роняет пачку
+                failed.append({"name": Path(path).name,
+                               "error": f"{type(exc).__name__}: {exc}"})
+                continue
+            if ref is None:
+                continue
+            row = _register(db, admin, ref, tag_list, "bulk")
+            added.append({"id": row.id, "docname": row.docname,
+                          "chunks": row.chunks_count})
+        return {"added": added, "failed": failed, "total": len(existing)}
+
+    task = tasks.submit(body, kind="indexing",
+                        title=f"Индексация {len(existing)} файлов",
+                        user_id=admin.id)
+    audit(db, action="admin.documents.bulk_async", actor=admin,
+          target_type="collection", target_id="global",
+          **_meta(request), requested=len(existing), task=task.id)
+    return {"task_id": task.id, "total": len(existing)}
+
+
 @router.post("/path", response_model=DocumentOut)
 async def add_path(payload: dict[str, Any], request: Request,
                    admin: User = Depends(require_admin),
@@ -157,10 +218,7 @@ async def add_path(payload: dict[str, Any], request: Request,
     raw_path = str(payload.get("path") or "").strip()
     if not raw_path:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Не указан путь")
-    path = Path(raw_path)
-    is_file = await anyio.to_thread.run_sync(lambda: path.exists() and path.is_file())
-    if not is_file:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Файл не найден: {path.name}")
+    path = await anyio.to_thread.run_sync(validate_global_import, raw_path)
     ref = await _service().add_file(path)
     if ref is None:
         raise HTTPException(status.HTTP_409_CONFLICT,

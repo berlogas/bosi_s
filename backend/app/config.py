@@ -88,6 +88,17 @@ class Settings(BaseSettings):
     max_projects_per_session: int = 5
     max_quick_history: int = 200
 
+    # ---------- безопасность (Фаза 9) ----------
+    # Разрешить импорт документов откуда угодно. По умолчанию выключено:
+    # исследователь может загружать только из каталога своей сессии.
+    allow_external_import_paths: bool = False
+    # Защита от перебора пароля на /api/auth/login
+    login_max_attempts: int = 10
+    login_window_seconds: int = 300
+    login_lockout_seconds: int = 300
+    # Минимальная длина SECRET_KEY (короткий ключ ломает подпись JWT)
+    min_secret_key_length: int = 32
+
     # ---------- фоновая обработка ----------
     indexer_concurrency: int = 1
     background_poll_seconds: float = 2.0
@@ -141,6 +152,34 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    def validate_runtime(self) -> list[str]:
+        """Проверки настроек при старте. Возвращает предупреждения.
+
+        Ошибки (когда продолжать нельзя) поднимаются исключением.
+        """
+        warnings: list[str] = []
+        if len(self.secret_key) < self.min_secret_key_length:
+            raise RuntimeError(
+                f"SECRET_KEY короче {self.min_secret_key_length} символов: "
+                "подпись JWT будет ненадёжной. Сгенерируйте новый: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        if "change-me" in self.secret_key.lower():
+            raise RuntimeError(
+                "SECRET_KEY остался шаблонным из .env.example — замените его.")
+        if self.environment == "prod":
+            if self.debug:
+                warnings.append("DEBUG=true в prod — отключите отладочный режим.")
+            if self.multimodal:
+                warnings.append("MULTIMODAL=true в prod — требовался OFF.")
+            if not self.offline_mode:
+                warnings.append("OFFLINE_MODE=false: возможны внешние запросы "
+                                "к Crossref/Semantic Scholar.")
+        if self.allow_external_import_paths:
+            warnings.append("ALLOW_EXTERNAL_IMPORT_PATHS=true: импорт файлов "
+                            "разрешён вне каталога данных.")
+        return warnings
 
     def ensure_dirs(self) -> None:
         for path in (self.data_dir, self.resolved_pqa_home, self.sessions_dir, self.documents_dir):

@@ -10,3 +10,6 @@ data/
 backups/
 backend/.pytest_cache/
 .hf-cache/
+
+# временные файлы отладки
+.tmp_cmp.txt

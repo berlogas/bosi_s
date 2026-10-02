@@ -31,8 +31,11 @@ async def session_id(client, researcher):
 
 
 @pytest.fixture
-def paper(tmp_path):
-    path = tmp_path / "biomass.md"
+def paper(stub_registry):
+    """Файл в РАЗРЕШЁННОМ каталоге: с Фазы 9 путь снаружи data_dir отклоняется (403)."""
+    directory = stub_registry.app.documents_dir / "incoming"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "biomass.md"
     path.write_text(
         "# Биомасса водорослей\n\n"
         "Биомасса измеряется методом GF/F — отношением сухого вещества к сырому.\n"
@@ -240,10 +243,26 @@ async def test_add_document_from_path_and_list(client, researcher, session_id,
     assert [d["dockey"] for d in listed.json()] == [body["dockey"]]
 
 
-async def test_add_document_missing_path_404(client, researcher, session_id, stub_registry) -> None:
+async def test_add_document_missing_path_404(client, researcher, session_id,
+                                             stub_registry) -> None:
+    """Разрешённый каталог, но файла нет -> 404 (а не 403)."""
+    missing = stub_registry.app.documents_dir / "incoming" / "нет-такого.md"
     response = await client.post(f"/api/sessions/{session_id}/documents/path",
-                                 json={"path": "/tmp/нет-такого.md"}, headers=researcher)
+                                 json={"path": str(missing)}, headers=researcher)
     assert response.status_code == 404
+
+
+async def test_add_document_outside_data_dir_403(client, researcher, session_id,
+                                                 stub_registry, tmp_path) -> None:
+    """Фаза 9: путь вне каталога данных отклоняется, даже если файл существует."""
+    outside = tmp_path / "secret.md"
+    outside.write_text("секрет", encoding="utf-8")
+
+    response = await client.post(f"/api/sessions/{session_id}/documents/path",
+                                 json={"path": str(outside)}, headers=researcher)
+
+    assert response.status_code == 403
+    assert "вне разрешённых" in response.json()["detail"]
 
 
 async def test_add_document_unknown_category_422(client, researcher, session_id,

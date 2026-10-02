@@ -123,12 +123,16 @@ def stub_registry(monkeypatch, service_app, chunk_store, tmp_path):
     Нужен, чтобы API-тесты не поднимали ни Ollama, ни реальные эмбеддинги
     по сети: `service_app` уже содержит быстрый тестовый профиль.
     """
+    from app.core import safety
     from app.services import paperqa_service as svc
 
     service_app.data_dir = tmp_path / "registry-data"
     service_app.ensure_dirs()
     registry = svc.ServiceRegistry(service_app, chunk_store)
     monkeypatch.setattr(svc, "_registry", registry)
+    # Валидация путей (Фаза 9) тоже должна смотреть в каталоги этого профиля,
+    # иначе она отклонит всё, что лежит вне боевого data_dir.
+    monkeypatch.setattr(safety, "get_settings", lambda: service_app)
     return registry
 
 # ------------------------------------------------------- сервисный слой PaperQA

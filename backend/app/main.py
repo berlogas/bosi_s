@@ -17,9 +17,11 @@ from app.api import (
     documents,
     health,
     history,
+    metrics,
     projects,
     session_documents,
     sessions,
+    tasks,
     users,
 )
 from app.config import get_settings
@@ -38,6 +40,8 @@ logger = logging.getLogger("boasi")
 async def lifespan(app: FastAPI):  # noqa: ANN201
     settings = get_settings()
     setup_logging(settings.log_level)
+    for message in settings.validate_runtime():
+        logger.warning("Конфигурация: %s", message)
     settings.ensure_dirs()
     init_db()
     logger.info("boasi_s backend started", extra=settings.public_summary())
@@ -114,6 +118,8 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(history.router)
     app.include_router(projects.router)
+    app.include_router(tasks.router)
+    app.include_router(metrics.router)
     return app
 
 

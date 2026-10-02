@@ -23,6 +23,11 @@ from boasi_ui.pages import admin, dashboard, login, workspace  # noqa: E402
 
 log = logging.getLogger("boasi.frontend")
 
+# Метка версии интерфейса. Показывается в боковой панели: по ней видно, что
+# браузер подхватил новый код, а не закэшировал старый модуль (ошибка в
+# трассировке с указанием на `main` почти всегда означает старый файл).
+UI_BUILD = "2026-10-02b"
+
 
 def _setup_logging() -> None:
     """Писать логи интерфейса и в консоль, и в logs/frontend.log.
@@ -87,6 +92,7 @@ def sidebar() -> None:
             st.session_state["page"] = "admin"
             st.rerun()
     st.sidebar.divider()
+    st.sidebar.caption(f"сборка {UI_BUILD}")
     login.logout_button()
 
     with st.sidebar.expander("Состояние системы"):

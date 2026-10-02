@@ -440,3 +440,90 @@ def test_sidebar_failure_does_not_crash_app() -> None:
     at.run()
 
     assert not at.exception, f"приложение не должно падать: {at.exception}"
+
+
+# --------------------------------------------------------------------------- админка
+class AdminApi:
+    """Ответы админских маршрутов в реалистичной форме.
+
+    Нужен именно для проверки вкладки: заглушка общего назначения не
+    покрывает /api/admin/*, из-за чего падение admin.render() дошло до
+    пользователя незамеченным.
+    """
+
+    def __init__(self) -> None:
+        self.token = "test-token"
+        self.user = {"username": "admin", "role": "admin"}
+
+    @property
+    def is_admin(self) -> bool:
+        return True
+
+    def health(self):
+        return {"status": "ok", "llm_model": "stub", "embedding_model": "stub",
+                "ollama": {"reachable": False}}
+
+    def admin_users(self):
+        return [
+            {"id": "u1", "username": "admin", "role": "admin", "full_name": "Админ",
+             "is_active": True, "last_login_at": "2026-10-02T10:00:00+00:00"},
+            {"id": "u2", "username": "ivanov", "role": "researcher",
+             "full_name": None, "is_active": True,
+             "last_login_at": None},
+            # роль, которой нет в списке — раньше роняла вкладку на .index()
+            {"id": "u3", "username": "odd", "role": "viewer", "full_name": None,
+             "is_active": False, "last_login_at": None},
+        ]
+
+    def admin_documents(self):
+        return [{"id": "d1", "dockey": "k1", "title": "Руководство",
+                 "filename": "manual.md", "size_bytes": 2048, "chunk_count": 3,
+                 "category": "global_knowledge", "status": "ready"}]
+
+    def admin_audit(self, limit=100):
+        return [{"id": "a1", "actor_username": "admin", "action": "auth.login",
+                 "target_type": None, "ok": True, "ip": "127.0.0.1",
+                 "created_at": "2026-10-02T10:00:00+00:00"}]
+
+    def tasks(self, session_id=None):
+        return [{"id": "t1", "kind": "indexing", "title": "Индексация",
+                 "status": "done", "progress": 100, "step": "готово",
+                 "error": None, "cancel_requested": False, "seconds": 3.0}]
+
+    def sessions(self):
+        return [{"id": "s1234567", "user_id": "u1234567", "title": "Работа",
+                 "status": "active", "last_action_label": "Вопрос",
+                 "last_activity_at": "2026-10-02T10:00:00+00:00",
+                 "last_action_at": "2026-10-02T10:00:00+00:00",
+                 "resume_note": None}]
+
+
+def test_admin_panel_renders_all_tabs() -> None:
+    """Вкладка «Администрирование» не должна падать ни на одной подвкладке."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(app_path, default_timeout=40)
+    at.run()
+    at.session_state["api"] = AdminApi()
+    at.session_state["user"] = {"username": "admin", "role": "admin"}
+    at.session_state["page"] = "admin"
+    at.run()
+
+    assert not at.exception, f"вкладка упала: {at.exception}"
+    labels = [t.label for t in at.tabs]
+    assert "Пользователи" in labels and "Аудит" in labels
+
+
+def test_admin_panel_tolerates_unknown_role() -> None:
+    """Неизвестная роль в ответе не должна ронять вкладку (было .index())."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(app_path, default_timeout=40)
+    at.run()
+    at.session_state["api"] = AdminApi()   # среди ролей есть "viewer"
+    at.session_state["user"] = {"username": "admin", "role": "admin"}
+    at.session_state["page"] = "admin"
+    at.run()
+
+    assert not at.exception, at.exception
+    assert any("odd" in m.value for m in at.markdown)

@@ -9,6 +9,7 @@ from boasi_ui.api import ApiError
 from boasi_ui.components import ui
 
 TABS = ("Пользователи", "Глобальная база", "Задачи", "Сессии", "Аудит")
+ROLES = ["researcher", "admin"]
 
 
 def _users(client) -> None:
@@ -41,19 +42,25 @@ def _users(client) -> None:
                     st.error(exc.message)
 
     for user in users:
+        # Поля читаем через get с запасными значениями: если форма ответа
+        # сервера изменится, вкладка не должна падать целиком. Неизвестная
+        # роль не должна ронять страницу на .index().
+        username = user.get("username") or "?"
+        user_id = user.get("id") or username
+        role = user.get("role") or "researcher"
+        role_index = ROLES.index(role) if role in ROLES else 0
+
         columns = st.columns([3, 2, 2, 2])
         with columns[0]:
-            st.markdown(f"**{user['username']}** · {user.get('full_name') or ''}")
+            st.markdown(f"**{username}** · {user.get('full_name') or ''}")
         with columns[1]:
-            new_role = st.selectbox("Роль", ["researcher", "admin"],
-                                    index=["researcher", "admin"].index(
-                                        user["role"]),
-                                    key=f"role_{user['id']}")
+            new_role = st.selectbox("Роль", ROLES, index=role_index,
+                                    key=f"role_{user_id}")
         with columns[2]:
             new_password = st.text_input("Новый пароль", type="password",
-                                         key=f"pw_{user['id']}")
+                                         key=f"pw_{user_id}")
         with columns[3]:
-            if st.button("Сохранить", key=f"save_{user['id']}"):
+            if st.button("Сохранить", key=f"save_{user_id}"):
                 fields: dict = {"role": new_role}
                 if new_password:
                     fields["password"] = new_password
@@ -148,8 +155,11 @@ def _sessions(client) -> None:
         st.error(exc.message)
         return
     st.dataframe([{
-        "id": s["id"][:8], "пользователь": s["user_id"][:8], "название": s["title"],
-        "статус": s["status"], "действие": s.get("last_action_label") or "",
+        "id": (s.get("id") or "")[:8],
+        "пользователь": (s.get("user_id") or "")[:8],
+        "название": s.get("title") or "",
+        "статус": s.get("status") or "",
+        "действие": s.get("last_action_label") or "",
         "активность": (s.get("last_activity_at") or "")[:16],
     } for s in sessions], use_container_width=True, hide_index=True)
 

@@ -62,7 +62,10 @@ class ApiClient:
             raise ApiError("Сессия истекла. Войдите заново.", status=401)
 
         if response.status_code >= 400:
-            raise ApiError(*self._explain(response))
+            # status/detail — keyword-only, поэтому кортеж из _explain нельзя
+            # распаковывать позиционно: передаём по именам явно.
+            message, error_status, detail = self._explain(response)
+            raise ApiError(message, status=error_status, detail=detail)
 
         if raw:
             return response

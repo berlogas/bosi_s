@@ -237,6 +237,13 @@ cd backend
   уходит в stderr, который скрипт часто перенаправляет в `/dev/null`. Симптом:
   скрипт молча обрывается без ошибки. Всегда разделяйте `local` на отдельные
   строки.
+* **В Windows три `bash.exe`:** Git Bash (`C:\Program Files\Git\...`),
+  WSL (`C:\Windows\System32ash.exe`) и заглушка Store
+  (`...\WindowsAppsash.exe`). `where bash` отдаёт их в порядке зависимости
+  от PATH, и WSL-овский может оказаться первым — тогда `start.bat` падал с
+  `execvpe(/bin/bash) failed`. Поэтому `.bat` ищет Git Bash по известным
+  путям, отбрасывает WSL/WindowsApps и проверяет найденное запуском
+  `bash --version`.
 * **Ошибка молчит, если глушить stderr.** Парсинг JSON в `start.sh status`
   сначала падал из-за обратных слэшей в f-string (Python 3.11 их не допускает
   внутри выражения) — и это выглядело как «Backend отвечает, данных нет».

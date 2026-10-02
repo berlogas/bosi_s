@@ -13,7 +13,8 @@ cd N:/Development/boasi_s
 Откроется на <http://127.0.0.1:8501>.
 
 На Windows можно вместо этого запустить **`scripts\start.bat`** двойным
-кликом.
+кликом — он сам найдёт Git Bash (важно: в Windows есть три файла `bash.exe`,
+и один из них принадлежит WSL, а не Git; `.bat` их различает).
 
 ---
 
@@ -103,6 +104,7 @@ ollama pull qwen2.5:3b
 
 | Сообщение | Что делать |
 | --- | --- |
+| `execvpe(/bin/bash) failed` | `start.bat` подхватил WSL вместо Git Bash — удалите WSL или запустите вручную: `bash scripts/start.sh` |
 | `SECRET_KEY шаблонный` | сгенерировать ключ (шаг 2) |
 | `Порт 8000 занят` | `./scripts/start.sh stop` или снять старый процесс |
 | `Ollama недоступна` | `ollama serve` в отдельном окне |

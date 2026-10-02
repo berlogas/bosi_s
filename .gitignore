@@ -21,3 +21,6 @@ backend/.pytest_cache/
 backend/.hf-cache/
 .run/
 logs/
+
+# артефакты пробных запусков batch
+/INTERACTIVE

@@ -64,8 +64,8 @@ class ApiClient:
         if response.status_code >= 400:
             # status/detail — keyword-only, поэтому кортеж из _explain нельзя
             # распаковывать позиционно: передаём по именам явно.
-            message, error_status, detail = self._explain(response)
-            raise ApiError(message, status=error_status, detail=detail)
+            message, fallback, error_status, detail = self._explain(response)
+            raise ApiError(message or fallback, status=error_status, detail=detail)
 
         if raw:
             return response
@@ -77,20 +77,35 @@ class ApiClient:
             return response.text
 
     @staticmethod
-    def _explain(response: requests.Response) -> tuple[str, int | None, str | None]:
-        detail: str | None = None
-        message = f"Ошибка {response.status_code}"
+    def _explain(response: requests.Response) -> tuple[str, str, int | None, str | None]:
+        """Разобрать тело ошибки в человекочитаемый текст.
+
+        Ответ приходит не только из нашего API (реверс-прокси, шлюз), поэтому
+        типы проверять обязательно:
+          * «meta» может быть null — тогда dict.get вернёт None, и .get(limit)
+            на нём уронит интерфейс прямо на строке вызова;
+          * тело может оказаться списком или строкой, а не объектом;
+          * тело может не быть JSON вовсе.
+        Раньше здесь стоял только except ValueError, и остальные случаи давали
+        AttributeError, который ловушка страницы не ловила.
+        """
+        fallback = f"Ошибка {response.status_code}"
         try:
             body = response.json()
-            detail = body.get("detail") or body.get("error")
-            if body.get("meta", {}).get("limit"):
-                message = f"{detail or message} (лимит: {body['meta']['limit']})"
-            else:
-                message = detail or message
         except ValueError:
-            detail = response.text[:300]
-            message = detail or message
-        return message, response.status_code, detail
+            detail = response.text[:300] or None
+            return detail or fallback, fallback, response.status_code, detail
+
+        if not isinstance(body, dict):
+            detail = str(body)[:300]
+            return detail or fallback, fallback, response.status_code, detail
+
+        detail = body.get("detail") or body.get("error")
+        meta = body.get("meta")
+        limit = meta.get("limit") if isinstance(meta, dict) else None
+        message = f"{detail or fallback} (лимит: {limit})" if limit else (
+            detail or fallback)
+        return message, fallback, response.status_code, detail
 
     # ------------------------------------------------------------------ auth
     def login(self, username: str, password: str) -> dict[str, Any]:

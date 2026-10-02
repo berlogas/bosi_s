@@ -177,3 +177,62 @@ def test_raw_request_returns_bytes(client, monkeypatch) -> None:
     content = client.export_project("s-1", "p-1", "docx")
 
     assert isinstance(content, bytes) and content
+
+# ------------------------------------------------------- нестандартные тела ошибок
+def test_meta_null_does_not_crash(client, monkeypatch) -> None:
+    """`"meta": null` раньше ронял интерфейс AttributeError прямо на вызове.
+
+    dict.get возвращает None, если ключ есть со значением null, — а следом
+    .get("limit") на None падал. Ловушка страницы такое исключение не ловила,
+    поэтому пользователь видел трассировку вместо сообщения об ошибке.
+    """
+    _patch(monkeypatch, client,
+           FakeResponse(409, {"error": "limit_exceeded", "detail": "Лимит",
+                              "meta": None}))
+
+    with pytest.raises(ApiError) as exc:
+        client.admin_audit()
+
+    assert exc.value.status == 409
+    assert "Лимит" in exc.value.message
+
+
+def test_meta_is_not_dict(client, monkeypatch) -> None:
+    _patch(monkeypatch, client,
+           FakeResponse(409, {"detail": "Лимит", "meta": ["a", "b"]}))
+
+    with pytest.raises(ApiError) as exc:
+        client.admin_audit()
+
+    assert "Лимит" in exc.value.message
+
+
+def test_body_is_json_array(client, monkeypatch) -> None:
+    """Прокси мог вернуть массив вместо объекта."""
+    _patch(monkeypatch, client, FakeResponse(502, ["upstream", "error"]))
+
+    with pytest.raises(ApiError) as exc:
+        client.admin_audit()
+
+    assert exc.value.status == 502
+    assert "upstream" in exc.value.message
+
+
+def test_body_is_json_string(client, monkeypatch) -> None:
+    _patch(monkeypatch, client, FakeResponse(500, "internal error"))
+
+    with pytest.raises(ApiError) as exc:
+        client.admin_audit()
+
+    assert exc.value.status == 500
+
+
+def test_empty_error_body_is_reported_cleanly(client, monkeypatch) -> None:
+    """Пустое тело не должно давать ни исключений, ни пустых сообщений."""
+    _patch(monkeypatch, client, FakeResponse(503, None, text=""))
+
+    with pytest.raises(ApiError) as exc:
+        client.admin_audit()
+
+    assert exc.value.status == 503
+    assert exc.value.message.strip()

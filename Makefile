@@ -3,7 +3,7 @@ PY ?= .venv/Scripts/python.exe
 PYTHON ?= .venv/Scripts/python      # Linux/macOS
 BACKEND := backend
 
-.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup
+.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup restore pull-models
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -39,6 +39,10 @@ models: ## скачать модели Ollama для локальной разр
 	ollama pull qwen2.5:3b
 	ollama pull nomic-embed-text
 
+pull-models: ## предзагрузить модели в том Ollama (для оффлайн-работы контура)
+	docker compose up -d ollama
+	docker compose exec -T ollama ollama pull $(or $(MODEL),qwen2.5:3b)
+
 up: ## поднять весь стек в Docker
 	docker compose up -d --build
 	@echo "API: http://127.0.0.1:8000/api/health | UI: http://127.0.0.1:8501"
@@ -49,7 +53,13 @@ down: ## остановить стек
 logs: ## логи сервисов
 	docker compose logs -f --tail=100
 
-backup: ## бэкап БД и PQA_HOME
-	@mkdir -p backups
-	tar -czf backups/boasi-$$(date +%Y%m%d-%H%M%S).tar.gz data/ || true
-	@echo "backup -> backups/"
+backup: ## бэкап тома boasi_data (SQLite + PQA_HOME + файлы сессий)
+	./scripts/backup.sh
+
+restore: ## восстановление из архива: make restore ARCHIVE=backups/xxx.tar.gz
+	./scripts/restore.sh "$(ARCHIVE)"
+
+# --- Фаза 3 ---
+.PHONY: create-admin
+create-admin:
+	cd backend && $(PYTHON) scripts/create_admin.py

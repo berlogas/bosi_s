@@ -81,6 +81,11 @@ class LockRegistry:
     def global_index(self) -> RWLock:
         return self._global_index
 
+    def reset_session_lock(self, session_id: str) -> None:
+        """Сбросить лок сессии (после purge её не должно остаться в реестре)."""
+        self._locks.pop(session_id, None)
+        self._waiting.pop(session_id, None)
+
     def stats(self) -> dict[str, Any]:
         return {
             "locks": {

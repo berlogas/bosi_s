@@ -2,29 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 import app.db.session as session_module
 
-
-@pytest.fixture
-async def client(db_engine):
-    """httpx-клиент поверх ASGI-приложения с изолированной БД."""
-    from httpx import ASGITransport, AsyncClient
-    from sqlalchemy.orm import sessionmaker
-
-    from app.db.session import init_db
-    from app.main import create_app
-
-    session_module._session_factory = sessionmaker(
-        bind=db_engine, expire_on_commit=False, future=True
-    )
-    init_db(db_engine)
-
-    transport = ASGITransport(app=create_app())
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
-        yield http_client
-    session_module._session_factory = None
+# Фикстура `client` перенесена в tests/conftest.py — используется всеми API-тестами.
 
 
 async def _login(client, username: str, password: str) -> dict:

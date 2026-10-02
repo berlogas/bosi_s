@@ -280,6 +280,54 @@ class Project(Base):
                                                 onupdate=utcnow)
 
     session: Mapped[ResearchSession] = relationship(back_populates="projects")
+    versions: Mapped[list[ProjectVersion]] = relationship(
+        back_populates="project", cascade="all, delete-orphan",
+        order_by="ProjectVersion.created_at")
+
+
+class GenerationKind(str, enum.Enum):
+    """Что именно было сгенерировано — попадает в версию черновика."""
+
+    section = "section"
+    literature_review = "literature_review"
+    discussion = "discussion"
+    data_comparison = "data_comparison"
+    gap_analysis = "gap_analysis"
+    draft_analysis = "draft_analysis"
+    report = "report"
+
+
+class ProjectVersion(Base):
+    """Снапшот черновика на каждую генерацию (Фаза 7: версионирование).
+
+    Хранит не только текст, но и карту цитат: по ней видно, из каких
+    источников взялся каждый фрагмент и не «отъехали» ли цитаты при правке.
+    """
+
+    __tablename__ = "project_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("research_sessions.id", ondelete="CASCADE"), nullable=True, index=True)
+    section_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    kind: Mapped[GenerationKind] = mapped_column(
+        Enum(GenerationKind, native_enum=False), default=GenerationKind.section)
+    content_md: Mapped[str] = mapped_column(Text, default="")
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    citation_map: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    stats: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                 index=True)
+
+    project: Mapped[Project] = relationship("Project", back_populates="versions")
+
+    __table_args__ = (
+        Index("ix_project_versions_project_created", "project_id", "created_at"),
+    )
 
 
 class DocumentLink(Base):

@@ -143,6 +143,20 @@ class PaperQA2Service:
     def _texts_of(self, dockey: str) -> list[Any]:
         return [t for t in self.docs.texts if t.doc.dockey == dockey]
 
+    def storage_dir(self, session_id: str | None = None, kind: str = "files") -> Path:
+        """Каталог хранения файлов: у каждой сессии свой (изоляция сессий).
+
+        Глобальная база (`session_id=None`) лежит в `documents_dir`, сессионные
+        файлы — в `sessions_dir/<id>/<kind>`. Так удаление сессии чистит ровно
+        её файлы и не задевает чужие.
+        """
+        if session_id:
+            path = self.app.sessions_dir / session_id / kind
+        else:
+            path = self.app.documents_dir / kind
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def _doc_of(self, dockey: str) -> Any:
         return self.docs.docs.get(dockey)
 
@@ -254,8 +268,7 @@ class PaperQA2Service:
         во временный файл делаем сами (спайк 02, примечание к API).
         """
         result = DocumentBatchResult()
-        upload_dir = self.app.documents_dir / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_dir = self.storage_dir(session_id, "uploads")
 
         for uploaded in files:
             name = getattr(uploaded, "filename", None) or getattr(uploaded, "name", "upload")
@@ -301,8 +314,7 @@ class PaperQA2Service:
         if not url.lower().startswith(("http://", "https://")):
             raise DocumentProcessingError(f"Некорректный URL: {url}")
 
-        tmp_dir = self.app.documents_dir / "urls"
-        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_dir = self.storage_dir(session_id, "urls")
         target = tmp_dir / f"{uuid.uuid4().hex[:8]}{self._extension_from_url(url)}"
         try:
             async with (
@@ -622,6 +634,19 @@ class PaperQA2Service:
         """`session.references` — строка, а не список (реальный API)."""
         references = session.references or ""
         return [line.strip("-* ") for line in references.splitlines() if line.strip()]
+
+    # ------------------------------------------------------------------ LLM-промпты
+    async def complete(self, prompt: str, *, name: str = "completion") -> str:
+        """Один вызов LLM с произвольным промптом.
+
+        Использует ту же модель, что и поиск и ответы: подменённую в тестах
+        (`_llm_model`) либо модель из настроек. Поэтому генератор разделов
+        (Фаза 7) и чат (Фаза 6) говорят с одной и той же моделью.
+        """
+        llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
+        result = await llm.call_single(messages=[{"role": "user", "content": prompt}],
+                                       name=name)
+        return (getattr(result, "text", "") or "").strip()
 
     async def _read_upload(self, uploaded: Any) -> bytes:
         read = getattr(uploaded, "read", None)

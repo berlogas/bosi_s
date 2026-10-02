@@ -85,6 +85,52 @@ def researcher_user(db):
     return create_user(db, username="ivanov", password="researcher-pass-123",
                        role=Role.researcher, hashed_password=hash_password("researcher-pass-123"))
 
+
+# ---------------------------------------------------------------------------- API
+@pytest.fixture
+async def client(db_engine, _test_settings):
+    """httpx-клиент поверх ASGI-приложения с изолированной БД."""
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.orm import sessionmaker
+
+    import app.db.session as session_module
+    from app.db.session import init_db
+    from app.main import create_app
+
+    session_module._session_factory = sessionmaker(
+        bind=db_engine, expire_on_commit=False, future=True
+    )
+    init_db(db_engine)
+
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+        yield http_client
+    session_module._session_factory = None
+
+
+async def login_headers(client, username: str, password: str) -> dict[str, str]:
+    """Логин и заголовок Authorization для исследователя/админа."""
+    response = await client.post("/api/auth/login",
+                                 json={"username": username, "password": password})
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['tokens']['access_token']}"}
+
+
+@pytest.fixture
+def stub_registry(monkeypatch, service_app, chunk_store, tmp_path):
+    """Реестр сервисов на заглушке, подменённый в глобальном `_registry`.
+
+    Нужен, чтобы API-тесты не поднимали ни Ollama, ни реальные эмбеддинги
+    по сети: `service_app` уже содержит быстрый тестовый профиль.
+    """
+    from app.services import paperqa_service as svc
+
+    service_app.data_dir = tmp_path / "registry-data"
+    service_app.ensure_dirs()
+    registry = svc.ServiceRegistry(service_app, chunk_store)
+    monkeypatch.setattr(svc, "_registry", registry)
+    return registry
+
 # ------------------------------------------------------- сервисный слой PaperQA
 # LLM подменяется заглушкой: тесты идут без сети и без Ollama;
 # эмбеддинги — локальные sentence-transformers.

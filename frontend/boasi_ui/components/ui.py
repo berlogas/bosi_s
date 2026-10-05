@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import streamlit as st
@@ -17,6 +19,57 @@ STATUS_ICONS = {
     "queued": "⏳", "running": "🔄", "done": "✅",
     "error": "❌", "cancelled": "🚫",
 }
+
+# Имя и аватар ассистента. Пользователь просил, чтобы в разговорах его
+# звали «Бо» — раньше ассистент был вовсе безымянным (в пузырях чата стоял
+# дефолтный «Assistant»). Держим в одном месте, чтобы переименовать было
+# не надо полазить по страницам.
+ASSISTANT_NAME = "Бо"
+ASSISTANT_AVATAR = "👨‍💻"
+USER_NAME = "Вы"
+USER_AVATAR = "👨‍🔬"
+
+
+def chat_message(role: str):
+    """Открывает пузырь чата.
+
+    У `st.chat_message` первый параметр — это и роль, и подпись: туда
+    принимается либо 'user'/'assistant', либо произвольная строка. Поэтому
+    «Бо» передаём именно первым аргументом, а `avatar` идёт именованным.
+    """
+    if role == "assistant":
+        return st.chat_message(ASSISTANT_NAME, avatar=ASSISTANT_AVATAR)
+    return st.chat_message("user")
+
+
+@contextmanager
+def chat_bubble(role: str,
+                action: Callable[[], None] | None = None) -> Iterator[None]:
+    """Пузырь чата, у которого действие стоит в одной строке с аватаром.
+
+    `st.chat_message` рисует заголовок (аватар и подпись) сам и не даёт
+    положить туда виджет, поэтому пузыри с кнопкой удаления собираем
+    сами: аватар, подпись и кнопка — три колонки в одной строке. Раньше
+    кнопка стояла под текстом и занимала отдельную строку.
+
+    `action` вызывается в третьей колонке; вернуть из него ничего не
+    нужно. Если он не передан, колонка всё равно создаётся — чтобы
+    аватары и подписи всех пузырей стояли на одной высоте.
+    """
+    label, icon = ((USER_NAME, USER_AVATAR) if role == "user"
+                   else (ASSISTANT_NAME, ASSISTANT_AVATAR))
+    with st.container(border=True):
+        avatar_col, name_col, action_col = st.columns(
+            [1, 30, 1], vertical_alignment="center")
+        with avatar_col:
+            st.markdown(f"<span style='font-size:1.15rem'>{icon}</span>",
+                        unsafe_allow_html=True)
+        with name_col:
+            st.markdown(f"**{label}**")
+        with action_col:
+            if action is not None:
+                action()
+        yield
 STATUS_COLORS = {
     "queued": "grey", "running": "blue", "done": "green",
     "error": "red", "cancelled": "orange",
@@ -174,7 +227,17 @@ def source_list(sources: list[dict[str, Any]]) -> None:
 
 
 def answer_view(answer: dict[str, Any]) -> None:
-    st.markdown(answer.get("answer") or "_Ответ пуст_")
+    text = (answer.get("answer") or "").strip()
+    if text:
+        st.markdown(text)
+    elif not answer.get("base_empty"):
+        st.markdown("_Ответ пуст_")
+    if answer.get("base_empty"):
+        # Ответ без опоры на базу: раньше это выглядело как «Ответ пуст»
+        # и выглядело поломкой, хотя на самом деле документов просто нет.
+        st.info("Ответ без ссылок на источники: в базе знаний нет документов "
+                "или по запросу ничего не нашлось. Загрузите документы в "
+                "разделе «Администрирование».")
     source_list(answer.get("sources", []))
     if answer.get("from_cache"):
         st.caption("Ответ взят из кэша")

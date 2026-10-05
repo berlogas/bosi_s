@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import streamlit as st
 
 from boasi_ui import state
@@ -13,22 +15,80 @@ from boasi_ui.api import ApiError
 from boasi_ui.components import ui
 
 
-def _quick_question(client) -> None:
-    with st.expander("Быстрый вопрос по базе знаний", expanded=True):
-        query = st.text_input("Ваш вопрос", key="quick_query",
-                              placeholder="Например: как измеряют биомассу?")
-        if not st.button("Спросить", key="quick_ask", disabled=not query):
-            return
+def _chat_message(role: str):
+    """Открывает пузырь чата (имя ассистента — Бо).
+
+    Раньше тут был `st.chat_message`, но у него аватар и подпись рисует
+    сам Streamlit: у спрашивающего оставался служебный значок, а у Бо —
+    дефолтный. Теперь пузырь один на весь чат приложения, с нужными
+    аватарами: учёный у спрашивающего, технарь у Бо.
+    """
+    return ui.chat_bubble(role)
+
+
+def _quick_chat(client) -> None:
+    """Чат по глобальной базе — в привычном виде: Enter отправляет.
+
+    Раньше здесь был expander с текстовым полем и кнопкой «Спросить».
+    Пользователь попросил обычный чат, поэтому история живёт в
+    session_state, сообщения рисуются как диалог, а ввод — внизу.
+    """
+    history: list[dict[str, Any]] = st.session_state.setdefault("quick_chat", [])
+
+    for item in history:
+        with _chat_message(item["role"]):
+            # У ассистента текст рисует answer_view — иначе ответ
+            # продублируется (он и в content, и в answer["answer"]).
+            if item.get("answer") is None:
+                st.markdown(item.get("content") or "")
+            else:
+                ui.answer_view(item["answer"])
+
+    suggestions = st.session_state.get("suggestions") or []
+    if suggestions:
+        st.caption("Можно уточнить:")
+        for text in suggestions[:4]:
+            st.caption(f"- {text}")
+
+    prompt = st.chat_input("Спросите что-нибудь по базе знаний")
+    if not prompt:
+        return
+
+    history.append({"role": "user", "content": prompt})
+    with _chat_message("user"):
+        st.markdown(prompt)
+
+    with _chat_message("assistant"):
         try:
             with st.spinner("Ищу в глобальной базе…"):
-                answer = client.quick_query(query)
-            ui.answer_view(answer)
-            if query in (st.session_state.get("suggestions") or []):
-                st.caption("повторный вопрос")
-            st.session_state["quick_ask"] = query
-            st.session_state["suggestions"] = client.suggest_queries(query)
+                answer = client.quick_query(prompt)
         except ApiError as exc:
             st.error(exc.message)
+            st.session_state["quick_chat"] = [
+                *history[:-1],
+                {"role": "assistant", "content": "",
+                 "answer": {"answer": "", "base_empty": False,
+                            "error": exc.message}},
+            ]
+            st.rerun()
+
+        ui.answer_view(answer)
+
+    entry = {"role": "assistant", "content": answer.get("answer") or "",
+             "answer": answer}
+    history.append(entry)
+
+    # Уточняющие вопросы рисуем под ответом, как подсказки в чате.
+    if not answer.get("base_empty") and answer.get("sources"):
+        try:
+            st.session_state["suggestions"] = client.suggest_queries(prompt)
+        except ApiError:
+            st.session_state["suggestions"] = []
+    else:
+        st.session_state["suggestions"] = []
+
+    st.rerun()
+
 
 
 def _new_session(client) -> None:
@@ -60,7 +120,7 @@ def render() -> None:
     client = state.require_auth()
     st.markdown("### Дашборд")
 
-    _quick_question(client)
+    _quick_chat(client)
 
     try:
         sessions = client.sessions()

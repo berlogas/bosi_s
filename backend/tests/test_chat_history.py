@@ -216,3 +216,102 @@ async def test_history_of_foreign_session_is_404(client, researcher, session_id,
     response = await client.get(f"/api/chat/messages?session_id={session_id}",
                                 headers=petrov)
     assert response.status_code == 404
+
+# ------------------------------------------------------- удаление одного сообщения
+async def test_delete_removes_question_with_its_answer(client, researcher,
+                                                        researcher_user,
+                                                        session_id, db) -> None:
+    """Кнопка удаления убирает вопрос вместе с ответом."""
+    messages_repo.save_exchange(
+        db, user=researcher_user, question="Как измеряют биомассу?",
+        answer="Методом GF/F [1].", session_id=session_id, mode=SearchMode.hybrid)
+    db.commit()
+    first = messages_repo.list_messages(db, session_id)
+    assert len(first) == 2
+
+    response = await client.delete(f"/api/chat/messages/{first[0].id}",
+                                   headers=researcher)
+    assert response.status_code == 204
+    assert messages_repo.list_messages(db, session_id) == []
+
+
+async def test_delete_from_answer_also_removes_question(client, researcher,
+                                                        researcher_user,
+                                                        session_id, db) -> None:
+    """Кнопка у ответа убирает пару тоже — не оставляем «висячий» ответ."""
+    messages_repo.save_exchange(
+        db, user=researcher_user, question="Вопрос", answer="Ответ",
+        session_id=session_id, mode=SearchMode.hybrid)
+    db.commit()
+    second = messages_repo.list_messages(db, session_id)[1]
+
+    response = await client.delete(f"/api/chat/messages/{second.id}",
+                                   headers=researcher)
+    assert response.status_code == 204
+    assert messages_repo.list_messages(db, session_id) == []
+
+
+async def test_delete_touches_only_its_own_pair(client, researcher,
+                                                 researcher_user,
+                                                 session_id, db) -> None:
+    """Соседние пары не задеты: удаляем первый вопрос из двух обменов."""
+    messages_repo.save_exchange(
+        db, user=researcher_user, question="Первый", answer="Ответ 1",
+        session_id=session_id, mode=SearchMode.hybrid)
+    messages_repo.save_exchange(
+        db, user=researcher_user, question="Второй", answer="Ответ 2",
+        session_id=session_id, mode=SearchMode.hybrid)
+    db.commit()
+    items = messages_repo.list_messages(db, session_id)
+    assert len(items) == 4
+
+    await client.delete(f"/api/chat/messages/{items[0].id}", headers=researcher)
+
+    remaining = [m.content for m in messages_repo.list_messages(db, session_id)]
+    assert remaining == ["Второй", "Ответ 2"]
+
+
+async def test_delete_unknown_message_is_404(client, researcher) -> None:
+    response = await client.delete("/api/chat/messages/не-существует",
+                                   headers=researcher)
+    assert response.status_code == 404
+
+
+async def test_delete_message_of_other_user_is_404(client, researcher,
+                                                   db_engine, session_id) -> None:
+    """Чужое сообщение удалить нельзя, даже если известен его id."""
+    from sqlalchemy.orm import sessionmaker
+
+    from app.core.security import hash_password
+    from app.db.models import Role
+    from app.db.repositories.users import create_user
+
+    with sessionmaker(bind=db_engine, expire_on_commit=False)() as db:
+        stranger = create_user(
+            db, username="petrov", password="password-1234",
+            role=Role.researcher, hashed_password=hash_password("password-1234"))
+        db.commit()
+        foreign = messages_repo.save_exchange(
+            db, user=stranger, question="чужой вопрос", answer="чужой ответ",
+            session_id=session_id, mode=SearchMode.hybrid)[0]
+        db.commit()
+        foreign_id = foreign.id
+
+    response = await client.delete(f"/api/chat/messages/{foreign_id}",
+                                   headers=researcher)
+    assert response.status_code == 404
+
+
+async def test_clear_chat_removes_all_messages(client, researcher,
+                                               researcher_user, session_id,
+                                               db) -> None:
+    messages_repo.save_exchange(
+        db, user=researcher_user, question="Вопрос", answer="Ответ",
+        session_id=session_id, mode=SearchMode.hybrid)
+    db.commit()
+    assert messages_repo.count_messages(db, session_id) == 2
+
+    response = await client.delete(f"/api/chat/messages?session_id={session_id}",
+                                   headers=researcher)
+    assert response.status_code == 204
+    assert messages_repo.count_messages(db, session_id) == 0

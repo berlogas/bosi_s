@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_researcher
@@ -59,6 +59,25 @@ def clear_history(session_id: str, request: Request,
           target_id=session.id, removed=removed)
 
 
+@router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_history_message(message_id: str, request: Request,
+                           user: User = Depends(get_current_user),
+                           db: Session = Depends(get_db)) -> None:
+    """Удалить сообщение переписки вместе с парой.
+
+    Кнопка в интерфейсе одна на пару: удаляет вопрос и ответ целиком,
+    независимо от того, у какого из них нажали. Вопрос без ответа и
+    ответ без вопроса бесполезны, поэтому «половинки» не оставляем.
+    Остальную историю и документы не трогаем.
+    """
+    removed = messages_repo.delete_message(db, message_id, user_id=user.id)
+    if not removed:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "Сообщение не найдено")
+    audit(db, action="chat.message_delete", actor=user, target_type="message",
+          target_id=message_id, ip=_ip(request), removed=removed)
+
+
 @router.post("/quick-message", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
 def save_quick_message(payload: QuickQueryRequest,
                        user: User = Depends(get_current_user),
@@ -68,6 +87,10 @@ def save_quick_message(payload: QuickQueryRequest,
         db, user_id=user.id, content=payload.query, role="user")
     messages_repo.trim_quick_history(db, user.id)
     return _out(message)
+
+
+def _ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
 
 
 def _out(message: Any) -> MessageOut:

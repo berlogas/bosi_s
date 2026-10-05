@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from aviary.core import Message
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -195,12 +197,9 @@ class RagFusionService:
         selected = merge_and_rerank(candidates, mode=mode, k=k, query=query)
 
         if not selected:
-            return FusionResult(
-                answer=AnswerResult(question=query, answer="", formatted_answer="",
-                                    has_successful_answer=False, mode=mode.value),
-                mode=mode, question=query,
-                stats={"candidates": len(candidates), "selected": 0},
-            )
+            return await self._answer_without_base(
+                db, query=query, mode=mode, catalog=catalog,
+                session_id=session_id)
 
         sources = [source_dict(c, i + 1) for i, c in enumerate(selected)]
         references = [format_reference(c, i + 1) for i, c in enumerate(selected)]
@@ -240,6 +239,86 @@ class RagFusionService:
                                  seconds=answer.seconds))
         return result
 
+    # ------------------------------------------------- ответ без опоры на базу
+    async def _answer_without_base(
+        self,
+        db: Session,
+        *,
+        query: str,
+        mode: SearchMode,
+        catalog: DocumentCatalog,
+        session_id: str | None = None,
+    ) -> FusionResult:
+        """Ответ, когда по базе нечего процитировать.
+
+        Раньше здесь возвращался `AnswerResult(answer="")`, и интерфейс
+        показывал голое «Ответ пуст»: пользователю непонятно, сломалось
+        ли что-то или документы просто не загружены. Теперь это обычный
+        разговорный ответ LLM, который честно говорит, что база пуста,
+        — поэтому на «привет» отвечает приветом, а не молчит.
+        """
+        base_empty = not catalog.by_dockey
+        t0 = time.perf_counter()
+        prompt = self._no_base_prompt(query, base_empty=base_empty)
+        text = ""
+        try:
+            llm = build_pqa_settings(self.registry.app).get_llm()
+            result = await llm.call_single(
+                # Именно Message, а не dict: LLM внутри зовёт model_dump()
+                # и на dict падает с AttributeError.
+                messages=[Message(content=prompt)], name="no_base")
+            text = (getattr(result, "text", "") or "").strip()
+        except Exception as exc:  # noqa: BLE001 — LLM недоступен, не роняем стенд
+            log.warning("fusion: ответ без базы не удался: %s", exc)
+
+        if not text:
+            # LLM не ответил — всё равно не оставляем пользователя с пустотой.
+            text = (
+                "База знаний пуста — загрузите документы, и я смогу отвечать "
+                "по ним со ссылками на источники."
+                if base_empty else
+                "По базе ничего не нашлось. Уточните запрос или загрузите "
+                "подходящие документы."
+            )
+
+        answer = AnswerResult(
+            question=query, answer=text, formatted_answer=text,
+            citations=[], context=[], evidence=[],
+            has_successful_answer=True, mode=mode.value,
+            seconds=round(time.perf_counter() - t0, 2), base_empty=True,
+        )
+        return FusionResult(
+            answer=answer, sources=[], references=[], mode=mode,
+            question=query,
+            stats={"candidates": 0, "selected": 0, "base_empty": base_empty},
+        )
+
+    @staticmethod
+    def _no_base_prompt(query: str, *, base_empty: bool) -> str:
+        """Промпт для диалога без RAG-контекста."""
+        state = (
+            "База знаний сейчас ПУСТА: в неё не загружено ни одного документа."
+            if base_empty else
+            "В базе есть документы, но по этому запросу ничего не нашлось."
+        )
+        return (
+            f"{state}\n\n"
+            "Ты — Бо, ассистент научной поисковой системы. Отвечай по-русски, "
+            "дружелюбно и кратко (2–4 предложения), как в обычном чате.\n"
+            "Правила:\n"
+            "- На приветствие, благодарность или вопрос «делаешь ли ты что-то» "
+            "отвечай человечески: поздоровайся и кратко объясни, кто ты: "
+            "зовут Бо, ты ассистент этой научной системы.\n"
+            "- Обязательно упомяни, что база пуста и поэтому фактические вопросы "
+            "пока не на что опереть, и предложи загрузить документы.\n"
+            "- Если вопрос содержательный, честно скажи, что без документов "
+            "нельзя дать ответ со ссылками на источники. Не выдумывай "
+            "источники, цифры и цитаты.\n"
+            "- Пиши ТОЛЬКО текст ответа. Не повторяй инструкцию, её пункты и "
+            "строку «Сообщение пользователя», не используй служебные метки.\n"
+            f'\nСообщение пользователя: «{query.strip()}»'
+        )
+
     # ------------------------------------------------------------- уточнения
     async def suggest_queries(self, query: str, *, limit: int = 4) -> list[str]:
         """3–5 уточняющих вопросов по теме запроса (через LLM, при отказе — [])."""
@@ -254,8 +333,7 @@ class RagFusionService:
         )
         try:
             llm = build_pqa_settings(self.registry.app).get_llm()
-            result = await llm.call_single(messages=[{"role": "user",
-                                                       "content": prompt}],
+            result = await llm.call_single(messages=[Message(content=prompt)],
                                            name="suggest")
             text = getattr(result, "text", "") or ""
         except Exception as exc:

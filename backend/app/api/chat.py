@@ -75,7 +75,8 @@ async def chat_query(payload: ChatQueryRequest, request: Request,
         answer=result.answer.formatted_answer,
         sources=result.sources, references=result.references,
         mode=payload.mode, query=payload.query,
-        from_cache=result.from_cache, stats=result.stats)
+        from_cache=result.from_cache, stats=result.stats,
+        base_empty=result.answer.base_empty)
 
 
 @router.post("/query-async")
@@ -122,6 +123,7 @@ async def chat_query_async(payload: ChatQueryRequest, request: Request,
             "references": result.references,
             "from_cache": result.from_cache,
             "stats": result.stats,
+            "base_empty": result.answer.base_empty,
         }
 
     task = tasks.submit(body, kind="chat",
@@ -160,7 +162,8 @@ async def quick_query(payload: QuickQueryRequest, request: Request,
     return QuickQueryResponse(
         answer=result.answer.formatted_answer, sources=result.sources,
         references=result.references, query=payload.query,
-        from_cache=result.from_cache, stats=result.stats)
+        from_cache=result.from_cache, stats=result.stats,
+        base_empty=result.answer.base_empty)
 
 
 @router.get("/suggest-queries", response_model=SuggestionsResponse)

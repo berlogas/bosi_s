@@ -134,6 +134,10 @@ class AnswerResult:
     mode: str | None = None
     seconds: float = 0.0
     used_context: bool = False  # True, если ответ построен на готовом PQASession
+    # True, если ответ сгенерирован без опоры на базу (база пуста или
+    # ничего не нашлось). Фронтенд по этому флагу объясняет пользователю,
+    # почему ответ не со ссылками, вместо того чтобы молчать.
+    base_empty: bool = False
 
     @property
     def empty(self) -> bool:
@@ -148,6 +152,7 @@ class AnswerResult:
             "context": self.context,
             "evidence": [c.to_dict() for c in self.evidence],
             "has_successful_answer": self.has_successful_answer,
+            "base_empty": self.base_empty,
             "cost": self.cost,
             "token_counts": self.token_counts,
             "mode": self.mode,

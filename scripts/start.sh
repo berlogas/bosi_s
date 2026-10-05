@@ -115,7 +115,21 @@ preflight() {
   ok "SECRET_KEY задан"
 
   # Ollama: предупреждаем, но не блокируем — backend поднимется и без неё
-  if curl -sf -m 3 -o /dev/null "$OLLAMA_URL/api/tags" 2>/dev/null; then
+  if ! ollama_up; then
+    start_ollama
+  fi
+  check_ollama
+}
+
+# Отвечает ли Ollama. Вынесено отдельно, потому что проверку зовут и
+# preflight, и цикл ожидания в start_ollama.
+ollama_up() {
+  curl -sf -m 3 -o /dev/null "$OLLAMA_URL/api/tags" 2>/dev/null
+}
+
+# Сообщает о состоянии Ollama и моделей. Возвращает 1, если не отвечает.
+check_ollama() {
+  if ollama_up; then
     local models
     models="$(curl -sf -m 5 "$OLLAMA_URL/api/tags" 2>/dev/null \
       | "$PY" -c 'import sys,json
@@ -127,10 +141,46 @@ except Exception:
     if [ "$models" = "-" ] || [ -z "$models" ]; then
       warn "Моделей нет: ответы работать не будут. Скачать: ./scripts/start.sh models"
     fi
-  else
-    warn "Ollama недоступна на $OLLAMA_URL — ответы не будут работать."
-    printf '     запустите: ollama serve\n'
+    return 0
   fi
+
+  warn "Ollama недоступна на $OLLAMA_URL — ответы не будут работать."
+  printf '     запустите вручную: ollama serve\n'
+  return 1
+}
+
+# Поднимает Ollama, если она не отвечает. Раньше её приходилось запускать
+# руками; теперь это делает скрипт. Отключается через OLLAMA_AUTOSTART=0.
+start_ollama() {
+  [ "${OLLAMA_AUTOSTART:-1}" = "0" ] && return 1
+
+  # На Windows ollama не всегда в PATH Git Bash; проверяем типовые пути.
+  local bin
+  bin="$(command -v ollama 2>/dev/null || true)"
+  if [ -z "$bin" ]; then
+    for c in "$LOCALAPPDATA/Programs/Ollama/ollama.exe" \
+             "/c/Users/$USERNAME/AppData/Local/Programs/Ollama/ollama.exe" \
+             "/usr/local/bin/ollama"; do
+      [ -x "$c" ] && { bin="$c"; break; }
+    done
+  fi
+  [ -n "$bin" ] || return 1
+
+  step "Ollama не отвечает — запускаю"
+  # nohup обязателен: скрипт скоро завершится, а Ollama должна жить дальше.
+  # Без него процесс умирает вместе с окном консоли (проверено на Windows).
+  nohup "$bin" serve > "$LOG_DIR/ollama.log" 2>&1 &
+  echo $! > "$RUN_DIR/ollama.pid"
+
+  # Модели грузятся долго, но /api/tags отвечает сразу после старта сервера.
+  local i=0
+  while [ "$i" -lt 30 ]; do
+    ollama_up && { ok "Ollama поднялась (pid $(cat "$RUN_DIR/ollama.pid" 2>/dev/null))"; return 0; }
+    i=$((i+1)); sleep 1
+  done
+
+  warn "Ollama не поднялась за 30 с. Лог: ./scripts/start.sh logs ollama"
+  return 1
 }
 
 # ------------------------------------------------------------------ режимы

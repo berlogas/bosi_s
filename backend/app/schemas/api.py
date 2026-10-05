@@ -286,6 +286,7 @@ class ChatQueryResponse(BaseModel):
     query: str
     from_cache: bool = False
     stats: dict[str, Any] = Field(default_factory=dict)
+    base_empty: bool = False
 
 
 class QuickQueryRequest(BaseModel):
@@ -302,6 +303,9 @@ class QuickQueryResponse(BaseModel):
     query: str
     from_cache: bool = False
     stats: dict[str, Any] = Field(default_factory=dict)
+    # Ответ получен без опоры на базу (база пуста или ничего не нашлось).
+    # Фронтенд покажет пояснение, чтобы «пустой» ответ был понятен.
+    base_empty: bool = False
 
 
 class SuggestionsResponse(BaseModel):

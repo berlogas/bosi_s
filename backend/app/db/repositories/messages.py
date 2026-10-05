@@ -149,6 +149,61 @@ def delete_messages(db: Session, session_id: str) -> int:
     return int(result.rowcount or 0)
 
 
+def delete_message(db: Session, message_id: str, *, user_id: str) -> int:
+    """Удалить сообщение вместе с парным. Возвращает 0, если его нет или чужое.
+
+    В переписке вопрос и ответ образуют пару, поэтому кнопка удаления
+    убирает обе части сразу: незаданный вопрос или «висящий» ответ
+    бесполезны. Проверка user_id обязательна — id известен из истории, но
+    удалять чужую переписку нельзя.
+
+    Возвращает количество удалённых строк (1 или 2).
+    """
+    message = db.scalar(
+        select(Message).where(Message.id == message_id,
+                              Message.user_id == user_id))
+    if message is None:
+        return 0
+
+    ids = [message.id]
+    pair = _paired_message(db, message)
+    if pair is not None:
+        ids.append(pair.id)
+
+    db.execute(delete(Message).where(Message.id.in_(ids)))
+    db.commit()
+    return len(ids)
+
+
+def _paired_message(db: Session, message: Message) -> Message | None:
+    """Соседнее сообщение той же «пары»: ответ после вопроса или наоборот.
+
+    Ищем по позиции в упорядоченном диалоге, а не по `created_at` сравнению:
+    в SQLite метки времени часто совпадают, и строгое неравенство теряло бы
+    соседа. Работает и для быстрых вопросов (session_id = NULL).
+    """
+    if message.role not in {"user", "assistant"}:
+        return None
+
+    same_scope = (Message.session_id == message.session_id
+                  if message.session_id is not None
+                  else Message.session_id.is_(None))
+    items = list(db.scalars(
+        select(Message)
+        .where(same_scope, Message.user_id == message.user_id)
+        .order_by(*_oldest_first())))
+    index = next((i for i, m in enumerate(items) if m.id == message.id), None)
+    if index is None:
+        return None
+
+    wanted = "assistant" if message.role == "user" else "user"
+    for offset in range(1, len(items)):
+        for position in (index + offset, index - offset):
+            if 0 <= position < len(items) and items[position].role == wanted:
+                return items[position]
+    return None
+
+
 def last_exchange(db: Session, session_id: str) -> tuple[str, str] | None:
     """Последние вопрос и ответ — для восстановления диалога при resume."""
     messages = list(db.scalars(
@@ -174,6 +229,7 @@ def touch(db: Session, message: Message) -> Message:
 __all__ = [
     "add_message",
     "count_messages",
+    "delete_message",
     "delete_messages",
     "last_exchange",
     "list_messages",

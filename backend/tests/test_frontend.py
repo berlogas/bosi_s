@@ -258,7 +258,10 @@ def test_workspace_opens_after_session_creation(fake_api) -> None:
 
     # после создания дашборд перерисовывается в workspace
     assert not at.exception, at.exception
-    assert any("Документы" in t.label for t in at.tabs)
+    # Разделы воркспейса переключаются управляемым radio, а не st.tabs:
+    # st.tabs не отдавал выбор приложению и сбрасывал его на первый раздел
+    # при перерисовке (Enter в форме чата уводил на «Документы»).
+    assert "Документы" in at.radio[0].options
 
 
 def test_workspace_shows_limits(fake_api) -> None:

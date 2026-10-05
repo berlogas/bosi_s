@@ -230,6 +230,15 @@ class ApiClient:
                             params={"query": query})
         return body.get("suggestions", [])
 
+    def clear_messages(self, session_id: str) -> Any:
+        """Очистить переписку сессии целиком (документы и заметки целы)."""
+        return self.request("DELETE", "/api/chat/messages",
+                            params={"session_id": session_id})
+
+    def delete_message(self, message_id: str) -> Any:
+        """Удалить одно сообщение переписки."""
+        return self.request("DELETE", f"/api/chat/messages/{message_id}")
+
     # ------------------------------------------------------------------ проекты
     def projects(self, session_id: str) -> list[dict[str, Any]]:
         return self.request("GET", f"/api/sessions/{session_id}/projects")

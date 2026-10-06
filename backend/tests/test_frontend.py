@@ -530,3 +530,233 @@ def test_admin_panel_tolerates_unknown_role() -> None:
 
     assert not at.exception, at.exception
     assert any("odd" in m.value for m in at.markdown)
+
+
+# ------------------------------------------------- Фаза 10: проверки ответа
+def test_collect_warnings_reads_stats_and_checks() -> None:
+    """Живый ответ несёт проверки в `stats`, история — в `checks`."""
+    from boasi_ui.components.ui import collect_warnings
+
+    live = {"stats": {"grounding": {"warnings": ["Наполеон не в источниках"]},
+                      "citations": {"warnings": ["в ссылке [7] нет источника"]},
+                      "candidates": {"k": 10}}}
+    history = {"checks": {"grounding": {"warnings": ["Наполеон не в источниках"]}}}
+
+    assert collect_warnings(live) == ["Наполеон не в источниках",
+                                      "в ссылке [7] нет источника"]
+    assert collect_warnings(history) == ["Наполеон не в источниках"]
+    assert collect_warnings({}) == []
+    assert collect_warnings({"stats": {}}) == []
+
+
+def test_chat_answer_shows_checks_warning(fake_api) -> None:
+    """Ответ с неподтверждёнными фактами получает предупреждение в UI."""
+
+    at = _logged_in(fake_api)
+    at.text_input(key="new_session_title").set_value("Рабочая")
+    at.run()
+    at.button(key="create_session").click().run()
+    assert not at.exception, at.exception
+
+    at.session_state["workspace_tab"] = "Чат"
+    at.session_state["active_tab"] = "Чат"
+    at.session_state["chat_last"] = {
+        "q": "Кто такая Екатерина Алексеевна?",
+        "a": {"answer": "Ответ с выдуманным фактом.", "sources": [],
+              "stats": {"grounding": {
+                  "warnings": ["Утверждения не подтверждены: Наполеон"]}}},
+    }
+    at.run()
+
+    assert not at.exception, at.exception
+    assert any("Наполеон" in w.value for w in at.warning)
+
+
+# ------------------------------------------------------------------------ архивация
+def _in_workspace(fake_api) -> Any:
+    at = _logged_in(fake_api)
+    at.text_input(key="new_session_title").set_value("Рабочая")
+    at.run()
+    at.button(key="create_session").click().run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_workspace_archive_asks_confirmation(fake_api) -> None:
+    """Первый клик только спрашивает — сессия не уходит в архив молча."""
+    at = _in_workspace(fake_api)
+
+    at.button(key="archive_btn").click().run()
+
+    assert not at.exception, at.exception
+    assert not any(call[0] == "archive" for call in fake_api.calls)
+    assert any("Архивировать сессию?" in w.value for w in at.warning)
+
+    at.button(key="archive_yes").click().run()
+
+    assert not at.exception, at.exception
+    assert ("archive", "s-1") in fake_api.calls
+
+
+def test_workspace_archive_can_be_cancelled(fake_api) -> None:
+    at = _in_workspace(fake_api)
+
+    at.button(key="archive_btn").click().run()
+    at.button(key="archive_no").click().run()
+
+    assert not at.exception, at.exception
+    assert not any(call[0] == "archive" for call in fake_api.calls)
+    assert not any("Архивировать сессию?" in w.value for w in at.warning)
+
+
+def test_dashboard_archive_asks_confirmation(fake_api) -> None:
+    """Кнопка «Архив» в карточке дашборда тоже работает в два шага."""
+    at = _logged_in(fake_api)
+
+    at.button(key="arch_s-1").click().run()
+
+    assert not at.exception, at.exception
+    assert not any(call[0] == "archive" for call in fake_api.calls)
+    assert any("Подтвердите" in c.value for c in at.caption)
+
+    at.button(key="arch_yes_s-1").click().run()
+
+    assert not at.exception, at.exception
+    assert ("archive", "s-1") in fake_api.calls
+
+
+# ------------------------------------------------------------------- ошибки задач
+def _error_task(task_id: str) -> dict[str, Any]:
+    return {"id": task_id, "kind": "chat", "title": "Вопрос: тест",
+            "status": "error", "progress": 100, "step": "сохранение ответа",
+            "error": "OperationalError: table messages has no column named checks",
+            "cancel_requested": False, "seconds": 319.6, "result": {}}
+
+
+def test_failed_task_keeps_question_and_shows_error(fake_api) -> None:
+    """Упавшая задача не должна молча стирать вопрос из чата."""
+    at = _in_workspace(fake_api)
+    fake_api.task = _error_task   # ответ считался, но сохранение упало
+
+    at.session_state["task_id"] = "t-1"
+    at.session_state["chat_pending"] = "Вопрос без ответа"
+    at.session_state["workspace_tab"] = "Чат"
+    at.session_state["active_tab"] = "Чат"
+    at.run()
+
+    assert not at.exception, at.exception
+    failed = at.session_state["chat_failed"]
+    assert failed["q"] == "Вопрос без ответа"
+    assert "OperationalError" in failed["text"]
+    # вопрос остался на виду, а под ним — причина сбоя
+    assert any("Вопрос без ответа" in m.value for m in at.markdown)
+    assert any("Не получилось ответить" in e.value for e in at.error)
+
+
+def test_cancelled_task_keeps_question_with_info(fake_api) -> None:
+    at = _in_workspace(fake_api)
+    fake_api.task = lambda task_id: {**_error_task(task_id),
+                                     "status": "cancelled", "error": None}
+
+    at.session_state["task_id"] = "t-1"
+    at.session_state["chat_pending"] = "Отменённый вопрос"
+    at.session_state["workspace_tab"] = "Чат"
+    at.session_state["active_tab"] = "Чат"
+    at.run()
+
+    assert not at.exception, at.exception
+    assert at.session_state["chat_failed"]["kind"] == "cancelled"
+    assert any("Отменённый вопрос" in m.value for m in at.markdown)
+    assert any("Задача отменена" in i.value for i in at.info)
+
+
+def test_done_task_does_not_mark_exchange_failed(fake_api) -> None:
+    at = _in_workspace(fake_api)   # FakeApi.task по умолчанию — status done
+
+    at.session_state["task_id"] = "t-1"
+    at.session_state["chat_pending"] = "Нормальный вопрос"
+    at.session_state["workspace_tab"] = "Чат"
+    at.session_state["active_tab"] = "Чат"
+    at.run()
+
+    assert not at.exception, at.exception
+    assert "chat_failed" not in at.session_state
+    assert "chat_pending" not in at.session_state
+
+
+def test_fmt_seconds_compact_formats() -> None:
+    """Секундомер в строке прогресса: 42с / 2:17 / 1:01:01."""
+    from boasi_ui.components.ui import _fmt_seconds
+
+    assert _fmt_seconds(None) == ""
+    assert _fmt_seconds(0) == ""
+    assert _fmt_seconds(42.4) == "42с"
+    assert _fmt_seconds(137.0) == "2:17"
+    assert _fmt_seconds(3661) == "1:01:01"
+
+
+def test_task_panel_shows_live_stage_timer(monkeypatch) -> None:
+    """Строка прогресса должна «жить»: этап, секундомер, проценты, общее время.
+
+    Раньше панель показывала один и тот же 20% все минуты генерации и
+    выглядела как зависшая. (В AppTest элемента st.progress нет — проверяем
+    напрямую вызов task_panel.)
+    """
+    import streamlit as st
+    from boasi_ui.components.ui import task_panel
+
+    captured: list[str] = []
+
+    class _Client:
+        def task(self, task_id):
+            return {"id": task_id, "kind": "chat", "title": "Вопрос",
+                    "status": "running", "progress": 55,
+                    "step": "генерация ответа (LLM)",
+                    "stage_seconds": 137.0, "seconds": 300.0,
+                    "error": None, "cancel_requested": False}
+
+    monkeypatch.setattr(
+        st, "progress",
+        lambda value, text=None, **kw: captured.append(text or ""))
+
+    task_panel(_Client(), "t-1")
+
+    assert captured, "st.progress не был вызван"
+    text = captured[0]
+    assert "генерация ответа (LLM)" in text and "55%" in text, text
+    assert "2:17" in text and "всего 5:00" in text, text
+
+
+def test_md_safe_references_defeats_link_definition() -> None:
+    """Иначе markdown съедает «[2]: doc (title)» и остаются голые «1. 2.»."""
+    from boasi_ui.components.ui import md_safe_references
+
+    text = ("1. [2]: ekaterina_hot_facts (загружено пользователем)\n"
+            "2. [3]: ekaterina_context (загружено пользователем)")
+    fixed = md_safe_references(text)
+
+    assert "]:" not in fixed
+    assert "1. [2] ekaterina_hot_facts" in fixed
+    assert "2. [3] ekaterina_context" in fixed
+
+
+def test_history_renders_reference_text_not_bare_numbers(fake_api) -> None:
+    """История в чате: блок References должен показывать записи, а не «1. 2.»."""
+    at = _in_workspace(fake_api)
+    fake_api.messages = lambda session_id, limit=200: {
+        "messages": [
+            {"id": "m1", "role": "user", "content": "фавориты Екатерины"},
+            {"id": "m2", "role": "assistant",
+             "content": "Ответ.\n\nReferences\n\n"
+                        "1. [2]: ekaterina_hot_facts (загружено пользователем)\n\n"
+                        "2. [3]: ekaterina_context (загружено пользователем)"},
+        ]}
+
+    at.session_state["workspace_tab"] = "Чат"
+    at.session_state["active_tab"] = "Чат"
+    at.run()
+
+    assert not at.exception, at.exception
+    rendered = [m.value for m in at.markdown]
+    assert any("1. [2] ekaterina_hot_facts" in v for v in rendered), rendered
+    assert all("]:" not in v for v in rendered), rendered

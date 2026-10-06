@@ -66,8 +66,15 @@ class Settings(BaseSettings):
     summary_llm_model: str | None = None  # None -> llm_model
     embedding_model: str = "st-multi-qa-MiniLM-L6-cos-v1"
     evidence_k: int = 10
-    answer_max_sources: int = 5
-    answer_length: str = "about 200 words, but can be longer"
+    # Больше источников в самом ответе = больше проверяемого материала
+    # для модели и для проверки обоснованности (стоимость — только prefill).
+    answer_max_sources: int = 8
+    # Короткий ответ без «научно-статьной» простыни: простыня = больше
+    # выдуманных фактов (см. grounding.py) и дольше генерация на CPU.
+    answer_length: str = "no more than 120 words"
+    # Сырой текст вместо LLM-сводок в контексте: честнее, но огромный
+    # prefill (SPICE_REPORT: ответ 817 с) — включается только явно.
+    evidence_skip_summary: bool = False
     max_concurrent_requests: int = 1  # Ollama на CPU обрабатывает запросы последовательно
     chunk_chars: int = 4000
     chunk_overlap: int = 200
@@ -77,6 +84,8 @@ class Settings(BaseSettings):
     answer_language: str = "ru"
     # Русскоязычные промпты; если пусто — берётся дефолт paperqa + правило языка
     prompts_system: str | None = None
+    # Шаблон qa-промпта; если пусто — дефолт paperqa с GROUNDING RULES
+    prompts_qa: str | None = None
 
     # ---------- лимиты и жизненный цикл сессий (из ТЗ) ----------
     session_ttl_days: int = 90
@@ -144,6 +153,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "database_url", "db_path", "pqa_home", "summary_llm_model", "prompts_system",
+        "prompts_qa",
         mode="before",
     )
     @classmethod
@@ -176,6 +186,10 @@ class Settings(BaseSettings):
             if not self.offline_mode:
                 warnings.append("OFFLINE_MODE=false: возможны внешние запросы "
                                 "к Crossref/Semantic Scholar.")
+        if self.evidence_skip_summary:
+            warnings.append(
+                "EVIDENCE_SKIP_SUMMARY=true: сырой текст в контексте даёт "
+                "огромный prefill (замер SPICE_REPORT: ответ 817 с).")
         if self.allow_external_import_paths:
             warnings.append("ALLOW_EXTERNAL_IMPORT_PATHS=true: импорт файлов "
                             "разрешён вне каталога данных.")

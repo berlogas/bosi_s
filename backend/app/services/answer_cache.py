@@ -49,19 +49,26 @@ class CachedAnswer:
     citations: list[str] = field(default_factory=list)
     seconds: float = 0.0
     created_at: float = 0.0
+    # Отчёты citation_guard/grounding, чтобы при попадании в кэш показать
+    # пользователю те же проверки, что и при первом ответе. None у старых
+    # записей — поля в файле ещё не было.
+    checks: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {"answer": self.answer, "sources": self.sources,
                 "citations": self.citations, "seconds": self.seconds,
-                "created_at": self.created_at}
+                "created_at": self.created_at,
+                "checks": self.checks}
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> CachedAnswer:
+        checks = raw.get("checks")
         return cls(answer=str(raw.get("answer", "")),
                    sources=list(raw.get("sources") or []),
                    citations=list(raw.get("citations") or []),
                    seconds=float(raw.get("seconds") or 0.0),
-                   created_at=float(raw.get("created_at") or 0.0))
+                   created_at=float(raw.get("created_at") or 0.0),
+                   checks=dict(checks) if isinstance(checks, dict) else None)
 
 
 class AnswerCache:

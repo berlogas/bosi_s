@@ -142,6 +142,11 @@ async def test_chat_query_persists_history(client, researcher, session_id,
     assert history.json()["total"] == 2
     assert [m["role"] for m in history.json()["messages"]] == ["user", "assistant"]
     assert history.json()["messages"][0]["content"] == "Какая биомасса?"
+    # Отчёты проверок (цитаты, обоснованность) переживают перезагрузку:
+    # без `checks` в истории предупреждения видны только при первом показе.
+    checks = history.json()["messages"][1].get("checks", {})
+    assert "citations" in checks and "grounding" in checks
+    assert isinstance(checks["citations"]["ok"], bool)
 
 
 async def test_history_endpoint_is_readable_without_session(client, researcher,

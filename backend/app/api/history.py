@@ -101,6 +101,7 @@ def _out(message: Any) -> MessageOut:
         content=message.content,
         mode=getattr(message.mode, "value", None),
         sources=list(message.sources or []),
+        checks=dict(getattr(message, "checks", None) or {}),
         duration_seconds=message.duration_seconds,
         created_at=message.created_at,
     )

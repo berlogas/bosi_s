@@ -35,14 +35,38 @@ def _header(client, session_id: str, detail: dict) -> None:
             client.pause_session(session_id, note)
             st.rerun()
     with columns[2]:
-        if st.button("Архив", key="archive_btn", disabled=read_only):
-            client.archive_session(session_id)
-            st.session_state["page"] = "dashboard"
+        if st.button("Архив", key="archive_btn", disabled=read_only,
+                     help="Увести сессию в архив — спросим подтверждение"):
+            # Первое нажатие только спрашивает. Архивация необратима
+            # (reactivate_session для archived не пускает), а кнопка стоит
+            # ровно между «Паузой» и «Назад» — случайный клик раньше
+            # уводил сессию в архив без всякого подтверждения.
+            st.session_state["archive_ask"] = session_id
             st.rerun()
     with columns[3]:
         if st.button("← Дашборд", key="back_btn"):
+            st.session_state.pop("archive_ask", None)
             st.session_state["page"] = "dashboard"
             st.rerun()
+
+    if st.session_state.get("archive_ask") == session_id:
+        st.warning("Архивировать сессию? Она станет только для чтения: "
+                   "вернуть её из интерфейса будет нельзя.")
+        yes, no, _ = st.columns([1, 1, 3])
+        with yes:
+            if st.button("Да, в архив", key="archive_yes"):
+                try:
+                    client.archive_session(session_id)
+                except ApiError as exc:
+                    st.error(exc.message)   # флаг не снимаем — можно повторить
+                    return read_only
+                st.session_state.pop("archive_ask", None)
+                st.session_state["page"] = "dashboard"
+                st.rerun()
+        with no:
+            if st.button("Отмена", key="archive_no"):
+                st.session_state.pop("archive_ask", None)
+                st.rerun()
 
     if read_only:
         st.warning("Сессия в архиве — доступно только чтение.")
@@ -172,7 +196,7 @@ def _render_history(client, session_id: str, read_only: bool) -> list[dict[str, 
                 _delete_message_button(client, _m, history, _i, _r)
 
         with ui.chat_bubble(role, action=action):
-            st.markdown(message.get("content") or "")
+            st.markdown(ui.md_safe_references(message.get("content") or ""))
             if role != "user":
                 ui.source_list(message.get("sources", []))
     return history
@@ -204,6 +228,9 @@ def _forget_cached_exchange(history: list[dict[str, Any]], index: int) -> None:
     last = ((st.session_state.get("chat_last") or {}).get("q") or "").strip()
     if last and last == question:
         st.session_state.pop("chat_last", None)
+    failed = ((st.session_state.get("chat_failed") or {}).get("q") or "").strip()
+    if failed and failed == question:
+        st.session_state.pop("chat_failed", None)
 
 
 def _delete_message_button(client, message: dict[str, Any],
@@ -268,6 +295,17 @@ def _delete_cached_exchange(read_only: bool) -> None:
     st.rerun()
 
 
+def _delete_failed_exchange(read_only: bool) -> None:
+    """Кнопка удаления вопроса, на который задача ответить не смогла."""
+    if read_only:
+        return
+    if not st.button("🗑", key="del_failed_exchange",
+                     help="Убрать вопрос и ошибку из переписки"):
+        return
+    st.session_state.pop("chat_failed", None)
+    st.rerun()
+
+
 def _clear_chat_controls(client, session_id: str, read_only: bool) -> None:
     """Очистка всей переписки — в два шага, потому что отмены нет."""
     if read_only:
@@ -320,6 +358,25 @@ def chat_tab(client, session_id: str, read_only: bool) -> None:
             st.markdown(pending)
         with ui.chat_bubble("assistant"):
             st.info("Вопрос обрабатывается…")
+
+    # Вопрос, на который задача упала (сбой базы, недоступен LLM и т.п.).
+    # Показываем его вместе с ошибкой: раньше панель задачи и вопрос
+    # просто исчезали при status=error, и в чате оставалась тишина —
+    # «долго думала, а ответа нет» без единого объяснения.
+    failed = st.session_state.get("chat_failed")
+    if failed:
+        if _asked(history, failed["q"]):
+            st.session_state.pop("chat_failed", None)
+        else:
+            with ui.chat_bubble("user",
+                                action=lambda: _delete_failed_exchange(
+                                    read_only)):
+                st.markdown(failed["q"])
+            with ui.chat_bubble("assistant"):
+                if failed.get("kind") == "cancelled":
+                    st.info(failed.get("text") or "Задача отменена.")
+                else:
+                    st.error(f"Не получилось ответить: {failed.get('text')}")
 
     # Синхронный ответ, которого ещё нет в истории. Ответ из кэша сервер
     # не сохраняет (в chat_query стоит `if not from_cache`), поэтому без
@@ -451,16 +508,25 @@ def render() -> None:
         def _watch_task() -> None:
             try:
                 ui.task_panel(client, task_id)
-                status = client.task(task_id)["status"]
+                task = client.task(task_id)
             except ApiError:
                 st.session_state.pop("task_id", None)
                 st.rerun()
                 return
+            status = task.get("status")
             if status in {"done", "error", "cancelled"}:
                 st.session_state.pop("task_id", None)
                 # Задача дописала обмен в историю — вопрос больше не pending,
                 # а полная перерисовка покажет ответ из истории.
-                st.session_state.pop("chat_pending", None)
+                pending = st.session_state.pop("chat_pending", None)
+                # При падении задачи вопрос нельзя просто убрать: иначе
+                # пользователь видит только долгое ожидание и пустоту.
+                if status in {"error", "cancelled"} and pending:
+                    st.session_state["chat_failed"] = {
+                        "q": pending,
+                        "kind": status,
+                        "text": task.get("error") or "Задача отменена",
+                    }
                 st.rerun()
 
         _watch_task()

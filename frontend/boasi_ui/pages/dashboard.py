@@ -40,7 +40,7 @@ def _quick_chat(client) -> None:
             # У ассистента текст рисует answer_view — иначе ответ
             # продублируется (он и в content, и в answer["answer"]).
             if item.get("answer") is None:
-                st.markdown(item.get("content") or "")
+                st.markdown(ui.md_safe_references(item.get("content") or ""))
             else:
                 ui.answer_view(item["answer"])
 

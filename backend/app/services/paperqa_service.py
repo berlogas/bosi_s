@@ -43,6 +43,7 @@ from app.core.errors import DocumentProcessingError, UpstreamError
 from app.core.locks import locks
 from app.services.chunk_store import ChunkStore, SqliteChunkStore
 from app.services.pqa_profile import build_pqa_settings, settings_fingerprint
+from app.services.pqa_readers import install_utf8_parser
 from app.services.types import (
     SOURCE_MARK,
     AnswerResult,
@@ -54,6 +55,10 @@ from app.services.types import (
 )
 
 log = logging.getLogger(__name__)
+
+# Парсинг документов — только в UTF-8: paperqa читает файлы в кодировке
+# локали (cp1251 на Windows), и кириллица превращается в «Р‘РёРѕРјР°ССЃР°».
+install_utf8_parser()
 
 GLOBAL_COLLECTION = "global"
 SESSION_PREFIX = "session:"

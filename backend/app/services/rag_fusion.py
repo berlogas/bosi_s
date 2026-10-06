@@ -341,15 +341,38 @@ def source_dict(candidate: Candidate, index: int) -> dict[str, Any]:
     }
 
 
+def build_reference(marker: str, index: int, label: str) -> str:
+    """Единый формат ссылки API: `📁 [n] Название (категория)`.
+
+    Номер обязателен: в тексте ответа модель цитирует `[n]`, и без него
+    пользователь не сопоставит список с цитатой. Формат дублирует
+    `boasi_ui.components.ui.source_list`.
+    """
+    return f"{marker} [{index}] {label}"
+
+
 def format_reference(candidate: Candidate, index: int) -> str:
-    """Человекочитаемая ссылка: `📚 <citation>` или `📁 <title> (категория)`."""
+    """Человекочитаемая ссылка: `📚 [n] <citation>` или `📁 [n] <title> (категория)`."""
     scope = "global" if candidate.scope is SourceScope.GLOBAL else "session"
     if scope == "global":
-        citation = str(candidate.context.text.doc.citation or candidate.docname)
-        return f"{candidate.marker} {citation}"
-    label = candidate.meta.title or candidate.docname
-    category = candidate.meta.category or "без категории"
-    return f"{candidate.marker} {label} ({category})"
+        label = str(candidate.context.text.doc.citation or candidate.docname)
+    else:
+        label = (f"{candidate.meta.title or candidate.docname} "
+                 f"({candidate.meta.category or 'без категории'})")
+    return build_reference(candidate.marker, index, label)
+
+
+def reference_from_source(source: dict[str, Any]) -> str:
+    """Тот же формат для ответа из кэша: кандидатов там нет, только словари."""
+    scope = str(source.get("source_scope") or "session")
+    # маркер мог отсутствовать в старых записях кэша — выводим из области
+    marker = str(source.get("marker") or ("📚" if scope == "global" else "📁"))
+    if scope == "global":
+        label = str(source.get("citation") or source.get("docname") or "")
+    else:
+        label = (f"{source.get('title') or source.get('docname') or ''} "
+                 f"({source.get('category') or 'без категории'})")
+    return build_reference(marker, int(source.get("index") or 0), label)
 
 
 def chunks_from_candidates(candidates: Sequence[Candidate]) -> list[ScoredChunk]:
@@ -378,11 +401,13 @@ __all__ = [
     "DocumentMeta",
     "SourceScope",
     "build_candidates",
+    "build_reference",
     "category_weight",
     "chunks_from_candidates",
     "format_reference",
     "is_allowed",
     "merge_and_rerank",
+    "reference_from_source",
     "score_candidate",
     "source_dict",
     "stem",

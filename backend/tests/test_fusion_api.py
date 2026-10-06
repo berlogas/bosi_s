@@ -128,6 +128,9 @@ async def test_sources_are_marked_and_numbered(client, researcher, session_id,
     assert body["references"], "ссылки на источники обязательны"
     for reference in body["references"]:
         assert reference[0] in "📚📁"
+    # в списке источников — те же номера, что и в цитатах ответа `[n]`
+    assert [r.split(" ")[1] for r in body["references"]] == [
+        f"[{i}]" for i in range(1, len(body["sources"]) + 1)]
 
 
 async def test_project_focus_ranks_project_documents_first(client, researcher,
@@ -262,3 +265,100 @@ async def test_suggest_queries_returns_list(client, researcher) -> None:
     assert response.status_code == 200
     assert isinstance(body["suggestions"], list)
     assert body["query"] == "хлорофилл"
+
+# --------------------------------------------------------------------------- цитаты
+class _MarkerStub(StubLLMModel):
+    """Отдаёт маркерный текст только на вызов генерации ответа.
+
+    Сводки контекста идут обычной заглушкой (`relevance_score` в промпте),
+    иначе paperqa не разберёт оценку релевантности и уронит сборку контекста.
+    """
+
+    async def call_single(self, messages=None, **kwargs):
+        text = "".join(getattr(m, "content", "") or "" for m in (messages or []))
+        if "relevance_score" in text:
+            return await super().call_single(messages, **kwargs)
+        return self._LLMResult(text=self.answer, model=self.name)
+
+
+async def test_llm_citation_markers_are_repaired(client, researcher, session_id,
+                                                 seeded, stub_registry) -> None:
+    """Выдуманные LLM маркеры «(степень N)» не доходят до пользователя.
+
+    Слабая модель пишет их вместо ключей PaperQA; ответ должен прийти со
+    ссылками `[n]` (нумерация источников в интерфейсе), а номера за пределами
+    выдачи — удалены и видны в stats["citations"].
+    """
+    from app.services import paperqa_service as svc
+
+    stub = _MarkerStub(answer=(
+        "Хлорофилл-а измеряют экстракционным методом (степень 1, степень 2), "
+        "а редкие случаи (степень 9) не опираются ни на что."))
+    svc._registry.session_service(session_id)._llm_model = stub
+
+    body = await _query(client, researcher, session_id, no_cache=True)
+
+    assert "степень" not in body["answer"], body["answer"]
+    assert "[1" in body["answer"], body["answer"]
+    assert "(степень 9)" not in body["answer"]
+
+    check = body["stats"]["citations"]
+    assert check["repaired"][0].startswith("(степень 1, степень 2) → [")
+    assert check["dropped"] == ["(степень 9)"]
+    assert check["ok"] is False
+    assert check["warnings"]
+
+
+async def test_stale_cached_markers_repaired_on_read(db) -> None:
+    """Ответ, закэшированный ДО починки («docname lines 0-0»), чинится при чтении.
+
+    Иначе пользователь навсегда увидит мусор из старого кэша: переиндексация
+    сбрасывает ключ, а повторный тот же вопрос — нет.
+    """
+    from app.services.answer_cache import CachedAnswer
+    from app.services.rag_service import RagFusionService
+
+    class _StaleCache:
+        async def get_or_none(self, **kwargs):
+            return CachedAnswer(
+                answer="Факт (2b_context lines 47-77) и (ghost lines 0-0).",
+                sources=[{"index": 1, "docname": "2b_context",
+                          "page": "2b_context lines 47-77"}],
+                citations=["📁 2b_context (temp_literature)"],
+                seconds=1.0)
+
+    fusion = RagFusionService(cache=_StaleCache())
+
+    result = await fusion.answer(db, query="повторный вопрос")
+
+    assert result.from_cache is True
+    # имя фрагмента заменено на номер источника, мусорная ссылка удалена
+    assert result.answer.formatted_answer == "Факт [1] и."
+    # ссылки списка пересобраны с номером — иначе [n] в ответе не сопоставить
+    assert result.references == ["📁 [1] 2b_context (без категории)"]
+    check = result.stats["citations"]
+    assert check["changed"] is True
+    assert check["repaired"] == ["(2b_context lines 47-77) → [1]"]
+    assert check["dropped"] == ["(ghost lines 0-0)"]
+
+
+async def test_on_stage_reports_growing_progress(db, seeded, session_id) -> None:
+    """Колбэк on_stage отдаёт растущие проценты и подписанный LLM-этап.
+
+    Без этапов строка прогресса в чате замирает на 20%, пока LLM считает
+    ответ минутами, и выглядит как зависшая («мёртвая строка»).
+    """
+    from app.services.rag_service import RagFusionService
+
+    seen: list[tuple[int, str]] = []
+    fusion = RagFusionService()
+
+    result = await fusion.answer(
+        db, query="Что такое CTD-зонд?", session_id=session_id,
+        on_stage=lambda percent, label: seen.append((percent, label)))
+
+    assert result.from_cache is False
+    percents = [percent for percent, _ in seen]
+    assert percents, "fusion не сообщил ни одного этапа"
+    assert percents == sorted(percents), percents
+    assert any("LLM" in label for _, label in seen), seen

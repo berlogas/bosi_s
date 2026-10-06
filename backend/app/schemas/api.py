@@ -238,6 +238,8 @@ class MessageOut(BaseModel):
     content: str
     mode: str | None = None
     sources: list[dict[str, Any]] = Field(default_factory=list)
+    # Отчёты проверок ответа: {"citations": …, "grounding": …}
+    checks: dict[str, Any] = Field(default_factory=dict)
     duration_seconds: float | None = None
     created_at: datetime
 

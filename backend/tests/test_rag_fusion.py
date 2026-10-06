@@ -337,8 +337,9 @@ def test_format_reference_differs_by_scope() -> None:
                          docname="paper", title="Данные GF/F")
     session_cand.docname = "paper"
 
-    assert format_reference(global_cand, 1) == "📚 Smith 2023 (загружено)"
-    assert format_reference(session_cand, 2) == "📁 Данные GF/F (project_data)"
+    # формат с номером `[n]` — он же ключ к цитатам в тексте ответа
+    assert format_reference(global_cand, 1) == "📚 [1] Smith 2023 (загружено)"
+    assert format_reference(session_cand, 2) == "📁 [2] Данные GF/F (project_data)"
 
 
 def test_chunks_from_candidates_keeps_order() -> None:
@@ -354,3 +355,34 @@ def test_chunks_from_candidates_keeps_order() -> None:
 
 def test_tokenize_ignores_short_words() -> None:
     assert tokenize("в и GF/F хлорофилл") == {"хлорофилл", "gf"}
+
+# ------------------------------------------------------------------ формат ссылок
+def test_reference_from_source_matches_fresh_format() -> None:
+    """Ссылка из кэша обязана выглядеть как из свежего ответа: `📁 [n] …`."""
+    from app.services.rag_fusion import reference_from_source
+
+    session_source = {"index": 2, "marker": "📁", "source_scope": "session",
+                      "title": "Данные GF/F", "category": "project_data",
+                      "docname": "biomass", "citation": "biomass (загружено)"}
+    global_source = {"index": 1, "marker": "📚", "source_scope": "global",
+                     "title": None, "category": None, "docname": "handbook",
+                     "citation": "Руководство по CTD"}
+
+    assert reference_from_source(session_source) == "📁 [2] Данные GF/F (project_data)"
+    assert reference_from_source(global_source) == "📚 [1] Руководство по CTD"
+
+
+def test_reference_without_category_says_so() -> None:
+    from app.services.rag_fusion import reference_from_source
+
+    source = {"index": 1, "marker": "📁", "source_scope": "session",
+              "title": "Заметка", "category": None, "docname": "note"}
+
+    assert reference_from_source(source) == "📁 [1] Заметка (без категории)"
+
+
+def test_build_reference_keeps_marker_first() -> None:
+    """UI-тесты и пользователи читают маркер первым символом."""
+    from app.services.rag_fusion import build_reference
+
+    assert build_reference("📁", 3, "Док (data)") == "📁 [3] Док (data)"

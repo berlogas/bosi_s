@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 from paperqa import Settings
+from paperqa.prompts import CANNOT_ANSWER_PHRASE
 from paperqa.settings import MultimodalOptions, PromptSettings
 
 from app.config import Settings as AppSettings
@@ -30,15 +31,54 @@ RU_RULE = (
     "LANGUAGE REQUIREMENT (обязательно): отвечай ТОЛЬКО на русском языке. "
     "Не переводи и не перефразируй названия географических объектов, приборов, методов "
     "и аббревиатуры: «Баренцево море», «CTD-зонд», «хлорофилл-а», «GF/F», "
-    "«потеря сухого вещества». Каждое утверждение снабжай ключом источника из контекста."
+    "«потеря сухого вещества». Каждое утверждение снабжай ключом источника из контекста.\n"
+    "CITATION REQUIREMENT (обязательно): ссылки ставь ТОЛЬКО в скобках и ТОЛЬКО из "
+    "ключей контекста вида (pqac-1a2b3c4d) — ровно тех, что перечислены в списке "
+    "Valid Keys. Свои обозначения запрещены: никаких «(степень 1)», «(степень 1, "
+    "степень 2)», «(уровень 2)», «(источник 3)», «(1)» и «[1]» — это не ссылки и они "
+    "будут отброшены. Если подходящего ключа в контексте нет — не ставь скобки вообще.\n"
+    "FACT REQUIREMENT (обязательно): опирайся ТОЛЬКО на факты, прямо указанные в "
+    "контексте выше. Не добавляй даты, имена, родственные связи, числа и события из "
+    "своей памяти: если этого нет в контексте — не пиши. Если контекста не хватает, "
+    f"ответь ровно: «{CANNOT_ANSWER_PHRASE}.» Отвечай коротко и по существу — без "
+    "вступлений, выводов и «научно-статьных» фраз."
 )
 
 EN_RULE = (
     "LANGUAGE REQUIREMENT (mandatory): answer in English only. "
-    "Cite the source key for every claim."
+    "Cite the source key for every claim.\n"
+    "CITATION REQUIREMENT (mandatory): put citations in parentheses ONLY with the "
+    "context keys like (pqac-1a2b3c4d) — exactly the keys listed under Valid Keys. "
+    "Invent nothing: no '(degree 1)', '(source 2)', '(1)' or '[1]' — those are not "
+    "citations and will be discarded. If no key fits the claim, omit parentheses.\n"
+    "FACT REQUIREMENT (mandatory): use ONLY facts explicitly stated in the context "
+    "above. Never add dates, names, kinship, numbers or events from your own "
+    "knowledge — if it is not in the context, do not write it. If the context is "
+    f"insufficient, reply exactly: \"{CANNOT_ANSWER_PHRASE}.\" Answer briefly and "
+    "straight to the point: no introduction, no conclusions, no filler."
 )
 
 LANGUAGE_RULES = {"ru": RU_RULE, "en": EN_RULE}
+
+# --------------------------------------------------------------------- qa-промпт
+# Требование «писать как научную статью» из дефолта paperqa провоцирует
+# развёрнутые ответы: слабая модель достраивает факты из памяти, чтобы
+# текст звучал связно. Заменяем его на правила обоснованности (Фаза 10).
+_QA_STYLE = (
+    "Write in the style of a scientific article, with concise sentences and "
+    "coherent paragraphs. This answer will be used directly, "
+    "so do not add any extraneous information."
+)
+
+_QA_GROUNDING = (
+    "GROUNDING RULES (mandatory):\n"
+    "- State ONLY facts that are explicitly present in the context above. Never "
+    "add names, dates, numbers, kinship or events from your own knowledge.\n"
+    f'- If the context is insufficient, reply exactly "{CANNOT_ANSWER_PHRASE}."\n'
+    "- Answer directly and briefly: no introduction, no conclusions, no filler "
+    "and no article structure. This answer will be used directly, so do not add "
+    "any extraneous information."
+)
 
 _built: dict[str, Settings] = {}
 
@@ -87,6 +127,24 @@ def build_system_prompt(app: AppSettings) -> str | None:
     return f"{default}\n\n{rule}" if default else rule
 
 
+def build_qa_prompt(app: AppSettings) -> str | None:
+    """qa-промпт paperqa с правилами обоснованности (или шаблон из .env).
+
+    Меняем ровно одно: требование писать «как научную статью» заменяется на
+    GROUNDING RULES — короткий ответ без вводных и выводов, только факты из
+    контекста, явный отказ (``I cannot answer``), если фактов нет.
+    """
+    if app.prompts_qa:
+        return app.prompts_qa
+    default = PromptSettings().qa
+    if _QA_STYLE in default:
+        return default.replace(_QA_STYLE, _QA_GROUNDING)
+    # Дефолт paperqa изменился: не рискуем потерять шаблон — вставляем правила
+    # прямо перед «Answer ({answer_length}):», иначе они окажутся после вывода.
+    marker = "Answer ({answer_length}):"
+    return default.replace(marker, f"{_QA_GROUNDING}\n{marker}")
+
+
 def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Settings:
     """Собрать `Settings`; результат кэшируется (сборка не бесплатная)."""
     from app.config import get_settings  # локальный импорт: избегаем цикла
@@ -96,6 +154,9 @@ def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Sett
     system_prompt = build_system_prompt(app)
     if system_prompt:
         prompts["system"] = system_prompt
+    qa_prompt = build_qa_prompt(app)
+    if qa_prompt:
+        prompts["qa"] = qa_prompt
 
     llm_config = build_llm_config(app)
     payload: dict[str, Any] = {
@@ -109,6 +170,9 @@ def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Sett
             "evidence_k": app.evidence_k,
             "answer_max_sources": app.answer_max_sources,
             "answer_length": app.answer_length,
+            # Сводка не из сырого текста: пропуск даёт огромный prefill
+            # (замер SPICE_REPORT: ответ 817 с) — только по явному флагу.
+            "evidence_skip_summary": app.evidence_skip_summary,
             # Ollama на CPU последователен: параллельные запросы дают очередь в минуты
             "max_concurrent_requests": app.max_concurrent_requests,
         },

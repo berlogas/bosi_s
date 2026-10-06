@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -53,6 +54,11 @@ class Task:
     status: TaskStatus = TaskStatus.queued
     progress: int = 0
     step: str = "в очереди"
+    # Секундомер текущего этапа: UI показывает «3:12» рядом с процентами,
+    # иначе при долгой LLM строка прогресса замирает на одних и тех же
+    # числах и выглядит как зависшая.
+    stage_started_at: float = field(default_factory=time.monotonic,
+                                    repr=False, compare=False)
     result: Any = None
     error: str | None = None
     cancel_requested: bool = False
@@ -63,6 +69,8 @@ class Task:
     started_at: datetime | None = None
     finished_at: datetime | None = None
     _handle: asyncio.Task | None = field(default=None, repr=False, compare=False)
+    _stage_ended_at: float | None = field(default=None, repr=False,
+                                          compare=False)
 
     @property
     def finished(self) -> bool:
@@ -76,6 +84,19 @@ class Task:
         end = self.finished_at or utcnow()
         return round((end - self.started_at).total_seconds(), 1)
 
+    def set_stage(self, progress: int, step: str) -> None:
+        """Перейти на новый этап: процент (с зажимом 0..100), подпись,
+        сброс секундомера этапа."""
+        self.progress = max(0, min(100, int(progress)))
+        self.step = step
+        self.stage_started_at = time.monotonic()
+
+    @property
+    def stage_seconds(self) -> float:
+        """Сколько идёт текущий этап (после завершения — заморожено)."""
+        end = self._stage_ended_at or time.monotonic()
+        return round(max(0.0, end - self.stage_started_at), 1)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id, "kind": self.kind, "title": self.title,
@@ -85,7 +106,7 @@ class Task:
             "session_id": self.session_id, "project_id": self.project_id,
             "created_at": self.created_at, "started_at": self.started_at,
             "finished_at": self.finished_at, "seconds": self.seconds,
-            "result": self.result,
+            "stage_seconds": self.stage_seconds, "result": self.result,
         }
 
 
@@ -135,45 +156,46 @@ class TaskRegistry:
     async def _run(self, task: Task, body: TaskBody) -> None:
         task.status = TaskStatus.running
         task.started_at = utcnow()
-        task.step = "начало"
+        task.set_stage(0, "начало")
         try:
             task.result = await body(task)
         except asyncio.CancelledError:
             task.status = TaskStatus.cancelled
-            task.step = "отменено пользователем"
+            task.set_stage(task.progress, "отменено пользователем")
             task.finished_at = utcnow()
             log.info("task %s (%s) отменена", task.id[:8], task.kind)
             raise
         except Exception as exc:
             task.status = TaskStatus.error
             task.error = f"{type(exc).__name__}: {exc}"
-            task.step = "ошибка"
+            task.set_stage(task.progress, "ошибка")
             task.finished_at = utcnow()
             log.exception("task %s (%s) упала", task.id[:8], task.kind)
         else:
             task.status = TaskStatus.done
-            task.progress = 100
-            task.step = "готово"
+            task.set_stage(100, "готово")
             task.finished_at = utcnow()
             log.info("task %s (%s) выполнена за %sс", task.id[:8], task.kind,
                      task.seconds)
         finally:
+            # секундомер этапа замораживаем: payload завершённой задачи
+            # обязан отдавать одно и то же значение
+            task._stage_ended_at = time.monotonic()
             self._trim()
 
     # ------------------------------------------------------------------ прогресс
     def report(self, task: Task, progress: int, step: str) -> None:
-        """Обновить прогресс из тела задачи."""
+        """Обновить прогресс из тела задачи (и перезапустить этап)."""
         if task.cancel_requested:
             raise asyncio.CancelledError
-        task.progress = max(0, min(100, int(progress)))
-        task.step = step
+        task.set_stage(progress, step)
 
     def request_cancel(self, task_id: str) -> bool:
         task = self._tasks.get(task_id)
         if task is None or task.finished:
             return False
         task.cancel_requested = True
-        task.step = "отмена запрошена"
+        task.set_stage(task.progress, "отмена запрошена")
         if task._handle is not None and not task._handle.done():
             task._handle.cancel()
         return True

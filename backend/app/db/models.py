@@ -382,6 +382,10 @@ class Message(Base):
     mode: Mapped[SearchMode | None] = mapped_column(Enum(SearchMode, native_enum=False),
                                                    nullable=True)
     sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Отчёты проверок ответа: {"citations": …, "grounding": …, "refusal": …}
+    # (см. app/services/citation_guard.py и grounding.py)
+    checks: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True,
+                                                          default=dict)
     project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)

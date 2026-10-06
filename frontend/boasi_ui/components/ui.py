@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -120,14 +121,33 @@ def session_card(session: dict[str, Any]) -> None:
             st.session_state["page"] = "workspace"
             st.rerun()
 
+    archive_ask = f"arch_ask_{session['id']}"
     with columns[2]:
-        if st.button("Архив", key=f"arch_{session['id']}",
-                     use_container_width=True, disabled=status != "active"):
-            try:
-                state.api().archive_session(session["id"])
+        if st.session_state.get(archive_ask):
+            # Второй шаг подтверждения — вместо кнопки «Архив».
+            if st.button("Да, в архив", key=f"arch_yes_{session['id']}",
+                         use_container_width=True,
+                         disabled=status != "active"):
+                try:
+                    state.api().archive_session(session["id"])
+                    st.session_state.pop(archive_ask, None)
+                    st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(str(exc))
+            if st.button("Отмена", key=f"arch_no_{session['id']}",
+                         use_container_width=True):
+                st.session_state.pop(archive_ask, None)
                 st.rerun()
-            except Exception as exc:  # noqa: BLE001
-                st.error(str(exc))
+        elif st.button("Архив", key=f"arch_{session['id']}",
+                       use_container_width=True, disabled=status != "active"):
+            # Архивация необратима — спрашиваем, а не выполняем сразу.
+            # Раньше один клик сразу уносил сессию в архив (и из
+            # workspace, и отсюда), и вернуть её было нельзя.
+            st.session_state[archive_ask] = True
+            st.rerun()
+
+    if st.session_state.get(archive_ask):
+        st.caption("Подтвердите: сессия уйдёт в архив (только чтение).")
 
 
 def limits_panel(summary: dict[str, Any]) -> None:
@@ -140,6 +160,21 @@ def limits_panel(summary: dict[str, Any]) -> None:
                f"Хранилище: {used_mb:.1f}/{limit_mb:.0f} МБ")
     if documents >= documents_limit:
         st.warning("Достигнут лимит документов — удалите лишние.")
+
+
+def _fmt_seconds(value: Any) -> str:
+    """42с / 3:07 / 1:02:05 — компактная запись времени для строк прогресса."""
+    try:
+        seconds = int(float(value or 0))
+    except (TypeError, ValueError):
+        return ""
+    if seconds < 1:
+        return ""
+    if seconds < 60:
+        return f"{seconds}с"
+    if seconds < 3600:
+        return f"{seconds // 60}:{seconds % 60:02d}"
+    return f"{seconds // 3600}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
 
 
 def task_panel(client, task_id: str) -> None:
@@ -159,9 +194,18 @@ def task_panel(client, task_id: str) -> None:
 
     with columns[0]:
         if status in {"running", "queued"}:
-            st.progress(min(1.0, task.get("progress", 0) / 100),
-                        text=f"{icon} {task.get('step', '')} "
-                             f"({task.get('progress', 0)}%)")
+            # Строка должна быть «живой»: подпись этапа тикает секундомером
+            # этапа и общим временем. Без этого при долгой LLM панель
+            # замирала на одних и тех же процентах и выглядела зависшей.
+            text = f"{icon} {task.get('step', '')}".strip()
+            stage = _fmt_seconds(task.get("stage_seconds"))
+            total = _fmt_seconds(task.get("seconds"))
+            if stage:
+                text += f" · {stage}"
+            text += f" ({task.get('progress', 0)}%)"
+            if total:
+                text += f" · всего {total}"
+            st.progress(min(1.0, task.get("progress", 0) / 100), text=text)
         else:
             st.markdown(f"{icon} **{task.get('title', '')}** — {status}")
             if task.get("step"):
@@ -226,10 +270,49 @@ def source_list(sources: list[dict[str, Any]]) -> None:
             f"score {source.get('score', 0):.2f}")
 
 
+def collect_warnings(payload: dict[str, Any]) -> list[str]:
+    """Предупреждения проверок ответа.
+
+    Живой ответ несёт их в `stats`, история — в `checks` (одни и те же
+    отчёты citation_guard/grounding, сохранённые в `messages.checks`).
+    """
+    container = payload.get("stats") or payload.get("checks") or {}
+    warnings: list[str] = []
+    for key in ("grounding", "citations"):
+        section = container.get(key) or {}
+        warnings.extend(section.get("warnings") or [])
+    return warnings
+
+
+def checks_view(payload: dict[str, Any]) -> None:
+    """Предупреждения о качестве ответа: выдуманные факты, сломанные ссылки."""
+    warnings = collect_warnings(payload)
+    if not warnings:
+        return
+    st.warning("⚠️ " + warnings[0])
+    if len(warnings) > 1:
+        with st.expander(f"Все предупреждения проверки ({len(warnings)})"):
+            for line in warnings[1:]:
+                st.markdown(f"- {line}")
+
+
+# Запись блока References «1. [2]: doc (…)»: markdown-it разбирает
+# `[2]: doc (title)` как определение ссылки-сноски, съедает строку и
+# в ответе остаются голые «1. 2.». Двоеточие убираем только при рендере —
+# новые ответы такой формат уже чинит citation_guard, история нет.
+_REF_ENTRY_RE = re.compile(r"^([ \t]*\d+\.)[ \t]+\[([0-9]+)\]:",
+                           re.MULTILINE)
+
+
+def md_safe_references(text: str) -> str:
+    """«1. [2]: doc» → «1. [2] doc» перед рендером markdown."""
+    return _REF_ENTRY_RE.sub(r"\1 [\2]", text or "")
+
+
 def answer_view(answer: dict[str, Any]) -> None:
     text = (answer.get("answer") or "").strip()
     if text:
-        st.markdown(text)
+        st.markdown(md_safe_references(text))
     elif not answer.get("base_empty"):
         st.markdown("_Ответ пуст_")
     if answer.get("base_empty"):
@@ -239,6 +322,7 @@ def answer_view(answer: dict[str, Any]) -> None:
                 "или по запросу ничего не нашлось. Загрузите документы в "
                 "разделе «Администрирование».")
     source_list(answer.get("sources", []))
+    checks_view(answer)
     if answer.get("from_cache"):
         st.caption("Ответ взят из кэша")
     if answer.get("references"):
@@ -253,8 +337,9 @@ def messages_view(messages: list[dict[str, Any]]) -> None:
         if role == "user":
             st.markdown(f"**Вы:** {message.get('content')}")
         else:
-            st.markdown(message.get("content") or "")
+            st.markdown(md_safe_references(message.get("content") or ""))
             source_list(message.get("sources", []))
+            checks_view(message)
 
 
 def error_box(exc: Exception) -> None:

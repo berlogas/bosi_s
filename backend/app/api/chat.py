@@ -60,7 +60,8 @@ async def chat_query(payload: ChatQueryRequest, request: Request,
             answer=result.answer.formatted_answer,
             session_id=session.id, mode=payload.mode, sources=result.sources,
             cost=result.answer.cost, duration_seconds=result.answer.seconds,
-            token_counts=result.answer.token_counts)
+            token_counts=result.answer.token_counts,
+            checks=result.checks)
 
     touch_session(db, session, action_type="chat",
                   action_label=f"Вопрос: {payload.query[:60]}",
@@ -97,22 +98,23 @@ async def chat_query_async(payload: ChatQueryRequest, request: Request,
     ensure_writable(session)
 
     async def body(task: Task) -> dict[str, Any]:
-        # прогресс по этапам: поиск по коллекциям -> rerank -> генерация
-        task.step = "поиск по глобальной базе и сессии"
-        task.progress = 20
+        # прогресс по этапам: поиск -> rerank -> LLM -> проверки -> сохранение.
+        # Этапы внутри fusion передаются колбэком on_stage=task.set_stage:
+        # без них строка прогресса замирает на 20%, пока LLM считает ответ.
+        task.set_stage(20, "поиск по глобальной базе и сессии")
         fusion = RagFusionService()
         result = await fusion.answer(
             db, query=payload.query, session_id=session.id, mode=payload.mode,
             k=payload.k or 10, max_sources=payload.max_sources or 5,
-            use_cache=not payload.no_cache)
-        task.progress = 100
-        task.step = "готово"
+            use_cache=not payload.no_cache, on_stage=task.set_stage)
+        task.set_stage(95, "сохранение ответа")
         messages_repo.save_exchange(
             db, user=user, question=payload.query,
             answer=result.answer.formatted_answer, session_id=session.id,
             mode=payload.mode, sources=result.sources,
             cost=result.answer.cost, duration_seconds=result.answer.seconds,
-            token_counts=result.answer.token_counts)
+            token_counts=result.answer.token_counts,
+            checks=result.checks)
         touch_session(db, session, action_type="chat",
                       action_label=f"Вопрос: {payload.query[:60]}",
                       snapshot={"tab": "chat"})
@@ -152,7 +154,8 @@ async def quick_query(payload: QuickQueryRequest, request: Request,
             answer=result.answer.formatted_answer, session_id=None,
             mode=SearchMode.global_only, sources=result.sources,
             cost=result.answer.cost, duration_seconds=result.answer.seconds,
-            token_counts=result.answer.token_counts)
+            token_counts=result.answer.token_counts,
+            checks=result.checks)
         messages_repo.trim_quick_history(db, user.id)
 
     audit(db, action="chat.quick_query", actor=user, target_type="collection",

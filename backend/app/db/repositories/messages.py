@@ -72,15 +72,21 @@ def save_exchange(
     session_id: str | None = None,
     mode: SearchMode | None = None,
     sources: list[dict[str, Any]] | None = None,
+    checks: dict[str, Any] | None = None,
     cost: float = 0.0,
     duration_seconds: float | None = None,
     token_counts: dict[str, Any] | None = None,
 ) -> tuple[Message, Message]:
-    """Сохранить вопрос и ответ одной транзакцией."""
+    """Сохранить вопрос и ответ одной транзакцией.
+
+    `checks` — отчёты проверок ответа (цитаты, обоснованность): они
+    переживают перезагрузку страницы и показываются из истории.
+    """
     ask = Message(user_id=user.id, session_id=session_id, role="user",
                   content=question, mode=mode)
     reply = Message(user_id=user.id, session_id=session_id, role="assistant",
-                    content=answer, sources=sources or [], mode=mode, cost=cost,
+                    content=answer, sources=sources or [], checks=checks or {},
+                    mode=mode, cost=cost,
                     duration_seconds=duration_seconds, token_counts=token_counts or {})
     db.add_all([ask, reply])
     db.commit()

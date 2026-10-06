@@ -7,12 +7,20 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
 from app.core.errors import NotFoundError
 from app.db.models import Role
-from app.services.tasks import ProgressReporter, TaskRegistry, TaskStatus, reset_registry, tasks
+from app.services.tasks import (
+    ProgressReporter,
+    Task,
+    TaskRegistry,
+    TaskStatus,
+    reset_registry,
+    tasks,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -164,15 +172,12 @@ def test_progress_reporter_calculates_percent() -> None:
     registry = TaskRegistry()
     seen: list[tuple[int, str]] = []
 
-    class _FakeTask:
-        cancel_requested = False
-
-    task = _FakeTask()
+    task = Task(id="1", kind="indexing", title="t")
     reporter = ProgressReporter(task, registry)  # type: ignore[arg-type]
 
     for index in range(1, 5):
         reporter.step(index, 4, f"файл {index}")
-        seen.append((task.progress, task.step))  # type: ignore[attr-defined]
+        seen.append((task.progress, task.step))
 
     assert [pct for pct, _ in seen] == [25, 50, 75, 100]
     assert seen[-1][1] == "файл 4"
@@ -258,3 +263,40 @@ def test_anonymous_task_visible_to_anyone() -> None:
 
     task = _FakeTask(None)
     assert _own(task, _FakeUser("me", Role.researcher)) is task
+
+
+# --------------------------------------------------------------------- этапы
+
+def test_task_payload_includes_stage_seconds() -> None:
+    """UI-контракт: секундомер этапа обязан попадать в payload задачи."""
+    payload = Task(id="1", kind="chat", title="t").to_dict()
+    assert payload["stage_seconds"] >= 0
+
+
+async def test_set_stage_updates_percent_and_resets_timer() -> None:
+    """Этап зажимает проценты (0..100) и перезапускает секундомер этапа."""
+    started = asyncio.Event()
+    clamped: list[int] = []
+
+    async def body(task):
+        task.set_stage(150, "перебор")  # кривые проценты зажимаем
+        clamped.append(task.progress)
+        task.stage_started_at = time.monotonic() - 42  # этап «висел» 42 с
+        task.set_stage(55, "генерация ответа (LLM)")
+        started.set()
+        await asyncio.sleep(0.01)
+        return "ok"
+
+    task = tasks.submit(body, kind="chat", title="Вопрос")
+    await started.wait()
+
+    assert clamped == [100]
+    assert task.progress == 55
+    assert task.step == "генерация ответа (LLM)"
+    assert task.to_dict()["stage_seconds"] < 1, "секундомер этапа не сброшен"
+
+    await _wait_finished(task)
+    frozen = task.to_dict()["stage_seconds"]
+    await asyncio.sleep(0.02)
+    assert task.to_dict()["stage_seconds"] == frozen, (
+        "после финиша время этапа должно быть заморожено")

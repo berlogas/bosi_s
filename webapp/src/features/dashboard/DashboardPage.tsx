@@ -24,7 +24,7 @@ import { TaskPanel } from '../../components/TaskPanel'
 import { useAuth } from '../auth/authStore'
 import { QuickChat } from './QuickChat'
 import { SessionCard } from './SessionCard'
-import { useActiveTasks, useCreateSession, useSessions } from './queries'
+import { useActiveTasks, useCancelTask, useCreateSession, useSessions } from './queries'
 
 function NewSession() {
   const navigate = useNavigate()
@@ -74,6 +74,7 @@ function NewSession() {
 
 function ActiveTasks() {
   const { data: tasks, isPending, isError, error } = useActiveTasks()
+  const cancel = useCancelTask()
 
   if (isPending) return null
   if (isError) {
@@ -91,7 +92,12 @@ function ActiveTasks() {
       <Stack gap="xs">
         <Title order={5}>Активные задачи</Title>
         {tasks.map((task) => (
-          <TaskPanel key={task.id} task={task} />
+          <TaskPanel
+            key={task.id}
+            task={task}
+            onCancel={(target) => cancel.mutate(target.id)}
+            cancelPending={cancel.isPending}
+          />
         ))}
       </Stack>
     </Card>

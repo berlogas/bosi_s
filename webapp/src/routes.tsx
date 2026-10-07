@@ -1,8 +1,8 @@
 /**
  * Маршруты приложения.
  *
- * Фаза 0: вход и дашборд. Фаза 1: /s/:sessionId (каркас сессии).
- * Дальше — вкладки сессии (чат, документы, проекты) и /admin.
+ * Фаза 0: вход и дашборд. Фаза 1: сессии. Фаза 2: вкладки сессии как
+ * маршруты (`/s/:id/chat`, …) — план, п. E.
  */
 
 import { Center, Loader } from '@mantine/core'
@@ -13,6 +13,7 @@ import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { AppLayout } from './features/layout/AppLayout'
 import { SessionPage } from './features/sessions/SessionPage'
+import { ChatRoute, NotesRoute, PlaceholderRoute } from './features/sessions/tabs'
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const status = useAuth((state) => state.status)
@@ -43,7 +44,14 @@ export function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/s/:sessionId" element={<SessionPage />} />
+        <Route path="/s/:sessionId" element={<SessionPage />}>
+          {/* без вкладки — на чат (у Streamlit это был active_tab) */}
+          <Route index element={<Navigate to="chat" replace />} />
+          <Route path="chat" element={<ChatRoute />} />
+          <Route path="notes" element={<NotesRoute />} />
+          <Route path="documents" element={<PlaceholderRoute title="Документы" />} />
+          <Route path="projects" element={<PlaceholderRoute title="Проекты" />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

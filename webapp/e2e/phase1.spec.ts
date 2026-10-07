@@ -168,7 +168,8 @@ test('приёмка: вход → создать сессию → архив в
   await page.getByLabel('Название').fill('Новая')
   await page.getByRole('button', { name: 'Создать' }).click()
   created = true
-  await expect(page).toHaveURL(/\/s\/s-new$/)
+  // index-роут сессии ведёт на вкладку по умолчанию — чат (Фаза 2)
+  await expect(page).toHaveURL(/\/s\/s-new\/chat$/)
   await expect(page.getByRole('heading', { name: 'Новая' })).toBeVisible()
 
   // --- возврат на дашборд и архив в два шага ---

@@ -14,6 +14,14 @@ export type SessionStatus = components['schemas']['SessionStatus']
 export type User = components['schemas']['UserOut']
 export type QuickQueryResponse = components['schemas']['QuickQueryResponse']
 export type MessageOut = components['schemas']['MessageOut']
+export type MessagePage = components['schemas']['MessagePage']
+export type SearchMode = components['schemas']['SearchMode']
+
+/** Ответ POST /api/chat/query — источники как массив объектов (см. AnswerSource). */
+export type ChatQueryResponse = Omit<
+  components['schemas']['ChatQueryResponse'],
+  'sources'
+> & { sources?: AnswerSource[] }
 
 export type TaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 

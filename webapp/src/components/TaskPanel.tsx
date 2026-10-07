@@ -2,28 +2,30 @@
  * Панель фоновой задачи — паритет `ui.task_panel` (Streamlit).
  *
  * Живая строка: этап тикает секундомером этапа и общим временем, проценты
- * обновляются поллингом. Плюс кнопка «Отменить» — долгая операция не
- * должна оставлять висящий спиннер.
+ * обновляет владелец (поллинг задачи каждые 2 с). Плюс кнопка «Отменить» —
+ * долгая операция не должна оставлять висящий спиннер.
+ *
+ * Панель «controlled»: `task` приходит снаружи, поэтому одна и та же
+ * строка прогресса работает и на дашборде (список активных задач), и в
+ * чате (опрос одной задачи до done/error/cancelled).
  */
 
 import { Alert, Box, Button, Group, Progress, Stack, Text } from '@mantine/core'
-import { useState } from 'react'
 
-import { useCancelTask } from '../features/dashboard/queries'
 import type { Task } from '../api/types'
 import { fmtSeconds, STATUS_ICONS } from '../lib/format'
 
-export function TaskPanel({ task: initial }: { task: Task }) {
-  const [task, setTask] = useState(initial)
-  const cancel = useCancelTask()
+export function TaskPanel({
+  task,
+  onCancel,
+  cancelPending = false,
+}: {
+  task: Task
+  /** Отменить задачу; кнопка рисуется только при наличии колбэка. */
+  onCancel?: (task: Task) => void
+  cancelPending?: boolean
+}) {
   const running = task.status === 'running' || task.status === 'queued'
-
-  function handleCancel() {
-    cancel.mutate(task.id, {
-      onSuccess: (response) => setTask(response.task),
-    })
-  }
-
   const icon = STATUS_ICONS[task.status] ?? ''
   const stage = fmtSeconds(task.stage_seconds)
   const total = fmtSeconds(task.seconds)
@@ -67,12 +69,12 @@ export function TaskPanel({ task: initial }: { task: Task }) {
           )}
         </Box>
 
-        {running && (
+        {running && onCancel && (
           <Button
             size="xs"
             variant="light"
-            loading={cancel.isPending}
-            onClick={handleCancel}
+            loading={cancelPending}
+            onClick={() => onCancel(task)}
           >
             {task.cancel_requested ? 'Отменяется…' : 'Отменить'}
           </Button>

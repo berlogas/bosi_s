@@ -8,7 +8,6 @@
 
 import { Alert, Collapse, Stack, Text } from '@mantine/core'
 import { useState } from 'react'
-
 import type { AnswerChecks, AnswerSource } from '../api/types'
 import { ChecksView } from './ChecksView'
 import { MarkdownText } from './MarkdownText'
@@ -28,6 +27,7 @@ interface AnswerViewProps {
 
 export function AnswerView({ answer }: AnswerViewProps) {
   const [referencesOpened, setReferencesOpened] = useState(false)
+  const [highlight, setHighlight] = useState<number | null>(null)
   const text = (answer.answer ?? '').trim()
   const sources = (answer.sources ?? []) as AnswerSource[]
   const references = answer.references ?? []
@@ -35,7 +35,7 @@ export function AnswerView({ answer }: AnswerViewProps) {
   return (
     <Stack gap="sm">
       {text ? (
-        <MarkdownText text={text} />
+        <MarkdownText text={text} onCitation={setHighlight} />
       ) : !answer.base_empty ? (
         <Text fs="italic" c="dimmed">
           Ответ пуст
@@ -49,7 +49,7 @@ export function AnswerView({ answer }: AnswerViewProps) {
         </Alert>
       )}
 
-      <SourceList sources={sources} />
+      <SourceList sources={sources} highlight={highlight} onHighlight={setHighlight} />
       <ChecksView stats={answer.stats} checks={answer.checks} />
 
       {answer.from_cache && (

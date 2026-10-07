@@ -14,7 +14,10 @@ import type { components } from './schema'
 import { tokens } from './tokens'
 import type {
   CancelTaskResponse,
+  ChatQueryResponse,
+  MessagePage,
   QuickQueryResponse,
+  SearchMode,
   SessionDetail,
   SessionOut,
   Task,
@@ -334,6 +337,76 @@ class ApiClient {
       timeoutMs: 60_000,
     })
     return body.suggestions ?? []
+  }
+
+  /** История диалога сессии (старшие первыми; limit до 500). */
+  messages(
+    sessionId: string,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<MessagePage> {
+    return this.request('/api/chat/messages', {
+      query: { session_id: sessionId, limit: options.limit, offset: options.offset },
+    })
+  }
+
+  /** Удалить сообщение вместе с парой (вопрос+ответ — одна операция). */
+  deleteMessage(messageId: string): Promise<void> {
+    return this.request(`/api/chat/messages/${messageId}`, { method: 'DELETE' })
+  }
+
+  /** Очистить всю переписку сессии (документы и заметки не трогаем). */
+  clearMessages(sessionId: string): Promise<void> {
+    return this.request('/api/chat/messages', {
+      method: 'DELETE',
+      query: { session_id: sessionId },
+    })
+  }
+
+  /** Синхронный вопрос по сессии — ждём ответа (долгий, LLM). */
+  chatQuery(
+    sessionId: string,
+    query: string,
+    mode: SearchMode = 'hybrid',
+  ): Promise<ChatQueryResponse> {
+    return this.request('/api/chat/query', {
+      method: 'POST',
+      json: { session_id: sessionId, query, mode, k: 10, max_sources: 5 },
+      timeoutMs: 600_000, // в api.py у chat timeout=3600
+    })
+  }
+
+  /** Фоновый вопрос: возвращается task_id, UI опрашивает /api/tasks/{id}. */
+  chatQueryAsync(
+    sessionId: string,
+    query: string,
+    mode: SearchMode = 'hybrid',
+  ): Promise<{ task_id: string }> {
+    return this.request('/api/chat/query-async', {
+      method: 'POST',
+      json: { session_id: sessionId, query, mode, k: 10, max_sources: 5 },
+      timeoutMs: 30_000,
+    })
+  }
+
+  /** «Точка возврата»: снапшот UI + заметка (автосохранение смены вкладки). */
+  saveState(
+    sessionId: string,
+    payload: {
+      snapshot?: Record<string, unknown>
+      resume_note?: string | null
+      action_label?: string
+      force?: boolean
+    },
+  ): Promise<SessionOut> {
+    return this.request(`/api/sessions/${sessionId}/state`, {
+      method: 'PUT',
+      json: {
+        snapshot: payload.snapshot,
+        resume_note: payload.resume_note,
+        action_label: payload.action_label,
+        force: payload.force ?? false,
+      },
+    })
   }
 }
 

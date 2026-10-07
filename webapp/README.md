@@ -9,9 +9,11 @@
 src/
   api/          # fetch-клиент (refresh-очередь, ApiError) + schema.ts (codegen)
   app/          # общие провайдеры (Mantine, React Query, роутер)
-  features/     # auth/ layout/ dashboard/ ... — по фичам
+  components/   # переиспользуемые: TaskPanel, AnswerView, MarkdownText, …
+  features/     # auth/ layout/ dashboard/ chat/ sessions/ — по фичам
   routes.tsx    # маршруты; страницы сидят под AppLayout
-  test/         # Vitest setup (jsdom-полифилы)
+  test/         # Vitest setup (jsdom-полифилы) и общие фикстуры
+e2e/            # Playwright-приёмка (моки сети, бэкенд не нужен)
 openapi/        # снимок спецификации бэкенда (генерируется, не править руками)
 ```
 
@@ -58,9 +60,18 @@ npm run codegen
   список/группы сессий с TTL, создание, архив в два шага с модалкой,
   активные задачи (поллинг, отмена), быстрый чат (ответ, источники,
   ошибки);
+- `src/features/chat/chat.test.tsx` — чат сессии (Фазы 2): история
+  пузырями, удаление пары, фоновая задача (панель → done/error), F5-
+  восстановление, очистка в два шага, read-only архива;
+- `src/components/answerView.test.tsx` — ответ: клик по цитате `[n]`
+  подсвечивает источник, санитизация markdown, References, предупреждения
+  grounding;
 - `e2e/phase1.spec.ts` — приёмка в настоящем браузере: вход → создать
   сессию → заархивировать с подтверждением. API мокается на уровне
   сети (`page.route`), поэтому e2e не требует бэкенда — работает в CI.
+- `e2e/phase2.spec.ts` — чат: долгий вопрос → панель этапов → отмена,
+  предупреждения grounding, References + клик по цитате, восстановление
+  поллинга после F5.
 
 Чтобы гонять e2e против живого API — уберите моки из спеки: Vite
 проксирует `/api` на `localhost:8000`.

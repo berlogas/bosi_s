@@ -1,10 +1,20 @@
 import js from '@eslint/js'
+import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   { ignores: ['dist/', 'src/api/schema.ts', 'coverage/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // правила хуков (exhaustive-deps и др.) — паритет с react-hooks/recommended
+  reactHooks.configs.flat['recommended-latest'],
+  {
+    // set-state-in-effect (react-hooks v7) запрещает ЛЮБОЙ setState в
+    // эффекте; у нас это штатные паттерны: реакция на статус задачи,
+    // синхронизация формы с пришедшим detail, одноразовый bootstrap.
+    files: ['**/*.{ts,tsx}'],
+    rules: { 'react-hooks/set-state-in-effect': 'off' },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     rules: {

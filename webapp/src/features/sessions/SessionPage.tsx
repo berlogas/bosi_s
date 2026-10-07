@@ -1,9 +1,13 @@
 /**
- * Страница сессии — каркас Фазы 1 (паритет `_header` из workspace.py).
+ * Страница сессии — шапка (паритет `_header` из workspace.py) и вкладки
+ * как маршруты (план, п. E): `/s/:id/chat`, `/s/:id/documents`, …
  *
- * Вкладки (Документы/Проекты/Чат/Заметки) — Фаза 2–3; здесь шапка:
- * статус, срок хранения, лимиты, «Пауза»/«Архив» с подтверждением и
- * режим «только чтение» для архивных сессий.
+ * Шапка: статус, срок хранения, лимиты, «Пауза»/«Архив» с подтверждением
+ * в два шага и режим «только чтение» для архивных сессий.
+ *
+ * Переключение вкладки автосохраняется в «точку возврата» (PUT /state) —
+ * как `save_state` в конце render() workspace.py. Сессия, у которой
+ * вкладка открыта по F5, не «перескакивает» на первую.
  */
 
 import {
@@ -14,15 +18,35 @@ import {
   Modal,
   Progress,
   Stack,
+  Tabs,
   Text,
   Title,
 } from '@mantine/core'
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { client } from '../../api/client'
 import { useArchiveSession, useSessionDetail } from '../dashboard/queries'
+import { useSaveState } from '../chat/queries'
 import { ttlLabel } from '../../lib/format'
+
+/** Идентификаторы вкладок — как в TABS workspace.py (в$order). */
+export const TABS = ['documents', 'projects', 'chat', 'notes'] as const
+export type TabId = (typeof TABS)[number]
+
+const TAB_LABELS: Record<TabId, string> = {
+  documents: 'Документы',
+  projects: 'Проекты',
+  chat: 'Чат',
+  notes: 'Заметки',
+}
+
+export function tabIdFromPath(pathname: string): TabId {
+  const segment = pathname.split('/').pop()
+  return (TABS as readonly string[]).includes(segment ?? '')
+    ? (segment as TabId)
+    : 'chat'
+}
 
 function Limits({
   documents,
@@ -60,10 +84,27 @@ function Limits({
 export function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const detail = useSessionDetail(sessionId ?? null)
   const archive = useArchiveSession()
+  const saveState = useSaveState(sessionId ?? '')
   const [confirmOpened, setConfirmOpened] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const firstRender = useRef(true)
+
+  const activeTab = tabIdFromPath(location.pathname)
+
+  // автосохранение активной вкладки в точку возврата (кроме первого рендера:
+  // приходить с F5 и писать то же самое — лишний PUT)
+  useEffect(() => {
+    if (!sessionId) return
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    saveState.mutate({ snapshot: { tab: activeTab }, force: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, sessionId])
 
   if (detail.isPending) {
     return <Loader size="sm" />
@@ -161,9 +202,23 @@ export function SessionPage() {
         <Alert color="yellow">Сессия в архиве — доступно только чтение.</Alert>
       )}
 
-      <Alert color="blue" title="Разделы сессии">
-        Вкладки «Документы · Проекты · Чат · Заметки» появятся в Фазе 2–3 миграции.
-      </Alert>
+      <Tabs
+        value={activeTab}
+        keepMounted={false}
+        onChange={(value) => navigate(`/s/${sessionId}/${value}`)}
+      >
+        <Tabs.List>
+          {TABS.map((tab) => (
+            <Tabs.Tab key={tab} value={tab}>
+              {TAB_LABELS[tab]}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+      </Tabs>
+
+      {/* вкладка рендерится маршрутом; sessionId пробрасывается через context
+          не стал — Outlet получает его из params */}
+      <Outlet context={{ session, readOnly }} />
 
       <Modal
         opened={confirmOpened}

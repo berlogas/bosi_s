@@ -33,7 +33,8 @@ class Settings(BaseSettings):
     # Только локальный доступ: данные не покидают инфраструктуру
     api_host: str = "127.0.0.1"
     api_port: int = 8000
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:8501"])
+    # React dev-сервер (webapp/, Vite) — единственный интерфейс
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://127.0.0.1:5173"])
 
     # ---------- безопасность ----------
     secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(48))

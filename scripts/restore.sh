@@ -17,7 +17,7 @@ fi
 [ -f "$ARCHIVE" ] || { echo "Файл не найден: $ARCHIVE" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo "docker не найден" >&2; exit 1; }
 
-if docker ps --format '{{.Names}}' | grep -qE '^(boasi-backend|boasi-frontend)$'; then
+if docker ps --format '{{.Names}}' | grep -qE '^boasi-backend$'; then
   echo "Остановите стек перед восстановлением: make down" >&2
   exit 1
 fi

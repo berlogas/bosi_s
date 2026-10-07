@@ -99,7 +99,7 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
-    # Приватность: API слушает только локально, CORS — только для локального Streamlit
+    # Приватность: API слушает только локально, CORS — только для React dev-сервера
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

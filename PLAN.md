@@ -108,9 +108,9 @@ boasi_s/
 │   │   ├── api/           # routers: auth, admin, sessions, documents, chat, projects, quick
 │   │   └── workers/       # indexer.py, heartbeat.py, reaper.py (90 дней)
 │   └── tests/
-└── frontend/
-    ├── Dockerfile, requirements.txt
-    └── app/ pages/ (login, dashboard, session_workspace, admin) components/ state/
+└── webapp/               # React-интерфейс (заменил frontend/, Streamlit удалён)
+    ├── src/               # features: auth, sessions, documents, projects, chat, admin
+    └── e2e/               # Playwright
 ```
 
 ---

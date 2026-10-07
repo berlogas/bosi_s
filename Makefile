@@ -56,7 +56,7 @@ health: ## проверка состояния стека
 
 up: ## поднять весь стек в Docker
 	docker compose up -d --build
-	@echo "API: http://127.0.0.1:8000/api/health | UI: http://127.0.0.1:8501"
+	@echo "API: http://127.0.0.1:8000/api/health"
 
 down: ## остановить стек
 	docker compose down

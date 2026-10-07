@@ -1,5 +1,5 @@
 /**
- * Боковая панель и общий layout — паритет `sidebar()` из frontend/app.py.
+ * Боковая панель и общий layout — паритет `sidebar()` из Streamlit-версии app.py.
  *
  * Метка сборки обязательна: по ней видно, что браузер подхватил новый код,
  * а не закэшировал старый (та же роль, что UI_BUILD в Streamlit).
@@ -27,7 +27,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { client } from '../../api/client'
 import { useAuth } from '../auth/authStore'
 
-/** Метка сборки интерфейса (аналог UI_BUILD в frontend/app.py). */
+/** Метка сборки интерфейса (аналог UI_BUILD в Streamlit-версии app.py). */
 export const UI_BUILD = '2026-10-07a'
 
 function SystemStatus() {

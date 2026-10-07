@@ -1,5 +1,5 @@
 /**
- * HTTP-клиент к backend API (аналог frontend/boasi_ui/api.py).
+ * HTTP-клиент к backend API.
  *
  * Транспортный слой: страницы зовут `client.login(...)`, `client.me()` и т.д.
  * Все ошибки приводятся к `ApiError` с русским текстом (см. errors.ts).

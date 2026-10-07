@@ -38,7 +38,7 @@
 ## 3. Архитектура
 
 ```
-Streamlit (:8501) ──HTTP──> FastAPI (:8000) ──> SQLite (WAL) на томе boasi_data
+React (webapp/, :5173) ──vite-proxy──> FastAPI (:8000) ──> SQLite (WAL) на томе boasi_data
                               │
                               ├── Docs (PaperQA) ──> Ollama (:11434)  генерация
                               │                     └── sentence-transformers  эмбеддинги
@@ -65,7 +65,7 @@ backend/app/
   services/          paperqa_service, rag_fusion, rag_service, projects,
                      generation, analyses, export, data_extract, tasks, answer_cache
   workers/           heartbeat, reaper
-frontend/boasi_ui/   api, state, components, pages
+webapp/src/           api, features (auth, sessions, documents, projects, chat, admin), components
 scripts/             backup.sh, restore.sh, pull_models.sh
 docs/                отчёты по фазам + OPERATIONS/ADMIN_GUIDE/USER_GUIDE
 ```

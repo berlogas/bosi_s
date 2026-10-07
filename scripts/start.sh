@@ -418,10 +418,7 @@ except Exception as exc:
   elif pid_of webapp >/dev/null 2>&1; then
     printf '  %s!%s React-интерфейс запущен, но не отвечает (порт %s)\n' "$YEL" "$OFF" "$WEBAPP_PORT"
   fi
-  # Остатки Streamlit-фронтенда (старые процессы) — сообщаем, не трогаем.
-  if curl -sf -m 3 -o /dev/null "http://127.0.0.1:8501/_stcore/health" 2>/dev/null; then
-    printf '  %s!%s Streamlit-интерфейс ещё где-то запущен (порт 8501) — остановите вручную\n' "$YEL" "$OFF"
-  fi
+  # Streamlit удалён (Фаза 5 миграции на React) — его процессы не проверяем.
 
   echo
   if pid_of backend >/dev/null 2>&1; then

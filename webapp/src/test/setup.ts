@@ -23,3 +23,20 @@ if (!globalThis.ResizeObserver) {
     disconnect(): void {}
   } as unknown as typeof ResizeObserver
 }
+
+// jsdom не реализует document.fonts — Mantine Textarea (autosize) слушает
+// событие loadingdone на нём и падает без полифилла.
+if (!('fonts' in document)) {
+  Object.defineProperty(document, 'fonts', {
+    value: {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      ready: Promise.resolve(),
+    },
+  })
+}
+
+// jsdom не реализует scrollIntoView (чат скроллится к свежему сообщению).
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}

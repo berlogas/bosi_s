@@ -71,9 +71,19 @@ export function AppLayout() {
   // Крутилка в подвале сайдбара, пока идёт восстановление сессии после F5.
   const bootPending = useAuth((state) => state.status === 'boot')
 
+  // Текущая сессия: /s/:id в адресной строке — переживает F5 (в отличие
+  // от session_state у Streamlit).
+  const currentSessionMatch = /^\/s\/[^/]+/.exec(location.pathname)
+  const currentSessionPath = currentSessionMatch ? currentSessionMatch[0] : null
+
   const items = [
     { to: '/', label: 'Дашборд', enabled: true },
-    { to: '/session', label: 'Текущая сессия', enabled: false },
+    // «Текущая сессия» — та, что открыта сейчас (в Streamlit — state.current_session_id())
+    {
+      to: currentSessionPath ?? '',
+      label: 'Текущая сессия',
+      enabled: currentSessionPath !== null,
+    },
     ...(user?.role === 'admin'
       ? [{ to: '/admin', label: 'Администрирование', enabled: true }]
       : []),
@@ -101,11 +111,11 @@ export function AppLayout() {
             <Stack gap={2}>
               {items.map((item) => (
                 <NavLink
-                  key={item.to}
+                  key={item.label}
                   label={item.label}
                   disabled={!item.enabled}
-                  active={location.pathname === item.to}
-                  onClick={() => navigate(item.to)}
+                  active={item.enabled && location.pathname === item.to}
+                  onClick={() => item.enabled && navigate(item.to)}
                 />
               ))}
             </Stack>

@@ -4,4 +4,6 @@ src/api/schema.ts
 openapi/spec.json
 node_modules/
 dist/
+playwright-report/
+test-results/
 package-lock.json

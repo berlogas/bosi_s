@@ -1,8 +1,8 @@
 /**
  * Маршруты приложения.
  *
- * Фаза 0: вход и дашборд. Дальше — /s/:id/... (чат, документы, проекты)
- * и /admin (раздел 6 плана миграции).
+ * Фаза 0: вход и дашборд. Фаза 1: /s/:sessionId (каркас сессии).
+ * Дальше — вкладки сессии (чат, документы, проекты) и /admin.
  */
 
 import { Center, Loader } from '@mantine/core'
@@ -12,6 +12,7 @@ import { LoginPage } from './features/auth/LoginPage'
 import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { AppLayout } from './features/layout/AppLayout'
+import { SessionPage } from './features/sessions/SessionPage'
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const status = useAuth((state) => state.status)
@@ -42,6 +43,7 @@ export function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/s/:sessionId" element={<SessionPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

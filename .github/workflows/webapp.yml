@@ -41,5 +41,20 @@ jobs:
       - name: Тесты (Vitest)
         run: npm test
 
+      - name: E2E (Playwright)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
       - name: Сборка
         run: npm run build
+
+      - name: Артефакты Playwright при падении
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            webapp/playwright-report
+            webapp/test-results
+          retention-days: 7

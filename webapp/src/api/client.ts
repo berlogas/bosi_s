@@ -12,11 +12,20 @@
 import { ApiError, explainError } from './errors'
 import type { components } from './schema'
 import { tokens } from './tokens'
+import type {
+  CancelTaskResponse,
+  QuickQueryResponse,
+  SessionDetail,
+  SessionOut,
+  Task,
+  TaskListResponse,
+} from './types'
 
 type UserOut = components['schemas']['UserOut']
 type LoginResponse = components['schemas']['LoginResponse']
 type TokenPair = components['schemas']['TokenPair']
 type HealthResponse = components['schemas']['HealthResponse']
+type SuggestionsResponse = components['schemas']['SuggestionsResponse']
 
 /** Путь, на котором refresh самому себе не нужен (иначе рекурсия). */
 const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'])
@@ -240,6 +249,91 @@ class ApiClient {
 
   health(): Promise<HealthResponse> {
     return this.request('/api/health', { timeoutMs: 10_000 })
+  }
+
+  // -------------------------------------------------------------- сессии
+  sessions(): Promise<SessionOut[]> {
+    return this.request('/api/sessions')
+  }
+
+  createSession(title: string): Promise<SessionOut> {
+    return this.request('/api/sessions', { method: 'POST', json: { title } })
+  }
+
+  sessionDetail(sessionId: string): Promise<SessionDetail> {
+    return this.request(`/api/sessions/${sessionId}`)
+  }
+
+  patchSession(
+    sessionId: string,
+    fields: Record<string, unknown>,
+  ): Promise<SessionOut> {
+    return this.request(`/api/sessions/${sessionId}`, { method: 'PATCH', json: fields })
+  }
+
+  archiveSession(sessionId: string, note?: string): Promise<SessionOut> {
+    return this.request(`/api/sessions/${sessionId}/archive`, {
+      method: 'POST',
+      query: note ? { note } : undefined,
+    })
+  }
+
+  pauseSession(sessionId: string, note?: string): Promise<SessionOut> {
+    return this.request(`/api/sessions/${sessionId}/pause`, {
+      method: 'POST',
+      query: note ? { note } : undefined,
+    })
+  }
+
+  resumeSession(sessionId: string): Promise<SessionDetail> {
+    return this.request(`/api/sessions/${sessionId}/resume`, { method: 'POST' })
+  }
+
+  // ---------------------------------------------------------------- задачи
+  tasks(
+    options: { sessionId?: string; activeOnly?: boolean } = {},
+  ): Promise<TaskListResponse> {
+    return this.request('/api/tasks', {
+      query: {
+        session_id: options.sessionId,
+        active_only: options.activeOnly,
+      },
+    })
+  }
+
+  task(taskId: string): Promise<Task> {
+    return this.request(`/api/tasks/${taskId}`)
+  }
+
+  cancelTask(taskId: string): Promise<CancelTaskResponse> {
+    return this.request(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
+  }
+
+  // ------------------------------------------------------------------ чат
+  /** Быстрый вопрос по глобальной базе — долгий (LLM), щадящий таймаут. */
+  quickQuery(
+    query: string,
+    options: { k?: number; noCache?: boolean } = {},
+  ): Promise<QuickQueryResponse> {
+    return this.request('/api/chat/quick-query', {
+      method: 'POST',
+      json: {
+        query,
+        k: options.k ?? 10,
+        max_sources: 5,
+        no_cache: options.noCache ?? false,
+      },
+      // LLM отвечает минуты; в api.py у quick_query timeout=3600
+      timeoutMs: 600_000,
+    })
+  }
+
+  async suggestQueries(query: string): Promise<string[]> {
+    const body = await this.request<SuggestionsResponse>('/api/chat/suggest-queries', {
+      query: { query },
+      timeoutMs: 60_000,
+    })
+    return body.suggestions ?? []
   }
 }
 

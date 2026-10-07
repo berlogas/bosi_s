@@ -23,6 +23,7 @@ npm run dev       # dev-сервер (проксирует /api → http://local
 npm run lint      # ESLint
 npm run typecheck # tsc --strict (strict + noUncheckedIndexedAccess)
 npm test          # Vitest (RTL-тесты, jsdom)
+npm run test:e2e   # Playwright (нужен `npx playwright install chromium`)
 npm run build     # production-сборка в dist/
 npm run format    # Prettier
 
@@ -51,8 +52,18 @@ npm run codegen
 
 - `src/api/client.test.ts` — refresh-очередь, ротация токенов, разбор
   ошибок (паритет `_explain` из Streamlit-клиента), сетевые сбои;
-- `src/features/auth/loginPage.test.tsx` — приёмка Фазы 0: вход →
-  пустой дашборд, ошибки формы.
+- `src/features/auth/loginPage.test.tsx` — вход: ошибки формы, успех →
+  пустой дашборд;
+- `src/features/dashboard/dashboard.test.tsx` — приёмка Фазы 1:
+  список/группы сессий с TTL, создание, архив в два шага с модалкой,
+  активные задачи (поллинг, отмена), быстрый чат (ответ, источники,
+  ошибки);
+- `e2e/phase1.spec.ts` — приёмка в настоящем браузере: вход → создать
+  сессию → заархивировать с подтверждением. API мокается на уровне
+  сети (`page.route`), поэтому e2e не требует бэкенда — работает в CI.
+
+Чтобы гонять e2e против живого API — уберите моки из спеки: Vite
+проксирует `/api` на `localhost:8000`.
 
 CI: `.github/workflows/webapp.yml` (codegen:check → lint → format →
-typecheck → test → build).
+typecheck → test → e2e → build).

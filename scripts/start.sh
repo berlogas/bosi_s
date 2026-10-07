@@ -188,6 +188,8 @@ start_ollama() {
 
 # ------------------------------------------------------------------ режимы
 start_manual() {
+  # $1 = "all" — дополнительно поднять React-интерфейс (параллельная
+  # эксплуатация: Streamlit и React живут одновременно).
   preflight
 
   # ---- backend
@@ -244,6 +246,10 @@ start_manual() {
       tail -n 20 "$LOG_DIR/frontend.log" 2>/dev/null | sed 's/^/     /'
       exit 1
     fi
+  fi
+
+  if [ "${1:-}" = "all" ]; then
+    start_webapp
   fi
 
   print_urls
@@ -506,6 +512,7 @@ create_admin() {
 # ------------------------------------------------------------------ точка входа
 case "${1:-start}" in
   start|"")      start_manual ;;
+  all)           start_manual all ;;
   webapp)        start_webapp ;;
   docker)        start_docker ;;
   stop)          stop_all ;;
@@ -527,6 +534,7 @@ case "${1:-start}" in
 Запуск boasi_s:
 
   ./scripts/start.sh              запустить всё (ручной режим)
+  ./scripts/start.sh all          backend + Streamlit + React разом
   ./scripts/start.sh webapp       запустить React-интерфейс рядом со Streamlit
   ./scripts/start.sh docker       запустить через Docker Compose
   ./scripts/start.sh stop         остановить backend и интерфейс

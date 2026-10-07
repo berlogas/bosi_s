@@ -21,9 +21,11 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"   # в SECRET_KEY
 
 UI: <http://127.0.0.1> · API: <http://127.0.0.1:8000/api/docs>
 
-Параллельно со Streamlit можно поднять React-интерфейс (миграция,
-[docs/REACT_MIGRATION_PLAN.md](docs/REACT_MIGRATION_PLAN.md)):
-`./scripts/start.sh webapp` → <http://127.0.0.1:5173> (порт — `WEBAPP_PORT`).
+React-интерфейс (миграция, [docs/REACT_MIGRATION_PLAN.md](docs/REACT_MIGRATION_PLAN.md))
+поднимается вместе со Streamlit одной командой: `./scripts/start.sh all` —
+будут запущены backend, Streamlit и React одновременно
+(<http://127.0.0.1:5173>, порт — `WEBAPP_PORT`). Только React отдельно:
+`./scripts/start.sh webapp`.
 
 Остановить — `./scripts/start.sh stop`, состояние — `./scripts/start.sh status`.
 

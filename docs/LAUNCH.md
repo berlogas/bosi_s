@@ -97,6 +97,8 @@ admin») — это подсказка консоли, а не способ во
 
 ```bash
 ./scripts/start.sh            # запустить всё
+./scripts/start.sh all        # backend + Streamlit + React-интерфейс разом
+./scripts/start.sh webapp     # только React-интерфейс (параллельно со Streamlit)
 ./scripts/start.sh status     # что работает
 ./scripts/start.sh stop       # остановить backend и интерфейс
 ./scripts/start.sh restart    # перезапустить

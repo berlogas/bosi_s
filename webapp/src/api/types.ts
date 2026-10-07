@@ -25,6 +25,54 @@ export type ChatQueryResponse = Omit<
 
 export type TaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 
+// ------------------------------------------------------------ документы
+export type DocumentOut = components['schemas']['DocumentOut']
+export type DocumentCategory = components['schemas']['DocumentCategory']
+export type DocumentBatchResult = components['schemas']['DocumentBatchResultOut']
+
+// ---------------------------------------------------------------- проекты
+export type ProjectOut = components['schemas']['ProjectOut']
+export type ProjectSection = components['schemas']['ProjectSectionOut']
+export type ProjectSectionUpdate = components['schemas']['ProjectSectionUpdate']
+export type GenerateRequest = components['schemas']['GenerateRequest']
+export type GenerateResult = components['schemas']['GenerateResultOut']
+export type ExportFormat = components['schemas']['ExportFormat']
+
+/** Элемент GET .../projects/{id}/documents: { document, role }. */
+export interface ProjectDocumentItem {
+  document: DocumentOut
+  role: string
+  [key: string]: unknown
+}
+
+/** GET .../projects/{id}/progress — свободный dict (без response_model). */
+export interface ProjectProgress {
+  project_id: string
+  status?: string
+  sections: number
+  written: number
+  words: number
+  percent: number
+  [key: string]: unknown
+}
+
+/** Пробел черновика из draft-analysis (без response_model). */
+export interface DraftGap {
+  severity: 'high' | 'medium' | 'low' | string
+  where: string
+  hint: string
+  excerpt?: string | null
+  [key: string]: unknown
+}
+
+/** GET .../projects/{id}/draft-analysis — свободный dict. */
+export interface DraftAnalysis {
+  has_gaps: boolean
+  gaps: DraftGap[]
+  by_severity: Record<string, number>
+  [key: string]: unknown
+}
+
 export interface Task {
   id: string
   kind: string

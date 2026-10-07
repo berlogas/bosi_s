@@ -13,7 +13,12 @@ import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { AppLayout } from './features/layout/AppLayout'
 import { SessionPage } from './features/sessions/SessionPage'
-import { ChatRoute, NotesRoute, PlaceholderRoute } from './features/sessions/tabs'
+import {
+  ChatRoute,
+  DocumentsRoute,
+  NotesRoute,
+  ProjectsRoute,
+} from './features/sessions/tabs'
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const status = useAuth((state) => state.status)
@@ -49,8 +54,8 @@ export function AppRoutes() {
           <Route index element={<Navigate to="chat" replace />} />
           <Route path="chat" element={<ChatRoute />} />
           <Route path="notes" element={<NotesRoute />} />
-          <Route path="documents" element={<PlaceholderRoute title="Документы" />} />
-          <Route path="projects" element={<PlaceholderRoute title="Проекты" />} />
+          <Route path="documents" element={<DocumentsRoute />} />
+          <Route path="projects" element={<ProjectsRoute />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

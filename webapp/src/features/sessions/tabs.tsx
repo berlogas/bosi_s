@@ -1,17 +1,17 @@
 /**
- * Страницы-вкладки сессии: чат, заметки и заглушки Фазы 3.
+ * Страницы-вкладки сессии: чат, заметки, документы и проекты.
  *
  * Маршруты `/s/:id/{chat,notes,documents,projects}`; общий контекст
  * (detail сессии, readOnly) отдаётся через Outlet от SessionPage.
  */
 
-import { Alert, Stack } from '@mantine/core'
 import { useOutletContext, useParams } from 'react-router-dom'
 
 import { ChatTab } from '../chat/ChatTab'
 import type { SessionDetail } from '../../api/types'
+import { DocumentsTab } from '../documents/DocumentsTab'
 import { NotesTab } from './NotesTab'
-import { useSessionDetail } from '../dashboard/queries'
+import { ProjectsTab } from '../projects/ProjectsTab'
 
 export interface SessionOutletContext {
   session: SessionDetail
@@ -28,25 +28,21 @@ export function ChatRoute() {
 export function NotesRoute() {
   const { session, readOnly } = useOutletContext<SessionOutletContext>()
   const { sessionId } = useParams<{ sessionId: string }>()
-  const detail = useSessionDetail(sessionId ?? null)
   if (!sessionId) return null
-  // приходим за свежим detail (нужен resume_note после сохранения извне)
-  const current = detail.data ?? session
-  return (
-    <NotesTab
-      session={current}
-      readOnly={readOnly}
-      snapshotTab="notes"
-      onSaved={() => void detail.refetch()}
-    />
-  )
+  // detail из контекста уже содержит resume_note (SessionPage его читает)
+  return <NotesTab session={session} readOnly={readOnly} snapshotTab="notes" />
 }
 
-/** Документы и проекты — Фаза 3 (паритет project_editor/documents_tab). */
-export function PlaceholderRoute({ title }: { title: string }) {
-  return (
-    <Stack>
-      <Alert color="blue">{title} появятся в Фазе 3 миграции.</Alert>
-    </Stack>
-  )
+export function DocumentsRoute() {
+  const { readOnly } = useOutletContext<SessionOutletContext>()
+  const { sessionId } = useParams<{ sessionId: string }>()
+  if (!sessionId) return null
+  return <DocumentsTab sessionId={sessionId} readOnly={readOnly} />
+}
+
+export function ProjectsRoute() {
+  const { readOnly } = useOutletContext<SessionOutletContext>()
+  const { sessionId } = useParams<{ sessionId: string }>()
+  if (!sessionId) return null
+  return <ProjectsTab sessionId={sessionId} readOnly={readOnly} />
 }

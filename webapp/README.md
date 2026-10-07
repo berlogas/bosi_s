@@ -10,7 +10,8 @@ src/
   api/          # fetch-клиент (refresh-очередь, ApiError) + schema.ts (codegen)
   app/          # общие провайдеры (Mantine, React Query, роутер)
   components/   # переиспользуемые: TaskPanel, AnswerView, MarkdownText, …
-  features/     # auth/ layout/ dashboard/ chat/ sessions/ — по фичам
+  features/     # auth/ layout/ dashboard/ chat/ sessions/ documents/
+                # projects/ — по фичам
   routes.tsx    # маршруты; страницы сидят под AppLayout
   test/         # Vitest setup (jsdom-полифилы) и общие фикстуры
 e2e/            # Playwright-приёмка (моки сети, бэкенд не нужен)
@@ -71,7 +72,18 @@ npm run codegen
   сети (`page.route`), поэтому e2e не требует бэкенда — работает в CI.
 - `e2e/phase2.spec.ts` — чат: долгий вопрос → панель этапов → отмена,
   предупреждения grounding, References + клик по цитате, восстановление
-  поллинга после F5.
+  поллинга после F5;
+- `src/features/documents/documents.test.tsx` — документы (Фаза 3):
+  добавление по пути (теги/категория, успех и ошибка), dropzone с
+  валидацией типов и лимита файлов, панель индексации, пустой список,
+  read-only архива;
+- `src/features/projects/projects.test.tsx` — проект-редактор (Фаза 3):
+  создание, прогресс и статус, черновик раздела в sessionStorage →
+  PUT-сохранение, генерация с ⚠ warnings и References, привязка/
+  отвязка документов, разбор черновика, read-only архива;
+- `e2e/phase3.spec.ts` — документы и проекты в браузере: загрузка
+  файла → панель прогресса индексации, добавление по пути, создание
+  проекта → правка раздела → сохранение, привязка документа и отвязка.
 
 Чтобы гонять e2e против живого API — уберите моки из спеки: Vite
 проксирует `/api` на `localhost:8000`.

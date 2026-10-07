@@ -15,7 +15,16 @@ import { tokens } from './tokens'
 import type {
   CancelTaskResponse,
   ChatQueryResponse,
+  DocumentBatchResult,
+  DocumentOut,
+  DraftAnalysis,
+  GenerateRequest,
+  GenerateResult,
   MessagePage,
+  ProjectDocumentItem,
+  ProjectOut,
+  ProjectProgress,
+  ProjectSection,
   QuickQueryResponse,
   SearchMode,
   SessionDetail,
@@ -29,6 +38,8 @@ type LoginResponse = components['schemas']['LoginResponse']
 type TokenPair = components['schemas']['TokenPair']
 type HealthResponse = components['schemas']['HealthResponse']
 type SuggestionsResponse = components['schemas']['SuggestionsResponse']
+/** Схема openapi: ExportFormat = markdown | docx | zip. */
+type ExportFormat = components['schemas']['ExportFormat']
 
 /** Путь, на котором refresh самому себе не нужен (иначе рекурсия). */
 const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'])
@@ -406,6 +417,168 @@ class ApiClient {
         action_label: payload.action_label,
         force: payload.force ?? false,
       },
+    })
+  }
+
+  // -------------------------------------------------------------- документы
+  /** Реестр документов сессии (паритет session_documents в api.py). */
+  sessionDocuments(sessionId: string, category?: string): Promise<DocumentOut[]> {
+    return this.request(`/api/sessions/${sessionId}/documents`, {
+      query: { category },
+    })
+  }
+
+  /** Добавить файл с диска по пути (ограничен каталогом сессии). */
+  addDocumentByPath(
+    sessionId: string,
+    path: string,
+    options: { category?: string; tags?: string[] } = {},
+  ): Promise<DocumentOut> {
+    return this.request(`/api/sessions/${sessionId}/documents/path`, {
+      method: 'POST',
+      json: { path, category: options.category, tags: options.tags ?? [] },
+      // индексация файла — минуты (upload в api.py тоже щадящий таймаут)
+      timeoutMs: 600_000,
+    })
+  }
+
+  /** Загрузка файлов (multipart) — паритет upload_session_documents. */
+  uploadDocuments(
+    sessionId: string,
+    files: File[],
+    options: { category?: string; tags?: string } = {},
+  ): Promise<DocumentBatchResult> {
+    const form = new FormData()
+    for (const file of files) form.append('files', file, file.name)
+    form.append('category', options.category ?? 'temp_literature')
+    form.append('tags', options.tags ?? '')
+    return this.request(`/api/sessions/${sessionId}/documents/upload`, {
+      method: 'POST',
+      form,
+      timeoutMs: 600_000,
+    })
+  }
+
+  deleteDocument(sessionId: string, documentId: string): Promise<void> {
+    return this.request(`/api/sessions/${sessionId}/documents/${documentId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // ---------------------------------------------------------------- проекты
+  projects(sessionId: string): Promise<ProjectOut[]> {
+    return this.request(`/api/sessions/${sessionId}/projects`)
+  }
+
+  createProject(
+    sessionId: string,
+    title: string,
+    targetJournal?: string,
+  ): Promise<ProjectOut> {
+    return this.request(`/api/sessions/${sessionId}/projects`, {
+      method: 'POST',
+      json: { title, target_journal: targetJournal || null },
+    })
+  }
+
+  patchProject(
+    sessionId: string,
+    projectId: string,
+    fields: { status?: string; title?: string; target_journal?: string },
+  ): Promise<ProjectOut> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}`, {
+      method: 'PATCH',
+      json: fields,
+    })
+  }
+
+  deleteProject(sessionId: string, projectId: string): Promise<void> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  sections(sessionId: string, projectId: string): Promise<ProjectSection[]> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/sections`)
+  }
+
+  /** Ручная правка раздела (content_md / notes / word_target). */
+  saveSection(
+    sessionId: string,
+    projectId: string,
+    name: string,
+    fields: { content_md?: string; notes?: string },
+  ): Promise<ProjectSection> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/sections/${encodeURIComponent(name)}`,
+      { method: 'PUT', json: fields },
+    )
+  }
+
+  projectDocuments(
+    sessionId: string,
+    projectId: string,
+  ): Promise<ProjectDocumentItem[]> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/documents`)
+  }
+
+  bindDocument(
+    sessionId: string,
+    projectId: string,
+    documentId: string,
+    role: string = 'reference',
+  ): Promise<void> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/documents`, {
+      method: 'POST',
+      json: { document_id: documentId, role },
+    })
+  }
+
+  unbindDocument(
+    sessionId: string,
+    projectId: string,
+    documentId: string,
+  ): Promise<void> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/documents/${documentId}`,
+      { method: 'DELETE' },
+    )
+  }
+
+  /** Генерация раздела/анализ — синхронный, ждём (LLM, минуты). */
+  generate(
+    sessionId: string,
+    projectId: string,
+    payload: GenerateRequest,
+  ): Promise<GenerateResult> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/generate`, {
+      method: 'POST',
+      json: payload,
+      timeoutMs: 600_000,
+    })
+  }
+
+  /** Разбор черновика без LLM: быстрый, детерминированный. */
+  draftAnalysis(sessionId: string, projectId: string): Promise<DraftAnalysis> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/draft-analysis`,
+    )
+  }
+
+  projectProgress(sessionId: string, projectId: string): Promise<ProjectProgress> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/progress`)
+  }
+
+  /** Экспорт статьи — отдаёт готовый файл (blob скачивается в UI). */
+  exportProjectRaw(
+    sessionId: string,
+    projectId: string,
+    fmt: ExportFormat,
+  ): Promise<Response> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/export`, {
+      query: { fmt },
+      raw: true,
+      timeoutMs: 120_000,
     })
   }
 }

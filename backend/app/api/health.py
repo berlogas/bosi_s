@@ -19,7 +19,9 @@ router = APIRouter(prefix="/api", tags=["system"])
 async def _check_ollama(settings) -> dict[str, Any]:  # noqa: ANN001
     url = f"{settings.ollama_base_url.rstrip('/')}/api/tags"
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
+        # trust_env=False: системный прокси Windows/VPN не должен
+        # перехватывать запросы к локальной Ollama (127.0.0.1)
+        async with httpx.AsyncClient(timeout=5, trust_env=False) as client:
             response = await client.get(url)
         response.raise_for_status()
         models = [m.get("name") for m in response.json().get("models", [])]

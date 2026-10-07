@@ -199,6 +199,9 @@ start_manual() {
     step "Запуск backend на порту $API_PORT"
     (
       cd backend
+      # Локальные сервисы (Ollama 11434) не должны ходить через системный
+      # прокси Windows/VPN — иначе httpx/litellm их не видят.
+      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
       nohup "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$API_PORT" \
         > "$LOG_DIR/backend.log" 2>&1 &
       echo $! > "$RUN_DIR/backend.pid"

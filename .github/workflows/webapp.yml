@@ -1,0 +1,45 @@
+name: webapp
+
+on:
+  push:
+    branches: [master, 'webapp/**']
+    paths: ['webapp/**', '.github/workflows/webapp.yml']
+  pull_request:
+    paths: ['webapp/**', '.github/workflows/webapp.yml']
+
+defaults:
+  run:
+    working-directory: webapp
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Типы API не устарели
+        run: npm run codegen:check
+
+      - name: Линт (ESLint)
+        run: npm run lint
+
+      - name: Формат (Prettier)
+        run: npm run format:check
+
+      - name: Типы (tsc strict)
+        run: npm run typecheck
+
+      - name: Тесты (Vitest)
+        run: npm test
+
+      - name: Сборка
+        run: npm run build

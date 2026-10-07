@@ -1,0 +1,7 @@
+# генерируется openapi-typescript (проверяется codegen:check, не форматтером)
+src/api/schema.ts
+# снимок спецификации бэкенда (правится codegen, не руками)
+openapi/spec.json
+node_modules/
+dist/
+package-lock.json

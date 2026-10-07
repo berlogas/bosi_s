@@ -9,6 +9,7 @@ import { Center, Loader } from '@mantine/core'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { LoginPage } from './features/auth/LoginPage'
+import { AdminPage } from './features/admin/AdminPage'
 import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { AppLayout } from './features/layout/AppLayout'
@@ -49,6 +50,7 @@ export function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/s/:sessionId" element={<SessionPage />}>
           {/* без вкладки — на чат (у Streamlit это был active_tab) */}
           <Route index element={<Navigate to="chat" replace />} />

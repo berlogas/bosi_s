@@ -13,6 +13,7 @@ import { ApiError, explainError } from './errors'
 import type { components } from './schema'
 import { tokens } from './tokens'
 import type {
+  AuditLogEntry,
   CancelTaskResponse,
   ChatQueryResponse,
   DocumentBatchResult,
@@ -579,6 +580,88 @@ class ApiClient {
       query: { fmt },
       raw: true,
       timeoutMs: 120_000,
+    })
+  }
+
+  // ------------------------------------------------------------ админка
+  adminUsers(): Promise<UserOut[]> {
+    return this.request('/api/admin/users')
+  }
+
+  adminCreateUser(fields: {
+    username: string
+    password: string
+    role: string
+    full_name?: string
+    email?: string
+  }): Promise<UserOut> {
+    return this.request('/api/admin/users', { method: 'POST', json: fields })
+  }
+
+  adminUpdateUser(
+    userId: string,
+    fields: { role?: string; password?: string; email?: string; full_name?: string },
+  ): Promise<UserOut> {
+    return this.request(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      json: fields,
+    })
+  }
+
+  adminAudit(
+    options: { limit?: number; offset?: number; action?: string } = {},
+  ): Promise<AuditLogEntry[]> {
+    return this.request('/api/admin/audit', {
+      query: {
+        limit: options.limit ?? 200,
+        offset: options.offset,
+        action: options.action,
+      },
+    })
+  }
+
+  adminDocuments(): Promise<DocumentOut[]> {
+    return this.request('/api/admin/documents')
+  }
+
+  adminAddPath(path: string): Promise<DocumentOut> {
+    return this.request('/api/admin/documents/path', {
+      method: 'POST',
+      json: { path },
+      timeoutMs: 600_000,
+    })
+  }
+
+  adminUpload(files: File[], tags = ''): Promise<DocumentBatchResult> {
+    const form = new FormData()
+    for (const file of files) form.append('files', file, file.name)
+    form.append('tags', tags)
+    return this.request('/api/admin/documents/upload', {
+      method: 'POST',
+      form,
+      timeoutMs: 600_000,
+    })
+  }
+
+  adminDeleteDocument(documentId: string): Promise<void> {
+    return this.request(`/api/admin/documents/${documentId}`, { method: 'DELETE' })
+  }
+
+  adminReindex(): Promise<{ status?: string }> {
+    return this.request('/api/admin/documents/reindex', {
+      method: 'POST',
+      timeoutMs: 600_000,
+    })
+  }
+
+  /** Массовая индексация в фоне: возвращает task_id (bulk-async). */
+  submitBulkIndex(
+    paths: string[],
+    tags: string[] = [],
+  ): Promise<{ task_id: string; total: number }> {
+    return this.request('/api/admin/documents/bulk-async', {
+      method: 'POST',
+      json: { paths, tags },
     })
   }
 }

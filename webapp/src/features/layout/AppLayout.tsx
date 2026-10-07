@@ -10,6 +10,7 @@ import {
   AppShellNavbar,
   Badge,
   Button,
+  Center,
   Divider,
   Group,
   Loader,
@@ -19,6 +20,7 @@ import {
   Text,
   Title,
 } from '@mantine/core'
+import { Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -153,7 +155,17 @@ export function AppLayout() {
       </AppShellNavbar>
 
       <AppShell.Main>
-        <Outlet />
+        {/* Страницы под Suspense: будущий code-split (React.lazy) и
+            любые транзиентные suspends не должны ронять layout */}
+        <Suspense
+          fallback={
+            <Center mih="40vh">
+              <Loader />
+            </Center>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </AppShell.Main>
     </AppShell>
   )

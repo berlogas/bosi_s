@@ -343,6 +343,36 @@ describe('дашборд: быстрый чат', () => {
     // ввод не заблокирован — можно повторить
     expect(screen.getByLabelText('Быстрый вопрос')).not.toBeDisabled()
   })
+
+  it('Enter отправляет вопрос, Shift+Enter — новая строка', async () => {
+    loginAs()
+    const { calls } = mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'POST /api/chat/quick-query': {
+        answer: 'Ок',
+        sources: [],
+        references: [],
+        query: 'вопрос',
+        from_cache: false,
+        base_empty: false,
+      },
+    })
+
+    renderApp()
+    const area = await screen.findByLabelText('Быстрый вопрос')
+
+    // Shift+Enter — перенос строки, отправки нет
+    await userEvent.type(area, 'строка{Shift>}{Enter}{/Shift}')
+    expect(findPost(calls, '/api/chat/quick-query')).toBeUndefined()
+    expect(area).toHaveValue('строка\n')
+
+    // Enter — отправка (паритет st.chat_input)
+    await userEvent.type(area, '{Enter}')
+    expect(await screen.findByText('Ок')).toBeInTheDocument()
+    expect(findPost(calls, '/api/chat/quick-query')).toBeDefined()
+  })
 })
 
 describe('вход после Фазы 0', () => {

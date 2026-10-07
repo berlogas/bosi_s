@@ -163,6 +163,13 @@ export function QuickChat() {
               placeholder="Спросите что-нибудь по базе знаний"
               value={prompt}
               onChange={(event) => setPrompt(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                // Паритет st.chat_input: Enter отправляет, Shift+Enter — новая строка
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  if (prompt.trim() && !busy) void submit(prompt)
+                }
+              }}
               autosize
               minRows={1}
               maxRows={6}

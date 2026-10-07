@@ -23,6 +23,9 @@ API_PORT="${API_PORT:-8000}"
 UI_PORT="${UI_PORT:-80}"
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
 
+# API_PORT используется и тут: Vite проксирует /api на backend.
+WEBAPP_PORT="${WEBAPP_PORT:-5173}"
+
 # Python: Windows и Linux различаются путём к интерпретатору
 pick_python() {
   if [ -x "$ROOT/.venv/Scripts/python.exe" ]; then
@@ -271,6 +274,9 @@ print_urls() {
   echo
   printf '%s  Платформа запущена%s\n' "$GRN" "$OFF"
   printf '  Интерфейс:  http://127.0.0.1:%s\n' "$UI_PORT"
+  if pid_of webapp >/dev/null 2>&1; then
+    printf '  React (dev): http://127.0.0.1:%s\n' "$WEBAPP_PORT"
+  fi
   printf '  API:        http://127.0.0.1:%s/api/docs\n' "$API_PORT"
   printf '  Здоровье:   http://127.0.0.1:%s/api/health\n' "$API_PORT"
   echo
@@ -320,11 +326,62 @@ except Exception:
   )
 }
 
+start_webapp() {
+  # React-фронтенд (webapp/) — параллельная эксплуатация со Streamlit:
+  # оба интерфейса живут одновременно, выбор за пользователем.
+  if pid_of webapp >/dev/null 2>&1; then
+    ok "React-интерфейс уже запущен (pid $(pid_of webapp))"
+    printf '  http://127.0.0.1:%s\n' "$WEBAPP_PORT"
+    return 0
+  fi
+
+  command -v npm >/dev/null 2>&1 || die "npm не найден в PATH"
+  [ -d "$ROOT/webapp/node_modules" ] || {
+    step "Устанавливаю зависимости webapp (npm install)"
+    (cd "$ROOT/webapp" && npm install) || die "npm install не удался"
+  }
+
+  if port_busy "$WEBAPP_PORT"; then
+    die "Порт $WEBAPP_PORT занят. Остановите то, что его слушает."
+  fi
+  if ! pid_of backend >/dev/null 2>&1; then
+    warn "Backend не запущен — Vite проксирует /api, но отвечать некому."
+    printf '     Запустите сначала: ./scripts/start.sh\n'
+  fi
+
+  step "Запуск React-интерфейса на порту $WEBAPP_PORT"
+  (
+    cd "$ROOT/webapp"
+    WEBAPP_PORT="$WEBAPP_PORT" \
+      nohup npm run dev -- --port "$WEBAPP_PORT" --host 127.0.0.1 \
+      > "$LOG_DIR/webapp.log" 2>&1 &
+    echo $! > "$RUN_DIR/webapp.pid"
+    echo "$WEBAPP_PORT" > "$RUN_DIR/webapp.port"
+  )
+  if wait_http "http://127.0.0.1:$WEBAPP_PORT" 60; then
+    ok "React-интерфейс поднялся (pid $(pid_of webapp))"
+    printf '  http://127.0.0.1:%s\n' "$WEBAPP_PORT"
+  else
+    fail "React-интерфейс не поднялся за 60 с. Хвост лога:"
+    tail -n 20 "$LOG_DIR/webapp.log" 2>/dev/null | sed 's/^/     /'
+    exit 1
+  fi
+}
+
 stop_all() {
   step "Остановка"
-  for name in frontend backend; do
+  local webapp_ran=0
+  for name in webapp frontend backend; do
     if pid="$(pid_of "$name")"; then
-      kill "$pid" 2>/dev/null
+      [ "$name" = "webapp" ] && webapp_ran=1
+      # npm — обёртка над vite: убиваем дерево процессов целиком,
+      # иначе дочерний vite переживёт родителя и порт останется занятым.
+      if command -v taskkill >/dev/null 2>&1; then
+        taskkill //F //T //PID "$pid" >/dev/null 2>&1
+      else
+        pkill -P "$pid" 2>/dev/null
+        kill "$pid" 2>/dev/null
+      fi
       sleep 1
       kill -9 "$pid" 2>/dev/null
       rm -f "$RUN_DIR/$name.pid"
@@ -333,7 +390,35 @@ stop_all() {
       warn "$name не запущен через скрипт"
     fi
   done
+  # npm — обёртка: kill по её pid не трогает дочерний vite, поэтому
+  # добиваем того, кто реально слушает порт (иначе порт остаётся занятым).
+  if [ "$webapp_ran" = "1" ]; then
+    local saved_port=""
+    [ -f "$RUN_DIR/webapp.port" ] && saved_port="$(cat "$RUN_DIR/webapp.port" 2>/dev/null)"
+    kill_port_listener "${saved_port:-$WEBAPP_PORT}"
+    rm -f "$RUN_DIR/webapp.port"
+  fi
   ok "Готово"
+}
+
+# Убить процесс, слушающий порт webapp. Вызывается только если вебап
+# запускался через скрипт (webapp.pid был) — чужие процессы не трогаем.
+kill_port_listener() {
+  local port="$1"
+
+  local pids=""
+  if command -v netstat >/dev/null 2>&1; then
+    pids="$(netstat -ano 2>/dev/null | awk -v p=":$port" '$2 ~ p"$" && $4 == "LISTENING" {print $5}' | sort -u)"
+  fi
+  # На Windows netstat пишет PID даже для процессов других сессий.
+  for pid in $pids; do
+    [ "$pid" = "0" ] && continue
+    if command -v taskkill >/dev/null 2>&1; then
+      taskkill //F //T //PID "$pid" >/dev/null 2>&1 && ok "процесс на порту $port остановлен (pid $pid)"
+    else
+      kill "$pid" 2>/dev/null; kill -9 "$pid" 2>/dev/null
+    fi
+  done
 }
 
 status_all() {
@@ -368,6 +453,12 @@ except Exception as exc:
     printf '  %s✓%s Frontend    http://127.0.0.1:%s\n' "$GRN" "$OFF" "$UI_PORT"
   else
     printf '  %s✗%s Frontend    не отвечает (порт %s)\n' "$RED" "$OFF" "$UI_PORT"
+  fi
+
+  if curl -sf -m 3 -o /dev/null "http://127.0.0.1:$WEBAPP_PORT" 2>/dev/null; then
+    printf '  %s✓%s React (dev) http://127.0.0.1:%s\n' "$GRN" "$OFF" "$WEBAPP_PORT"
+  elif pid_of webapp >/dev/null 2>&1; then
+    printf '  %s!%s React (dev) запущен, но не отвечает (порт %s)\n' "$YEL" "$OFF" "$WEBAPP_PORT"
   fi
 
   echo
@@ -415,6 +506,7 @@ create_admin() {
 # ------------------------------------------------------------------ точка входа
 case "${1:-start}" in
   start|"")      start_manual ;;
+  webapp)        start_webapp ;;
   docker)        start_docker ;;
   stop)          stop_all ;;
   restart)       stop_all; echo; start_manual ;;
@@ -435,6 +527,7 @@ case "${1:-start}" in
 Запуск boasi_s:
 
   ./scripts/start.sh              запустить всё (ручной режим)
+  ./scripts/start.sh webapp       запустить React-интерфейс рядом со Streamlit
   ./scripts/start.sh docker       запустить через Docker Compose
   ./scripts/start.sh stop         остановить backend и интерфейс
   ./scripts/start.sh restart      перезапустить
@@ -448,7 +541,7 @@ case "${1:-start}" in
   ./scripts/start.sh test         прогнать тесты
 
 Переменные окружения:
-  API_PORT=8000  UI_PORT=80  OLLAMA_URL=http://127.0.0.1:11434
+  API_PORT=8000  UI_PORT=80  WEBAPP_PORT=5173  OLLAMA_URL=http://127.0.0.1:11434
 USAGE
     ;;
   *) die "Неизвестная команда: $1 (./scripts/start.sh help)" ;;

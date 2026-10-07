@@ -37,6 +37,7 @@ UI: <http://127.0.0.1> · API: <http://127.0.0.1:8000/api/docs>
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | **Точка входа**: архитектура, статус, ключевые решения, ограничения |
 | [PLAN.md](PLAN.md) | План работ по фазам и статус каждой |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Исследователю: сессии, категории документов, режимы поиска, проекты |
+| [docs/REACT_UI_CHECKLIST.md](docs/REACT_UI_CHECKLIST.md) | Регрессия React-интерфейса: чек-лист приёмки (Streamlit → React) |
 | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Администратору: пользователи, глобальная база, аудит, регламент |
 | [docs/LAUNCH.md](docs/LAUNCH.md) | **Как запустить**: скрипты, порты, типичные ошибки |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Развёртывание, бэкап, диагностика, hardening |

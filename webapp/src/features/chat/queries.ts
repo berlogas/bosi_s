@@ -115,9 +115,14 @@ export function useSaveState(sessionId: string) {
     mutationFn: (payload: Parameters<typeof client.saveState>[1]) =>
       client.saveState(sessionId, payload),
     onSuccess: (session) => {
+      // Ответ PUT /state — SessionOut (снапшот и заметка уже на сервере):
+      // вливаем в detail, иначе «точка возврата» показывала бы старое.
       void queryClient.setQueryData(
         queryKeys.sessionDetail(sessionId),
-        (old: unknown) => old ?? session,
+        (old: unknown): unknown =>
+          old && typeof old === 'object'
+            ? { ...(old as Record<string, unknown>), ...session }
+            : session,
       )
     },
   })

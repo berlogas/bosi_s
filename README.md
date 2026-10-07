@@ -1,7 +1,7 @@
 # boasi_s
 
 Локальная научная RAG-платформа на **PaperQA2** + **Ollama** + **FastAPI** +
-**Streamlit**. Работает офлайн, данные не покидают машину.
+**React** (webapp/). Работает офлайн, данные не покидают машину.
 
 Исследователь загружает документы (литература, CSV с данными, черновики),
 получает ответы со ссылками на источники, готовит статью по плану разделов и
@@ -19,15 +19,11 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"   # в SECRET_KEY
 ./scripts/start.sh                                            # или ./scripts/start.sh docker
 ```
 
-UI: <http://127.0.0.1> · API: <http://127.0.0.1:8000/api/docs>
+UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 
-React-интерфейс (миграция, [docs/REACT_MIGRATION_PLAN.md](docs/REACT_MIGRATION_PLAN.md))
-поднимается вместе со Streamlit одной командой: `./scripts/start.sh all` —
-будут запущены backend, Streamlit и React одновременно
-(<http://127.0.0.1:5173>, порт — `WEBAPP_PORT`). Только React отдельно:
-`./scripts/start.sh webapp`.
-
-Остановить — `./scripts/start.sh stop`, состояние — `./scripts/start.sh status`.
+`./scripts/start.sh` поднимает backend и React-интерфейс; на Windows —
+`scripts\start.bat`. Остановить — `./scripts/start.sh stop`, состояние —
+`./scripts/start.sh status`.
 
 **Пошаговая инструкция:** [docs/LAUNCH.md](docs/LAUNCH.md).
 Развёртывание и бэкапы: [docs/OPERATIONS.md](docs/OPERATIONS.md).

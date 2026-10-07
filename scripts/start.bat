@@ -114,30 +114,15 @@ if not "%RC%"=="0" (
 )
 
 REM Открываем интерфейс в браузере. К этому моменту скрипт запуска уже
-REM дождался ответа /_stcore/health, то есть страница готова к открытию.
+REM дождался ответа платформы — страница готова к открытию.
 REM NO_BROWSER=1 — открывать не надо (автоматические проверки, CI).
 if not "%NO_BROWSER%"=="1" (
-    REM Для React (команда webapp) открываем его порт, а не Streamlit.
-    set "OPEN_PORT=%UI_PORT%"
-    if "!OPEN_PORT!"=="" set "OPEN_PORT=80"
-    if /i "%~1"=="webapp" (
-        if "!WEBAPP_PORT!"=="" set "WEBAPP_PORT=5173"
-        set "OPEN_PORT=!WEBAPP_PORT!"
-    )
-    REM Команда all: открываем оба интерфейса — Streamlit и React.
-    if /i "%~1"=="all" (
-        if "!WEBAPP_PORT!"=="" set "WEBAPP_PORT=5173"
-        echo   Открываю http://127.0.0.1:!WEBAPP_PORT! (React)
-        start "" "http://127.0.0.1:!WEBAPP_PORT!"
-    )
+    REM Единственный интерфейс — React на WEBAPP_PORT.
+    if "!WEBAPP_PORT!"=="" set "WEBAPP_PORT=5173"
+    set "OPEN_PORT=!WEBAPP_PORT!"
     echo.
-    if "!OPEN_PORT!"=="80" (
-        echo   Открываю http://127.0.0.1
-        start "" "http://127.0.0.1"
-    ) else (
-        echo   Открываю http://127.0.0.1:!OPEN_PORT!
-        start "" "http://127.0.0.1:!OPEN_PORT!"
-    )
+    echo   Открываю http://127.0.0.1:!OPEN_PORT!
+    start "" "http://127.0.0.1:!OPEN_PORT!"
 )
 
 if "%INTERACTIVE%"=="1" (

@@ -96,13 +96,11 @@ admin») — это подсказка консоли, а не способ во
 ## Запуск и остановка
 
 ```bash
-./scripts/start.sh            # запустить всё
-./scripts/start.sh all        # backend + Streamlit + React-интерфейс разом
-./scripts/start.sh webapp     # только React-интерфейс (параллельно со Streamlit)
+./scripts/start.sh            # запустить всё (backend + React)
 ./scripts/start.sh status     # что работает
 ./scripts/start.sh stop       # остановить backend и интерфейс
 ./scripts/start.sh restart    # перезапустить
-./scripts/start.sh logs backend   # смотреть логи (или frontend)
+./scripts/start.sh logs backend   # смотреть логи (или webapp)
 ./scripts/start.sh test       # прогнать тесты
 ./scripts/start.sh help       # все команды
 ```
@@ -153,9 +151,9 @@ ollama serve
 cd backend
 ../.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# 3. Интерфейс
-cd ../frontend
-../.venv/Scripts/python.exe -m streamlit run app.py --server.port 80
+# 3. Интерфейс (React, dev-сервер)
+cd webapp
+npm run dev -- --port 5173 --host 127.0.0.1
 ```
 
 На Linux/macOS интерпретатор другой: `.venv/bin/python`.

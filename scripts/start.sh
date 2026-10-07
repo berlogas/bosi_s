@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Единый запуск boasi_s (Фаза 10).
+# Единый запуск boasi_s (Фаза 10; Streamlit-интерфейс заменён на React).
 #
-#   ./scripts/start.sh              — запустить всё (ручной режим)
+#   ./scripts/start.sh              — запустить всё (backend + React)
 #   ./scripts/start.sh docker       — через Docker Compose
 #   ./scripts/start.sh stop         — остановить
 #   ./scripts/start.sh status       — состояние компонентов
@@ -20,10 +20,9 @@ mkdir -p "$RUN_DIR" "$LOG_DIR"
 
 # ------------------------------------------------------------------ конфигурация
 API_PORT="${API_PORT:-8000}"
-UI_PORT="${UI_PORT:-80}"
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
 
-# API_PORT используется и тут: Vite проксирует /api на backend.
+# Vite проксирует /api на backend.
 WEBAPP_PORT="${WEBAPP_PORT:-5173}"
 
 # Python: Windows и Linux различаются путём к интерпретатору
@@ -188,8 +187,6 @@ start_ollama() {
 
 # ------------------------------------------------------------------ режимы
 start_manual() {
-  # $1 = "all" — дополнительно поднять React-интерфейс (параллельная
-  # эксплуатация: Streamlit и React живут одновременно).
   preflight
 
   # ---- backend
@@ -215,42 +212,7 @@ start_manual() {
     fi
   fi
 
-  # ---- frontend
-  if pid_of frontend >/dev/null 2>&1; then
-    ok "Frontend уже запущен (pid $(pid_of frontend))"
-  else
-    # Порт 80 может быть занят другим приложением (IIS, Skype, nginx).
-    # Тогда не отказываем, а переходим на 8501 и говорим об этом.
-    if port_busy "$UI_PORT"; then
-      if [ "$UI_PORT" = "80" ] && ! port_busy 8501; then
-        warn "Порт 80 занят другим приложением — интерфейс будет на 8501"
-        UI_PORT=8501
-      else
-        die "Порт $UI_PORT занят."
-      fi
-    fi
-    step "Запуск интерфейса на порту $UI_PORT"
-    (
-      cd frontend
-      API_URL="http://127.0.0.1:$API_PORT" \
-      nohup "$PY" -m streamlit run app.py \
-        --server.address 127.0.0.1 --server.port "$UI_PORT" \
-        --server.headless true --browser.gatherUsageStats false \
-        > "$LOG_DIR/frontend.log" 2>&1 &
-      echo $! > "$RUN_DIR/frontend.pid"
-    )
-    if wait_http "http://127.0.0.1:$UI_PORT/_stcore/health" 60; then
-      ok "Интерфейс поднялся (pid $(pid_of frontend))"
-    else
-      fail "Интерфейс не поднялся за 60 с. Хвост лога:"
-      tail -n 20 "$LOG_DIR/frontend.log" 2>/dev/null | sed 's/^/     /'
-      exit 1
-    fi
-  fi
-
-  if [ "${1:-}" = "all" ]; then
-    start_webapp
-  fi
+  start_webapp
 
   print_urls
 }
@@ -279,10 +241,7 @@ start_docker() {
 print_urls() {
   echo
   printf '%s  Платформа запущена%s\n' "$GRN" "$OFF"
-  printf '  Интерфейс:  http://127.0.0.1:%s\n' "$UI_PORT"
-  if pid_of webapp >/dev/null 2>&1; then
-    printf '  React (dev): http://127.0.0.1:%s\n' "$WEBAPP_PORT"
-  fi
+  printf '  Интерфейс (React): http://127.0.0.1:%s\n' "$WEBAPP_PORT"
   printf '  API:        http://127.0.0.1:%s/api/docs\n' "$API_PORT"
   printf '  Здоровье:   http://127.0.0.1:%s/api/health\n' "$API_PORT"
   echo
@@ -333,8 +292,7 @@ except Exception:
 }
 
 start_webapp() {
-  # React-фронтенд (webapp/) — параллельная эксплуатация со Streamlit:
-  # оба интерфейса живут одновременно, выбор за пользователем.
+  # React-фронтенд (webapp/) — единственный интерфейс платформы.
   if pid_of webapp >/dev/null 2>&1; then
     ok "React-интерфейс уже запущен (pid $(pid_of webapp))"
     printf '  http://127.0.0.1:%s\n' "$WEBAPP_PORT"
@@ -377,7 +335,7 @@ start_webapp() {
 stop_all() {
   step "Остановка"
   local webapp_ran=0
-  for name in webapp frontend backend; do
+  for name in webapp backend; do
     if pid="$(pid_of "$name")"; then
       [ "$name" = "webapp" ] && webapp_ran=1
       # npm — обёртка над vite: убиваем дерево процессов целиком,
@@ -455,21 +413,19 @@ except Exception as exc:
     printf '  %s✗%s Backend     не отвечает (порт %s)\n' "$RED" "$OFF" "$API_PORT"
   fi
 
-  if curl -sf -m 3 -o /dev/null "http://127.0.0.1:$UI_PORT/_stcore/health" 2>/dev/null; then
-    printf '  %s✓%s Frontend    http://127.0.0.1:%s\n' "$GRN" "$OFF" "$UI_PORT"
-  else
-    printf '  %s✗%s Frontend    не отвечает (порт %s)\n' "$RED" "$OFF" "$UI_PORT"
-  fi
-
   if curl -sf -m 3 -o /dev/null "http://127.0.0.1:$WEBAPP_PORT" 2>/dev/null; then
-    printf '  %s✓%s React (dev) http://127.0.0.1:%s\n' "$GRN" "$OFF" "$WEBAPP_PORT"
+    printf '  %s✓%s React-интерфейс http://127.0.0.1:%s\n' "$GRN" "$OFF" "$WEBAPP_PORT"
   elif pid_of webapp >/dev/null 2>&1; then
-    printf '  %s!%s React (dev) запущен, но не отвечает (порт %s)\n' "$YEL" "$OFF" "$WEBAPP_PORT"
+    printf '  %s!%s React-интерфейс запущен, но не отвечает (порт %s)\n' "$YEL" "$OFF" "$WEBAPP_PORT"
+  fi
+  # Остатки Streamlit-фронтенда (старые процессы) — сообщаем, не трогаем.
+  if curl -sf -m 3 -o /dev/null "http://127.0.0.1:8501/_stcore/health" 2>/dev/null; then
+    printf '  %s!%s Streamlit-интерфейс ещё где-то запущен (порт 8501) — остановите вручную\n' "$YEL" "$OFF"
   fi
 
   echo
   if pid_of backend >/dev/null 2>&1; then
-    printf '  PID: backend=%s frontend=%s\n' "$(pid_of backend)" "$(pid_of frontend || echo -)"
+    printf '  PID: backend=%s webapp=%s\n' "$(pid_of backend)" "$(pid_of webapp || echo -)"
   fi
 }
 
@@ -489,7 +445,7 @@ pull_models() {
 # Последние ошибки интерфейса — то, что пользователю нужно приложить к
 # сообщению об ошибке.
 show_errors() {
-  file="$LOG_DIR/frontend.log"
+  file="$LOG_DIR/webapp.log"
   [ -f "$file" ] || { echo "Лог интерфейса ещё не создан: $file"; return 0; }
   printf '  %sОшибки интерфейса (%s)%s
 
@@ -512,7 +468,7 @@ create_admin() {
 # ------------------------------------------------------------------ точка входа
 case "${1:-start}" in
   start|"")      start_manual ;;
-  all)           start_manual all ;;
+  all)           start_manual ;;
   webapp)        start_webapp ;;
   docker)        start_docker ;;
   stop)          stop_all ;;
@@ -533,14 +489,12 @@ case "${1:-start}" in
     cat << 'USAGE'
 Запуск boasi_s:
 
-  ./scripts/start.sh              запустить всё (ручной режим)
-  ./scripts/start.sh all          backend + Streamlit + React разом
-  ./scripts/start.sh webapp       запустить React-интерфейс рядом со Streamlit
+  ./scripts/start.sh              запустить всё (backend + React)
   ./scripts/start.sh docker       запустить через Docker Compose
   ./scripts/start.sh stop         остановить backend и интерфейс
   ./scripts/start.sh restart      перезапустить
   ./scripts/start.sh status       состояние компонентов
-  ./scripts/start.sh logs backend хвост логов (frontend)
+  ./scripts/start.sh logs backend хвост логов (webapp)
   ./scripts/start.sh errors       ошибки интерфейса с трассировками
   ./scripts/start.sh models       скачать модели Ollama
   ./scripts/start.sh admin <login> создать администратора
@@ -549,7 +503,7 @@ case "${1:-start}" in
   ./scripts/start.sh test         прогнать тесты
 
 Переменные окружения:
-  API_PORT=8000  UI_PORT=80  WEBAPP_PORT=5173  OLLAMA_URL=http://127.0.0.1:11434
+  API_PORT=8000  WEBAPP_PORT=5173  OLLAMA_URL=http://127.0.0.1:11434
 USAGE
     ;;
   *) die "Неизвестная команда: $1 (./scripts/start.sh help)" ;;

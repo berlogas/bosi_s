@@ -64,6 +64,11 @@ export interface RequestOptions {
   raw?: boolean
   /** не пытаться рефрешить токены при 401 (сам refresh/logout). */
   noRefresh?: boolean
+  /**
+   * multipart: процент загрузки (0–100). Наличие колбэка включает
+   * XHR-транспорт — fetch не умеет отдавать прогресс отправки тела.
+   */
+  onProgress?: (percent: number) => void
 }
 
 type UnauthorizedListener = () => void
@@ -120,6 +125,11 @@ class ApiClient {
       body = opts.form // boundary подставит fetch
     }
 
+    // прогресс отправки возможен только через XHR (см. RequestOptions.onProgress)
+    if (opts.form !== undefined && opts.onProgress) {
+      return this.xhrUpload(path, opts, headers)
+    }
+
     const signal = combineSignals([
       opts.signal,
       AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
@@ -144,6 +154,67 @@ class ApiClient {
           : `Backend недоступен (${where}). Проверьте, что он запущен.`,
       )
     }
+  }
+
+  /**
+   * multipart через XHR: даёт upload.onprogress (доля отправленных байтов).
+   * Ответ собирается в Response, чтобы refresh/explain-логика request()
+   * работала без изменений.
+   */
+  private xhrUpload(
+    path: string,
+    opts: RequestOptions,
+    headers: Record<string, string>,
+  ): Promise<Response> {
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const where = typeof window === 'undefined' ? 'backend' : window.location.origin
+    return new Promise<Response>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open(opts.method ?? 'POST', buildUrl(path, opts.query))
+      for (const [name, value] of Object.entries(headers)) {
+        xhr.setRequestHeader(name, value) // без Content-Type: boundary сам
+      }
+      xhr.timeout = timeoutMs
+      xhr.responseType = 'text'
+      if (xhr.upload) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && event.total > 0) {
+            opts.onProgress?.(Math.round((event.loaded / event.total) * 100))
+          }
+        }
+      }
+      xhr.onload = () => {
+        resolve(
+          new Response(xhr.responseText || null, {
+            status: xhr.status,
+            headers: {
+              'Content-Type':
+                xhr.getResponseHeader('Content-Type') ?? 'application/json',
+            },
+          }),
+        )
+      }
+      xhr.onerror = () =>
+        reject(
+          new ApiError(`Backend недоступен (${where}). Проверьте, что он запущен.`),
+        )
+      xhr.ontimeout = () =>
+        reject(
+          new ApiError(
+            `Backend не ответил за ${Math.round(timeoutMs / 1000)} с. Проверьте, что он запущен.`,
+          ),
+        )
+      xhr.onabort = () =>
+        reject(new DOMException('The operation was aborted.', 'AbortError'))
+      if (opts.signal) {
+        if (opts.signal.aborted) {
+          xhr.abort()
+        } else {
+          opts.signal.addEventListener('abort', () => xhr.abort(), { once: true })
+        }
+      }
+      xhr.send(opts.form ?? null)
+    })
   }
 
   /**
@@ -447,7 +518,12 @@ class ApiClient {
   uploadDocuments(
     sessionId: string,
     files: File[],
-    options: { category?: string; tags?: string } = {},
+    options: {
+      category?: string
+      tags?: string
+      /** % отправленных байтов (0–100); включает XHR-транспорт. */
+      onProgress?: (percent: number) => void
+    } = {},
   ): Promise<DocumentBatchResult> {
     const form = new FormData()
     for (const file of files) form.append('files', file, file.name)
@@ -457,6 +533,7 @@ class ApiClient {
       method: 'POST',
       form,
       timeoutMs: 600_000,
+      onProgress: options.onProgress,
     })
   }
 

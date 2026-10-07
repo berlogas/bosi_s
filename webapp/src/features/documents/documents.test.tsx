@@ -208,6 +208,39 @@ describe('вкладка Документы', () => {
     expect(await screen.findByText('Добавлено: 1, ошибок: 0')).toBeInTheDocument()
   })
 
+  it('во время загрузки виден прогресс XHR (onprogress)', async () => {
+    // откладываем ответ сервера, чтобы поймать промежуточный процент
+    let releaseUpload: ((response: Response) => void) | undefined
+    mockDocsApi({
+      'POST /api/sessions/s-1/documents/upload': () =>
+        new Promise<Response>((resolve) => {
+          releaseUpload = resolve
+        }),
+    })
+
+    renderApp()
+    await screen.findByText('Временная литература (1)')
+
+    const dropzone = screen.getByTestId('doc-dropzone')
+    const file = new File(['содержимое'], 'report.pdf', { type: 'application/pdf' })
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(dropEvent, 'dataTransfer', { value: { files: [file] } })
+    dropzone.dispatchEvent(dropEvent)
+    expect(await screen.findByText(/Выбрано файлов: 1/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Загрузить файлы' }))
+
+    // фейковый XHR шлёт onprogress до ответа сервера
+    const progress = await screen.findByTestId('upload-progress')
+    expect(progress).toBeInTheDocument()
+    expect(await screen.findByText(/Отправляю файлы: 50%/)).toBeInTheDocument()
+
+    releaseUpload?.(json({ added: [DOC], duplicates: [], failed: [], total: 1 }))
+    expect(await screen.findByText('Добавлено: 1, ошибок: 0')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByTestId('upload-progress')).not.toBeInTheDocument(),
+    )
+  })
+
   it('удаление документа уходит DELETE и инвалидирует список', async () => {
     let deleted = false
     const { calls } = mockDocsApi({

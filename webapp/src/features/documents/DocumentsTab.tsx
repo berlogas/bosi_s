@@ -13,7 +13,7 @@ import {
   Alert,
   Button,
   Group,
-  Loader,
+  Progress,
   Select,
   Stack,
   Text,
@@ -60,6 +60,8 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   const [dragOver, setDragOver] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
+  /** % отправленных байтов при загрузке (XHR onprogress); null — не идёт. */
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const documents = useSessionDocuments(sessionId)
@@ -98,8 +100,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     if (accepted.length === 0) return
     setFormError(null)
     setUploadResult(null)
+    setUploadPercent(0)
     upload.mutate(
-      { files: accepted, category, tags },
+      { files: accepted, category, tags, onProgress: setUploadPercent },
       {
         onSuccess: (result) => {
           setUploadResult(
@@ -109,6 +112,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         },
         onError: (cause) =>
           setFormError(cause instanceof Error ? cause.message : 'Загрузка не удалась'),
+        onSettled: () => setUploadPercent(null),
       },
     )
   }
@@ -254,10 +258,18 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       )}
 
       {upload.isPending && (
-        <Text size="sm" c="dimmed">
-          <Loader size="xs" style={{ display: 'inline', marginRight: 8 }} />
-          Индексирую — это может занять минуты…
-        </Text>
+        <Stack gap={4}>
+          <Progress
+            value={uploadPercent ?? 0}
+            aria-label="Прогресс загрузки файлов"
+            data-testid="upload-progress"
+          />
+          <Text size="sm" c="dimmed">
+            {uploadPercent !== null && uploadPercent < 100
+              ? `Отправляю файлы: ${uploadPercent}%…`
+              : 'Файлы отправлены. Индексирую — это может занять минуты…'}
+          </Text>
+        </Stack>
       )}
 
       {documents.isError && (

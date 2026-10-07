@@ -94,11 +94,14 @@ export function useUploadDocuments(sessionId: string) {
       files,
       category,
       tags,
+      onProgress,
     }: {
       files: File[]
       category: string
       tags: string
-    }) => client.uploadDocuments(sessionId, files, { category, tags }),
+      /** % отправленных байтов — из DocumentsTab (XHR onprogress). */
+      onProgress?: (percent: number) => void
+    }) => client.uploadDocuments(sessionId, files, { category, tags, onProgress }),
     onSuccess: invalidate,
   })
 }

@@ -5,3 +5,5 @@
 *.lock text eol=lf
 *.toml text eol=lf
 *.ini text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

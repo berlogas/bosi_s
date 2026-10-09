@@ -21,6 +21,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { TaskPanel } from '../../components/TaskPanel'
+import { displayName } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { QuickChat } from './QuickChat'
 import { SessionCard } from './SessionCard'
@@ -129,7 +130,7 @@ export function DashboardPage() {
         <Title order={3}>Дашборд</Title>
         {user && (
           <Text size="sm" c="dimmed">
-            Здравствуйте, {user.username}!
+            Здравствуйте, {displayName(user)}!
           </Text>
         )}
       </Group>

@@ -25,6 +25,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { client } from '../../api/client'
+import { displayName, roleLabel } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 
 /** Метка сборки интерфейса (аналог UI_BUILD в Streamlit-версии app.py). */
@@ -125,7 +126,7 @@ export function AppLayout() {
             <Divider my="md" />
 
             <Text size="xs" c="dimmed" mb={4}>
-              👤 {user.username} ({user.role})
+              👤 {displayName(user)} · {roleLabel(user.role)}
             </Text>
             <Button
               variant="light"

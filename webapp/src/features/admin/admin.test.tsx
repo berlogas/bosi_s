@@ -249,7 +249,18 @@ describe('админка', () => {
     expect(await screen.findByRole('tab', { name: 'Пользователи' })).toBeInTheDocument()
     expect(await screen.findByLabelText('Логин: ivanov')).toBeInTheDocument()
     expect(screen.getByLabelText('ФИО: ivanov')).toHaveValue('Иванов И.И.')
-    expect(screen.getByRole('combobox', { name: 'Роль: petrov' })).toHaveValue('admin')
+    // в поле видно русскую подпись, а уходит в API техническое 'admin'
+    const petrovRole = screen.getByRole('combobox', { name: 'Роль: petrov' })
+    expect(petrovRole).toHaveValue('Администратор')
+    // в списке — русские подписи, технических значений не видно
+    await userEvent.click(petrovRole)
+    expect(
+      within(document.querySelector('[role="listbox"]') as HTMLElement).getByRole(
+        'option',
+        { name: 'Исследователь', hidden: true },
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'admin', hidden: true })).toBeNull()
   })
 
   it('создание пользователя: кнопкаdisabledпока пароль короче 8', async () => {
@@ -307,7 +318,7 @@ describe('админка', () => {
 
     const roleInput = screen.getByRole('combobox', { name: 'Роль: ivanov' })
     await userEvent.click(roleInput)
-    await userEvent.click(selectOption(roleInput, 'admin'))
+    await userEvent.click(selectOption(roleInput, 'Администратор'))
     // две строки пользователей — берём кнопку в строке ivanov
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Сохранить' }))
@@ -717,9 +728,12 @@ describe('админка', () => {
 
     expect(await screen.findByText(/Показано 3 из 3/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('combobox', { name: /Фильтр: статус/ }))
-    await userEvent.click(selectOption(
-      screen.getByRole('combobox', { name: /Фильтр: статус/ }), 'Активные',
-    ))
+    await userEvent.click(
+      selectOption(
+        screen.getByRole('combobox', { name: /Фильтр: статус/ }),
+        'Активные',
+      ),
+    )
 
     expect(await screen.findByText(/Показано 1 из 3/)).toBeInTheDocument()
     expect(screen.queryByText('Готовая')).toBeNull()
@@ -787,9 +801,11 @@ describe('админка', () => {
     renderApp()
     await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
 
-    await userEvent.click(await screen.findByRole('button', {
-      name: 'Очистить завершённые',
-    }))
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Очистить завершённые',
+      }),
+    )
     // без подтверждения запрос не уходит
     expect(calls.some((c) => c.url.endsWith('/api/tasks/clear'))).toBe(false)
 
@@ -837,7 +853,6 @@ describe('админка', () => {
       }),
     ).toBeInTheDocument()
   })
-
 
   it('вкладка Задачи: пустое состояние «Задач нет.»', async () => {
     loginAs(TEST_ADMIN)
@@ -946,18 +961,21 @@ describe('админка', () => {
     const link = await screen.findByRole('link', {
       name: 'Выгрузить журнал в CSV',
     })
-    expect(link).toHaveAttribute('href', expect.stringContaining('/api/admin/audit/export'))
+    expect(link).toHaveAttribute(
+      'href',
+      expect.stringContaining('/api/admin/audit/export'),
+    )
 
     const period = screen.getByRole('combobox', { name: /Фильтр: период/ })
     await userEvent.click(period)
     await userEvent.click(selectOption(period, '30 дней'))
 
     await waitFor(() =>
-      expect(screen.getByRole('link', { name: 'Выгрузить журнал в CSV' }))
-        .toHaveAttribute('href', expect.stringContaining('since=')),
+      expect(
+        screen.getByRole('link', { name: 'Выгрузить журнал в CSV' }),
+      ).toHaveAttribute('href', expect.stringContaining('since=')),
     )
   })
-
 
   it('вкладка Аудит: сортировка по времени и ok', async () => {
     loginAs(TEST_ADMIN)

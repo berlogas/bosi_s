@@ -38,6 +38,7 @@ import type { AuditLogEntry, SessionOut, Task, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
 import { shortWhen } from '../../lib/format'
+import { roleOptions } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { isActiveTask } from '../dashboard/queries'
 import {
@@ -148,7 +149,7 @@ function CreateUser() {
                 />
                 <Select
                   label="Роль"
-                  data={ROLES}
+                  data={roleOptions(ROLES)}
                   value={role}
                   onChange={(value) => value && setRole(value)}
                   allowDeselect={false}
@@ -299,7 +300,7 @@ function UserRow({
         <Select
           aria-label={`Роль: ${user.username}`}
           placeholder="Роль"
-          data={ROLES}
+          data={roleOptions(ROLES)}
           value={role}
           onChange={(value) => value && setRole(value)}
           allowDeselect={false}

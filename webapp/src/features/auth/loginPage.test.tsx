@@ -18,6 +18,8 @@ import { useAuth } from './authStore'
 const user = {
   id: 'u1',
   username: 'ivan',
+  // ФИО заполнено — приветствие должно быть по нему, а не по логину
+  full_name: 'Иванов Иван Иванович',
   role: 'researcher' as const,
   is_active: true,
 }
@@ -96,11 +98,12 @@ describe('вход в приложение', () => {
 
     // Дашборд после успешного входа (приёмка Фазы 0)
     expect(await screen.findByRole('heading', { name: 'Дашборд' })).toBeInTheDocument()
-    expect(screen.getByText('Здравствуйте, ivan!')).toBeInTheDocument()
+    expect(screen.getByText('Здравствуйте, Иванов Иван Иванович!')).toBeInTheDocument()
 
     // Боковая панель: метка сборки и пользователь
     expect(screen.getByText(/сборка \d{4}-\d{2}-\d{2}/)).toBeInTheDocument()
-    expect(screen.getByText(/ivan \(researcher\)/)).toBeInTheDocument()
+    // в сайдбаре — ФИО и русская подпись роли
+    expect(screen.getByText(/Иванов Иван Иванович · Исследователь/)).toBeInTheDocument()
 
     await waitFor(() =>
       expect(spy.mock.calls.some(([u]) => String(u).endsWith('/api/auth/login'))).toBe(

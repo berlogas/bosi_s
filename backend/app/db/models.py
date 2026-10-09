@@ -438,3 +438,107 @@ class DocumentChunk(Base):
     texts_blob: Mapped[bytes] = mapped_column(LargeBinary)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
                                                   onupdate=utcnow, index=True)
+
+
+# --------------------------------------------------------------------- inbox
+class InboxRunStatus(str, enum.Enum):
+    """Состояние прогона сканирования inbox.
+
+    `running`, который остался в БД после рестарта процесса, означает обрыв:
+    такой прогон помечается `failed`, а его файлы получают причину
+    (см. `services/inbox.py: reconcile_interrupted`).
+    """
+
+    running = "running"
+    done = "done"
+    failed = "failed"
+
+
+class InboxFileStatus(str, enum.Enum):
+    """Конечный автомат одного файла прогона.
+
+    discovered -> parsed -> indexed -> archived   (успех)
+    discovered -> rejected                       (битый/неподдерживаемый → /data/rejected)
+    discovered -> failed                         (ошибка индексации, файл остаётся в inbox)
+    """
+
+    discovered = "discovered"
+    parsed = "parsed"
+    indexed = "indexed"
+    archived = "archived"
+    rejected = "rejected"
+    failed = "failed"
+
+
+class InboxRun(Base):
+    """Журнал прогонов: что сканировали, чем закончилось, счётчики."""
+
+    __tablename__ = "inbox_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    trigger: Mapped[str] = mapped_column(String(32), default="manual")
+    status: Mapped[InboxRunStatus] = mapped_column(
+        Enum(InboxRunStatus, native_enum=False), default=InboxRunStatus.running,
+        index=True,
+    )
+    inbox_dir: Mapped[str] = mapped_column(String(1024))
+
+    scanned: Mapped[int] = mapped_column(Integer, default=0)
+    indexed: Mapped[int] = mapped_column(Integer, default=0)
+    archived: Mapped[int] = mapped_column(Integer, default=0)
+    rejected: Mapped[int] = mapped_column(Integer, default=0)
+    replaced: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                 index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+    files: Mapped[list[InboxFile]] = relationship(
+        back_populates="run", cascade="all, delete-orphan",
+    )
+
+
+class InboxFile(Base):
+    """По строке на каждый файл прогона: состояние, причина, куда попал.
+
+    `rel_path` — ключ идемпотентности внутри прогона, `sha256` — содержимое:
+    вместе они дают «тот же путь, другое содержимое» = замена документа.
+    """
+
+    __tablename__ = "inbox_files"
+    __table_args__ = (
+        Index("ix_inbox_files_run_status", "run_id", "status"),
+        UniqueConstraint("run_id", "rel_path", name="uq_inbox_files_run_rel_path"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("inbox_runs.id", ondelete="CASCADE"), index=True,
+    )
+    rel_path: Mapped[str] = mapped_column(String(1024))
+    abs_path: Mapped[str] = mapped_column(String(1024))
+    sha256: Mapped[str | None] = mapped_column(String(64), index=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+
+    status: Mapped[InboxFileStatus] = mapped_column(
+        Enum(InboxFileStatus, native_enum=False), default=InboxFileStatus.discovered,
+    )
+    # Шаг, на котором остановился: discovered/parsed/indexed/archived.
+    stage: Mapped[str] = mapped_column(String(32), default="discovered")
+    # Машиночитаемый код (unsupported_extension, too_large, parse_error,
+    # disk_error, replaced, interrupted) + текст для UI.
+    reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    reason_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True,
+    )
+    final_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                  onupdate=utcnow)
+
+    run: Mapped[InboxRun] = relationship(back_populates="files")

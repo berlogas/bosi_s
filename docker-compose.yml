@@ -36,12 +36,20 @@ services:
       # бэкап внутри бэкапа: архив рос бы с каждой копией.
       BACKUP_DIR: /backups
       BACKUP_KEEP: "14"
+      # Папка-приёмник: файлы кладёте сюда на хосте, backend по кнопке
+      # в админке индексирует их и переносит в /data/documents/library.
+      INBOX_DIR: /data/inbox
+      LIBRARY_DIR: /data/documents/library
+      REJECTED_DIR: /data/rejected
       OLLAMA_BASE_URL: http://ollama:11434
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - boasi_data:/data
       - boasi_backups:/backups
+      # Приёмник файлов для массового добавления. Каталог inbox/ в корне
+      # репозитория создаётся один раз: mkdir -p inbox
+      - ./inbox:/data/inbox
     # Явный healthcheck (в Dockerfile тоже есть, но здесь видно и можно задать
     # запас: первый старт грузит модель эмбеддингов и восстанавливает индекс —
     # это минуты, а не секунды).

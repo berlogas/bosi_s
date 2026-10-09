@@ -187,3 +187,32 @@ async def test_admin_audit_filter_by_date(client, admin_user) -> None:
 
     assert response.status_code == 200, response.text
     assert response.json() == []
+
+
+# ------------------------------------------------------------------ русские тексты
+async def test_unknown_route_says_not_found_in_russian(client) -> None:
+    """Стандартное `Not Found` Starlette не должно всплывать в интерфейсе."""
+    response = await client.get("/api/такого-маршрута-нет")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Не найдено"
+
+
+async def test_method_not_allowed_says_in_russian(client) -> None:
+    response = await client.get("/api/health/ещё-нет")
+
+    assert response.status_code in (404, 405)
+    assert response.json()["detail"] in ("Не найдено", "Метод не поддерживается")
+
+
+async def test_our_own_detail_is_not_translated(client, researcher_user) -> None:
+    """Тексты приложения остаются как есть — их писали люди для людей."""
+    from tests.conftest import login_headers
+
+    headers = await login_headers(client, "ivanov", "researcher-pass-123")
+    response = await client.get("/api/sessions/нет-такой/documents",
+                                headers=headers)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] != "Не найдено"
+    assert "сессия" in response.json()["detail"].lower()

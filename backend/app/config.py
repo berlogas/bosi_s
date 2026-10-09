@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # сами в себя (бэкап внутри бэкапа) и раздували том без предела.
     # В контейнере это отдельный том /backups, локально — backups/ в корне.
     backup_dir: Path | None = None
+    # ---- inbox: папка-приёмник массовой загрузки файлов ----
+    # Файлы кладут сюда с хоста (docker-compose монтирует её в контейнер),
+    # backend по кнопке индексирует их и переносит в постоянную библиотеку.
+    inbox_dir: Path | None = None
+    library_dir: Path | None = None
+    rejected_dir: Path | None = None
     # Сколько последних копий хранить (0 = без ограничения).
     backup_keep: int = 14
     upload_max_mb: int = 200
@@ -147,6 +153,21 @@ class Settings(BaseSettings):
     @property
     def documents_dir(self) -> Path:
         return self.data_dir / "documents"
+
+    @property
+    def resolved_inbox_dir(self) -> Path:
+        """Папка-приёмник. По умолчанию `data/inbox` — bind-mount из docker-compose."""
+        return self.inbox_dir or (self.data_dir / "inbox")
+
+    @property
+    def resolved_library_dir(self) -> Path:
+        """Постоянное хранилище импортированных файлов (`data/documents/library`)."""
+        return self.library_dir or (self.documents_dir / "library")
+
+    @property
+    def resolved_rejected_dir(self) -> Path:
+        """Файлы, которые не удалось разобрать. Чистит человек, через UI."""
+        return self.rejected_dir or (self.data_dir / "rejected")
 
     @property
     def resolved_db_path(self) -> Path | None:
@@ -253,7 +274,9 @@ class Settings(BaseSettings):
         return warnings
 
     def ensure_dirs(self) -> None:
-        for path in (self.data_dir, self.resolved_pqa_home, self.sessions_dir, self.documents_dir):
+        for path in (self.data_dir, self.resolved_pqa_home, self.sessions_dir,
+                     self.documents_dir, self.resolved_inbox_dir,
+                     self.resolved_library_dir, self.resolved_rejected_dir):
             path.mkdir(parents=True, exist_ok=True)
 
     def public_summary(self) -> dict[str, object]:

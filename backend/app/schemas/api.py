@@ -67,6 +67,7 @@ class CreateUserRequest(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
+    username: str | None = Field(default=None, min_length=2, max_length=64)
     password: str | None = Field(default=None, min_length=8, max_length=256)
     role: Role | None = None
     email: str | EmailStr | None = None
@@ -503,3 +504,59 @@ class BackupResultOut(BaseModel):
     entry: BackupEntryOut
     deleted_old: list[str]
     restore_hint: str
+
+
+# --------------------------------------------------------------------------- inbox
+class InboxFileOut(ORMModel):
+    """Строка журнала: что с файлом и — если не сложилось — почему."""
+
+    id: str
+    rel_path: str
+    abs_path: str
+    size_bytes: int
+    sha256: str | None = None
+    status: str
+    stage: str
+    reason_code: str | None = None
+    reason_text: str | None = None
+    attempts: int
+    document_id: str | None = None
+    final_path: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class InboxRunOut(ORMModel):
+    """Прогон сканирования inbox со счётчиками."""
+
+    id: str
+    trigger: str
+    status: str
+    inbox_dir: str
+    scanned: int
+    indexed: int
+    archived: int
+    rejected: int
+    replaced: int
+    failed: int
+    error: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+    files: list[InboxFileOut] = Field(default_factory=list)
+
+
+class InboxStatusOut(BaseModel):
+    """Текущее состояние папки-приёмника — для включения кнопки в UI."""
+
+    inbox_dir: str
+    exists: bool
+    files: int
+    usable_files: int
+    unsupported_files: int
+    bytes: int
+    busy: bool
+
+
+class InboxScanResultOut(BaseModel):
+    run: InboxRunOut
+    inbox_dir: str

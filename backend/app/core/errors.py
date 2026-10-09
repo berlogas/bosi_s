@@ -7,8 +7,40 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("boasi.errors")
+
+# Человеческие тексты для кодов, которые Starlette иначе отдаёт по-английски.
+_STATUS_TEXT_RU: dict[int, str] = {
+    400: "Некорректный запрос",
+    401: "Требуется вход",
+    403: "Доступ запрещён",
+    404: "Не найдено",
+    405: "Метод не поддерживается",
+    409: "Конфликт состояния",
+    415: "Неподдерживаемый тип данных",
+    422: "Некорректные данные запроса",
+    429: "Слишком много запросов",
+    500: "Внутренняя ошибка сервера",
+    503: "Сервис временно недоступен",
+}
+
+# Стандартные фразы Starlette: если detail совпадает с одной из них,
+# значит это не наш текст, а служебный — переводим.
+_STD_PHRASES: dict[int, tuple[str, ...]] = {
+    400: ("Bad Request",),
+    401: ("Unauthorized",),
+    403: ("Forbidden",),
+    404: ("Not Found",),
+    405: ("Method Not Allowed",),
+    409: ("Conflict",),
+    415: ("Unsupported Media Type",),
+    422: ("Unprocessable Entity", "Validation Error"),
+    429: ("Too Many Requests",),
+    500: ("Internal Server Error",),
+    503: ("Service Unavailable",),
+}
 
 
 class AppError(Exception):
@@ -76,6 +108,24 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "detail": "Некорректные данные запроса",
                 "meta": {"errors": exc.errors()},
             },
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        """Русские тексты вместо стандартных HTTP-причин.
+
+        Starlette отвечает на неизвестный маршрут `{"detail": "Not Found"}`,
+        и эта строка дословно всплывала в интерфейсе. Приложение
+        русскоязычное, поэтому известные коды переводятся, а неизвестный
+        `detail` (наш собственный текст ошибки) сохраняется как есть.
+        """
+        detail = exc.detail
+        if not isinstance(detail, str) or detail in _STD_PHRASES.get(exc.status_code, ()):
+            detail = _STATUS_TEXT_RU.get(exc.status_code, "Ошибка запроса")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": f"http_{exc.status_code}", "detail": detail},
+            headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(Exception)

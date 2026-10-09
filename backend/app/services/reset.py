@@ -195,7 +195,13 @@ def wipe_paths(settings: Settings, *, include_models: bool = False
     если кто-то подставил его в список целей.
     """
     protected: list[Path] = []
+    # library/rejected — часть данных и лежат внутри documents_dir/data_dir,
+    # но перечисляем явно: иначе сброс оставил бы осиротевшие файлы на диске.
+    # inbox НЕ трогаем: это bind-mount на каталог пользователя, там могут
+    # лежать ещё не загруженные файлы — их удаление неожиданно и необратимо.
     candidates: list[Path] = [settings.sessions_dir, settings.documents_dir,
+                              settings.resolved_library_dir,
+                              settings.resolved_rejected_dir,
                               settings.resolved_pqa_home]
     if include_models:
         # Явное согласие на удаление кэша моделей: после этого оффлайн-контур

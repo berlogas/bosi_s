@@ -8,6 +8,9 @@ __pycache__/
 data/
 .test_data/
 backups/
+# папка-приёмник для массового добавления файлов (кроме README)
+inbox/*
+!inbox/README.md
 *.sha256
 backend/.pytest_cache/
 .hf-cache/

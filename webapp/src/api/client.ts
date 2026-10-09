@@ -52,11 +52,19 @@ type BackupPlan = components['schemas']['BackupPlanOut']
 type BackupListing = components['schemas']['BackupListOut']
 type BackupResult = components['schemas']['BackupResultOut']
 
+/** Inbox: папка-приёмник и журнал прогонов массового добавления. */
+type InboxFile = components['schemas']['InboxFileOut']
+type InboxRun = components['schemas']['InboxRunOut']
+type InboxStatus = components['schemas']['InboxStatusOut']
+
 export type {
   BackupEntry,
   BackupListing,
   BackupPlan,
   BackupResult,
+  InboxFile,
+  InboxRun,
+  InboxStatus,
   ResetPlan,
   ResetResult,
   ResetScope,
@@ -697,7 +705,14 @@ class ApiClient {
 
   adminUpdateUser(
     userId: string,
-    fields: { role?: string; password?: string; email?: string; full_name?: string },
+    fields: {
+      username?: string
+      full_name?: string
+      role?: string
+      password?: string
+      is_active?: boolean
+      email?: string
+    },
   ): Promise<UserOut> {
     return this.request(`/api/admin/users/${userId}`, {
       method: 'PATCH',
@@ -759,23 +774,33 @@ class ApiClient {
     })
   }
 
-  /** Массовая индексация в фоне: возвращает task_id (bulk-async). */
-  submitBulkIndex(
-    paths: string[],
-    tags: string[] = [],
-  ): Promise<{ task_id: string; total: number }> {
-    return this.request('/api/admin/documents/bulk-async', {
+  // ------------------------------------------------------------------ inbox
+  /** Что лежит в папке-приёмнике: включает кнопку в UI. */
+  adminInboxStatus(): Promise<InboxStatus> {
+    return this.request('/api/admin/inbox/status')
+  }
+
+  /** Обработать содержимое inbox. Долгая операция — увеличенный таймаут. */
+  adminInboxScan(): Promise<{ run: InboxRun; inbox_dir: string }> {
+    return this.request('/api/admin/inbox/scan', {
       method: 'POST',
-      json: { paths, tags },
+      timeoutMs: 600_000,
     })
+  }
+
+  /** Журнал прогонов: последние по дате, с файлами внутри. */
+  adminInboxRuns(limit = 20): Promise<InboxRun[]> {
+    return this.request('/api/admin/inbox/runs', { query: { limit } })
+  }
+
+  /** Очистить каталог rejected (причины остаются в журнале). */
+  adminClearRejected(): Promise<{ removed: number }> {
+    return this.request('/api/admin/inbox/rejected', { method: 'DELETE' })
   }
 
   // --------------------------------------------------------------- сброс
   /** План сброса: что именно будет удалено. Ничего не меняет. */
-  adminResetPreview(
-    scope: ResetScope,
-    includeModels = false,
-  ): Promise<ResetPlan> {
+  adminResetPreview(scope: ResetScope, includeModels = false): Promise<ResetPlan> {
     return this.request('/api/admin/reset/preview', {
       query: { scope, include_models: includeModels },
     })

@@ -85,8 +85,16 @@ def test_scope_data_keeps_users_and_audit(db, tmp_settings) -> None:
     assert _count(db, DocumentChunk) == 0
     # Файлы удалены, каталоги пересозданы пустыми
     assert not (tmp_settings.sessions_dir / seeded["session_id"]).exists()
-    assert list(tmp_settings.documents_dir.iterdir()) == []
+    # documents_dir пуст, кроме служебной подпапки библиотеки, которую
+    # ensure_dirs() пересоздаёт после сброса
+    leftovers = [p for p in tmp_settings.documents_dir.iterdir()
+                 if p.name != tmp_settings.resolved_library_dir.name]
+    assert leftovers == []
+    assert list(tmp_settings.resolved_library_dir.iterdir()) == []
+    assert list(tmp_settings.resolved_rejected_dir.iterdir()) == []
     assert tmp_settings.sessions_dir.exists()
+    # inbox — bind-mount пользователя, сброс его не трогает
+    assert tmp_settings.resolved_inbox_dir.is_dir()
     # Запись о сбросе остаётся в аудите
     assert _count(db, AuditLog) >= 1
 
@@ -152,7 +160,8 @@ def test_plan_reports_rows_files_and_kept_paths(db, tmp_settings) -> None:
     assert plan.files == 3
     assert plan.total_bytes > 0
     assert str(tmp_settings.resolved_hf_home) in plan.kept_paths
-    assert {Path(p.path).name for p in plan.paths} == {"sessions", "documents", "pqa"}
+    assert {Path(p.path).name for p in plan.paths} == {
+        "sessions", "documents", "pqa", "library", "rejected"}
 
 
 # ------------------------------------------------------- кэш моделей не трогаем
@@ -222,6 +231,9 @@ def test_skeleton_dirs_recreated(db, tmp_settings) -> None:
     assert tmp_settings.sessions_dir.is_dir()
     assert tmp_settings.documents_dir.is_dir()
     assert tmp_settings.resolved_pqa_home.is_dir()
+    assert tmp_settings.resolved_library_dir.is_dir()
+    assert tmp_settings.resolved_inbox_dir.is_dir()
+    assert tmp_settings.resolved_rejected_dir.is_dir()
 
 
 def test_scope_all_is_confirmed_by_phrase() -> None:

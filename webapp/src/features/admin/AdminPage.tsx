@@ -9,6 +9,7 @@
 import {
   Accordion,
   Alert,
+  Box,
   Button,
   Checkbox,
   Divider,
@@ -20,15 +21,17 @@ import {
   Paper,
   Select,
   Stack,
+  Switch,
   Table,
   Tabs,
+  Badge,
   Text,
-  Textarea,
   TextInput,
   Title,
 } from '@mantine/core'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
+import type { InboxRun } from '../../api/client'
 import type { AuditLogEntry, SessionOut, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
@@ -45,11 +48,14 @@ import {
   useAdminUsers,
   useAudit,
   useBackups,
-  useBulkIndex,
+  useClearRejected,
   useCreateBackup,
   useCreateUser,
   useDeleteBackup,
   useDeleteUser,
+  useInboxRuns,
+  useInboxScan,
+  useInboxStatus,
   useResetPreview,
   useResetState,
   useSessionsTable,
@@ -115,6 +121,7 @@ function CreateUser() {
               <Group align="flex-end" wrap="nowrap" gap="xs">
                 <TextInput
                   label="Логин"
+                  aria-label="Логин"
                   value={username}
                   onChange={(event) => setUsername(event.currentTarget.value)}
                   style={{ flex: 1 }}
@@ -196,10 +203,10 @@ function DeleteUserButton({ user }: { user: User }) {
             Удалить пользователя <b>{user.username}</b>?
           </Text>
           <Alert color="red" role="alert">
-            Действие необратимо. Вместе с учётной записью каскадно удалятся его
-            сессии, сообщения, документы и проекты. Восстановление возможно
-            только из резервной копии. Если достаточно закрыть доступ —
-            используйте снятие галочки активности.
+            Действие необратимо. Вместе с учётной записью каскадно удалятся его сессии,
+            сообщения, документы и проекты. Восстановление возможно только из резервной
+            копии. Если достаточно закрыть доступ — используйте снятие галочки
+            активности.
           </Alert>
           {remove.isError && (
             <Alert color="red" role="alert">
@@ -230,26 +237,63 @@ function DeleteUserButton({ user }: { user: User }) {
   )
 }
 
-function UserRow({ user }: { user: User }) {
+function UserRow({
+  user,
+  onSaved,
+}: {
+  user: User
+  onSaved: (username: string) => void
+}) {
   const update = useUpdateUser()
   const [role, setRole] = useState<string>(
     ROLES.includes(user.role) ? user.role : 'researcher',
   )
+  const [username, setUsername] = useState(user.username)
+  const [fullName, setFullName] = useState(user.full_name ?? '')
   const [password, setPassword] = useState('')
-  const [saved, setSaved] = useState(false)
-  const canSave = (role !== user.role || password) && !update.isPending
+  const [isActive, setIsActive] = useState(user.is_active)
+  const usernameError =
+    username.trim().length > 0 && username.trim().length < 2
+      ? 'Логин: минимум 2 символа'
+      : null
+  const dirty =
+    username.trim() !== user.username ||
+    (fullName.trim() || null) !== (user.full_name ?? null)
+  const canSave =
+    (dirty || role !== user.role || password.length > 0) &&
+    !update.isPending &&
+    !usernameError &&
+    username.trim().length >= 2
 
   return (
     <tr>
       <td>
-        <Text size="sm">
-          <b>{user.username}</b> · {user.full_name ?? ''}
-        </Text>
+        <TextInput
+          size="xs"
+          aria-label={`Логин: ${user.username}`}
+          placeholder="Логин"
+          value={username}
+          onChange={(event) => setUsername(event.currentTarget.value)}
+          error={usernameError}
+          disabled={update.isPending}
+          w={160}
+        />
+      </td>
+      <td>
+        <TextInput
+          size="xs"
+          aria-label={`ФИО: ${user.username}`}
+          placeholder="ФИО"
+          value={fullName}
+          onChange={(event) => setFullName(event.currentTarget.value)}
+          disabled={update.isPending}
+          w={200}
+        />
       </td>
       <td>
         <Select
-          label="Роль"
           aria-label={`Роль: ${user.username}`}
+          placeholder="Роль"
           data={ROLES}
           value={role}
           onChange={(value) => value && setRole(value)}
@@ -260,13 +304,31 @@ function UserRow({ user }: { user: User }) {
       </td>
       <td>
         <TextInput
-          label="Новый пароль"
           aria-label={`Новый пароль: ${user.username}`}
+          placeholder="Новый пароль"
           type="password"
           value={password}
           onChange={(event) => setPassword(event.currentTarget.value)}
           disabled={update.isPending}
         />
+      </td>
+      <td style={{ textAlign: 'center' }}>
+        <Group justify="center" wrap="nowrap">
+          <Switch
+            aria-label={`Активен: ${user.username}`}
+            size="sm"
+            checked={isActive}
+            disabled={update.isPending}
+            onChange={(event) => {
+              const next = event.currentTarget.checked
+              setIsActive(next)
+              update.mutate(
+                { userId: user.id, fields: { role, is_active: next } },
+                { onSuccess: (updated) => setIsActive(updated.is_active) },
+              )
+            }}
+          />
+        </Group>
       </td>
       <td>
         <Group gap="xs" wrap="nowrap">
@@ -276,15 +338,26 @@ function UserRow({ user }: { user: User }) {
             disabled={!canSave}
             loading={update.isPending && update.variables?.userId === user.id}
             onClick={() => {
-              setSaved(false)
-              const fields: { role: string; password?: string } = { role }
+              const fields: {
+                username?: string
+                full_name?: string
+                role?: string
+                password?: string
+              } = { role }
+              if (dirty) {
+                fields.username = username.trim()
+                fields.full_name = fullName.trim() || ''
+              }
               if (password) fields.password = password
               update.mutate(
                 { userId: user.id, fields },
                 {
-                  onSuccess: () => {
-                    setSaved(true)
+                  onSuccess: (updated) => {
                     setPassword('')
+                    setUsername(updated.username)
+                    setFullName(updated.full_name ?? '')
+                    setRole(updated.role)
+                    onSaved(updated.username)
                   },
                 },
               )
@@ -292,11 +365,6 @@ function UserRow({ user }: { user: User }) {
           >
             Сохранить
           </Button>
-          {saved && (
-            <Text size="sm" c="green" role="status">
-              Сохранено.
-            </Text>
-          )}
           {update.isError && update.variables?.userId === user.id && (
             <Text size="sm" c="red" role="alert">
               {errorText(update.error, 'Ошибка запроса')}
@@ -311,6 +379,18 @@ function UserRow({ user }: { user: User }) {
 
 function UsersTab() {
   const users = useAdminUsers()
+  // Отметка о сохранении живёт вне таблицы: внутри она толкает кнопки
+  // соседних строк. Показывается 2 секунды поверх таблицы.
+  const [savedFor, setSavedFor] = useState<string | null>(null)
+  const timer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  const handleSaved = (username: string) => {
+    setSavedFor(username)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setSavedFor(null), 2000)
+  }
 
   if (users.isPending) return <Loader size="sm" />
   if (users.isError) {
@@ -327,28 +407,237 @@ function UsersTab() {
       {users.data.length === 0 && <Text c="dimmed">Пользователей нет.</Text>}
       {users.data.length > 0 && (
         <>
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Пользователь</Table.Th>
-              <Table.Th>Роль</Table.Th>
-              <Table.Th>Пароль</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {users.data.map((user) => (
-              <UserRow key={user.id} user={user} />
-            ))}
-          </Table.Tbody>
-        </Table>
-        <Text size="xs" c="dimmed">
-          «Удалить» стирает учётную запись вместе с её сессиями и документами, и
-          отменить это нельзя. Если достаточно закрыть доступ — снимите галочку
-          активности вместо удаления.
-        </Text>
+          <Box pos="relative">
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Логин</Table.Th>
+                  <Table.Th>ФИО</Table.Th>
+                  <Table.Th>Роль</Table.Th>
+                  <Table.Th>Пароль</Table.Th>
+                  <Table.Th style={{ textAlign: 'center' }}>Активен</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {users.data.map((user) => (
+                  <UserRow key={user.id} user={user} onSaved={handleSaved} />
+                ))}
+              </Table.Tbody>
+            </Table>
+            {savedFor && (
+              <Text
+                size="sm"
+                c="green"
+                role="status"
+                pos="absolute"
+                top={4}
+                right={12}
+                style={{ pointerEvents: 'none' }}
+              >
+                Сохранено: {savedFor}
+              </Text>
+            )}
+          </Box>
+          <Text size="xs" c="dimmed">
+            «Удалить» стирает учётную запись вместе с её сессиями и документами, и
+            отменить это нельзя. Если достаточно закрыть доступ — снимите галочку
+            активности вместо удаления.
+          </Text>
         </>
       )}
+    </Stack>
+  )
+}
+
+// ---------------------------------------------------------------------- inbox
+
+const INBOX_STATUS_LABEL: Record<string, string> = {
+  archived: 'принят',
+  indexed: 'проиндексирован',
+  rejected: 'отклонён',
+  failed: 'ошибка',
+  discovered: 'обнаружен',
+  parsed: 'разобран',
+}
+
+/** Файлы одного прогона с причинами: успех — одним списком, отказ — с пояснением. */
+function InboxRunFiles({ run }: { run: InboxRun }) {
+  const [opened, setOpened] = useState<string | null>(null)
+  const files = run.files ?? []
+  if (files.length === 0) return null
+
+  return (
+    <Stack gap={4}>
+      {files.map((file) => {
+        const bad = file.status === 'rejected' || file.status === 'failed'
+        const label = INBOX_STATUS_LABEL[file.status] ?? file.status
+        return (
+          <Paper key={file.id} withBorder p="xs" bg={bad ? 'red.0' : undefined}>
+            <Group justify="space-between" wrap="nowrap" gap="xs">
+              <Text size="xs" style={{ flex: 1 }} truncate>
+                {file.rel_path}
+              </Text>
+              <Badge
+                size="xs"
+                color={bad ? 'red' : file.status === 'archived' ? 'green' : 'gray'}
+              >
+                {label}
+              </Badge>
+              {file.reason_text && (
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  onClick={() => setOpened(opened === file.id ? null : file.id)}
+                >
+                  {opened === file.id ? 'скрыть причину' : 'почему?'}
+                </Button>
+              )}
+            </Group>
+            {opened === file.id && file.reason_text && (
+              <Text size="xs" c="red" mt={4} role="note">
+                {file.reason_text}
+              </Text>
+            )}
+          </Paper>
+        )
+      })}
+    </Stack>
+  )
+}
+
+/**
+ * Папка-приёмник: состояние, кнопка запуска и журнал добавления.
+ *
+ * Кнопка активна, только когда в папке есть принимаемые файлы — иначе
+ * нажатие было бы бессмысленным. Отчёт хранится в БД, поэтому виден после
+ * перезагрузки страницы и перезапуска контейнера.
+ */
+function InboxPanel() {
+  const status = useInboxStatus()
+  const runs = useInboxRuns()
+  const scan = useInboxScan()
+  const clearRejected = useClearRejected()
+  const [message, setMessage] = useState<string | null>(null)
+
+  const usable = status.data?.usable_files ?? 0
+  const unsupported = status.data?.unsupported_files ?? 0
+  const busy = status.data?.busy ?? false
+  const canScan = usable > 0 && !busy && !scan.isPending
+
+  return (
+    <Stack gap="sm">
+      <Paper withBorder p="sm">
+        <Group justify="space-between" wrap="nowrap" align="center">
+          <Stack gap={2} style={{ flex: 1 }}>
+            <Text size="sm">
+              {status.isPending
+                ? 'Проверяем папку-приёмник…'
+                : status.isError
+                  ? errorText(status.error, 'Не удалось проверить папку-приёмник')
+                  : status.data?.exists
+                    ? `В папке: ${status.data.files} (принимаемых ${usable}${
+                        unsupported ? `, неподдерживаемых ${unsupported}` : ''
+                      })`
+                    : `Папка не найдена: ${status.data?.inbox_dir ?? ''}`}
+            </Text>
+            {status.data?.exists && (
+              <Text size="xs" c="dimmed" style={{ wordBreak: 'break-all' }}>
+                {status.data.inbox_dir}
+              </Text>
+            )}
+          </Stack>
+          <Button
+            onClick={() => {
+              setMessage(null)
+              scan.mutate(undefined, {
+                onSuccess: (result) => {
+                  const run = result.run
+                  setMessage(
+                    `Готово: проиндексировано ${run.indexed}, отклонено ${run.rejected}, ошибок ${run.failed}.`,
+                  )
+                },
+              })
+            }}
+            disabled={!canScan}
+            loading={scan.isPending}
+          >
+            Запустить массовое добавление
+          </Button>
+        </Group>
+        {message && (
+          <Text size="sm" c="green" role="status" mt="xs">
+            {message}
+          </Text>
+        )}
+        {scan.isError && (
+          <Alert color="red" role="alert" mt="xs">
+            {errorText(scan.error, 'Ошибка запроса')}
+          </Alert>
+        )}
+        {status.data?.exists === false && (
+          <Text size="xs" c="dimmed" mt="xs">
+            Создайте папку и проверьте монтирование в docker-compose.yml
+            (./inbox:/data/inbox).
+          </Text>
+        )}
+      </Paper>
+
+      <Group justify="space-between">
+        <Text fw={500}>Журнал добавления</Text>
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          loading={clearRejected.isPending}
+          onClick={() => clearRejected.mutate()}
+        >
+          Очистить ошибочные
+        </Button>
+      </Group>
+      {clearRejected.isSuccess && (
+        <Text size="xs" c="green" role="status">
+          {`Удалено файлов: ${clearRejected.data.removed}`}
+        </Text>
+      )}
+      {runs.isPending && <Loader size="sm" />}
+      {runs.isError && (
+        <Alert color="red" role="alert">
+          {errorText(runs.error, 'Не удалось загрузить журнал')}
+        </Alert>
+      )}
+      {runs.data?.length === 0 && <Text c="dimmed">Прогонов пока не было.</Text>}
+      {runs.data?.map((run) => (
+        <Paper key={run.id} withBorder p="sm">
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">{new Date(run.started_at).toLocaleString('ru-RU')}</Text>
+            <Badge
+              size="sm"
+              color={
+                run.status === 'done'
+                  ? 'green'
+                  : run.status === 'failed'
+                    ? 'red'
+                    : 'yellow'
+              }
+            >
+              {run.status === 'done'
+                ? 'завершён'
+                : run.status === 'failed'
+                  ? 'прерван'
+                  : 'идёт'}
+            </Badge>
+          </Group>
+          <Text size="xs" c="dimmed">
+            {`принято ${run.archived}, заменено ${run.replaced}, отклонено ${run.rejected}, ошибок ${run.failed}`}
+          </Text>
+          {run.error && (
+            <Text size="xs" c="red" role="note">
+              {run.error}
+            </Text>
+          )}
+          <InboxRunFiles run={run} />
+        </Paper>
+      ))}
     </Stack>
   )
 }
@@ -361,13 +650,10 @@ function GlobalBaseTab() {
   const reindex = useAdminReindex()
   const remove = useAdminDeleteDocument()
   const documents = useAdminDocuments()
-  const bulk = useBulkIndex()
 
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<File[] | null>(null)
-  const [bulkText, setBulkText] = useState('')
   const [message, setMessage] = useState<string | null>(null)
-  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
   const [reindexDone, setReindexDone] = useState(false)
 
   return (
@@ -411,7 +697,9 @@ function GlobalBaseTab() {
         <FileInput
           label="Или файлы"
           multiple
-          value={files ?? undefined}
+          // пустой массив, а не undefined: undefined делает поле
+          // неуправляемым, и Mantine продолжает показывать старые файлы
+          value={files ?? []}
           onChange={setFiles}
           style={{ flex: 1 }}
         />
@@ -420,13 +708,19 @@ function GlobalBaseTab() {
           loading={upload.isPending}
           onClick={() => {
             setMessage(null)
+            // Список файлов очищаем сразу по клику: пока идёт загрузка,
+            // повторное нажатие не должно уходить теми же файлами.
+            const selected = files ?? []
+            setFiles(null)
             upload.mutate(
-              { files: files ?? [], tags: '' },
+              { files: selected, tags: '' },
               {
                 onSuccess: (result) => {
                   setMessage(`Добавлено ${(result.added ?? []).length}`)
                   setFiles(null)
                 },
+                // при ошибке возвращаем выбор в поле, чтобы можно было повторить
+                onError: () => setFiles(selected),
               },
             )
           }}
@@ -440,41 +734,19 @@ function GlobalBaseTab() {
         </Alert>
       )}
 
-      <Title order={5}>Массовая индексация</Title>
+      <Title order={5}>Массовое добавление</Title>
       <Text size="sm" c="dimmed">
-        Фоновый режим: можно свернуть и отменить
+        Файлы кладутся в папку-приёмник, затем нажимается кнопка: backend проиндексирует
+        их и перенесёт в постоянную библиотеку, а приёмник снова освободится.
       </Text>
-      <Textarea
-        label="Пути через запятую или по одному в строке"
-        value={bulkText}
-        onChange={(event) => setBulkText(event.currentTarget.value)}
-        autosize
-        minRows={3}
-      />
-      <Group>
-        <Button
-          loading={bulk.isPending}
-          onClick={() => {
-            const paths = bulkText
-              .replace(/,/g, '\n')
-              .split('\n')
-              .map((line) => line.trim())
-              .filter(Boolean)
-            if (paths.length === 0) {
-              setBulkMessage('Укажите хотя бы один путь.')
-              return
-            }
-            setBulkMessage(null)
-            bulk.mutate(paths, {
-              onSuccess: (task) =>
-                setBulkMessage(`Задача поставлена: ${task.total} файлов`),
-            })
-          }}
-        >
-          Запустить индексацию
-        </Button>
+      <InboxPanel />
+
+      <Group justify="space-between">
+        <Title order={5}>Документы глобальной базы</Title>
         <Button
           color="orange"
+          variant="light"
+          size="xs"
           loading={reindex.isPending}
           onClick={() => {
             setReindexDone(false)
@@ -484,14 +756,6 @@ function GlobalBaseTab() {
           Переиндексировать всё
         </Button>
       </Group>
-      {bulkMessage && (
-        <Alert
-          color={bulk.isError || bulkMessage.startsWith('Укажите') ? 'red' : 'green'}
-          role={bulk.isError || bulkMessage.startsWith('Укажите') ? 'alert' : 'status'}
-        >
-          {bulk.isError ? errorText(bulk.error, 'Ошибка запроса') : bulkMessage}
-        </Alert>
-      )}
       {reindex.isError && (
         <Alert color="red" role="alert">
           {errorText(reindex.error, 'Ошибка запроса')}
@@ -502,8 +766,6 @@ function GlobalBaseTab() {
           Готово.
         </Alert>
       )}
-
-      <Title order={5}>Документы глобальной базы</Title>
       {documents.isPending && <Loader size="sm" />}
       {documents.isError && (
         <Alert color="red" role="alert">
@@ -621,13 +883,19 @@ function SessionsTab() {
   return (
     <Accordion defaultValue={`user:${grouped[0]?.userId}`}>
       {grouped.map((group) => (
-        <Accordion.Item key={group.userId} value={`user:${group.userId}`} role="region" aria-label={group.label}>
-          <Accordion.Control aria-label={`${group.label}, ${group.rows.length} ${pluralizeSession(group.rows.length)}`}>
+        <Accordion.Item
+          key={group.userId}
+          value={`user:${group.userId}`}
+          role="region"
+          aria-label={group.label}
+        >
+          <Accordion.Control
+            aria-label={`${group.label}, ${group.rows.length} ${pluralizeSession(group.rows.length)}`}
+          >
             <Group justify="space-between" wrap="nowrap">
               <Text fw={600}>{group.label}</Text>
               <Text c="dimmed" size="sm">
-                {group.rows.length}{' '}
-                {pluralizeSession(group.rows.length)}
+                {group.rows.length} {pluralizeSession(group.rows.length)}
               </Text>
             </Group>
           </Accordion.Control>
@@ -794,8 +1062,8 @@ function ResetSection() {
   return (
     <Stack gap="sm">
       <Alert color="yellow" title="Сброс необратим">
-        Удалённые сессии, документы и переписка восстановить нельзя — только из
-        бэкапа (<code>make backup</code>). Сначала посмотрите план.
+        Удалённые сессии, документы и переписка восстановить нельзя — только из бэкапа (
+        <code>make backup</code>). Сначала посмотрите план.
       </Alert>
 
       <Select
@@ -814,7 +1082,7 @@ function ResetSection() {
 
       <Checkbox
         label="Также удалить кэш моделей (HF/Torch)"
-        description='Обычно НЕ нужно: без него после сброса платформа не сможет считать эмбеддинги в оффлайне, пока модель не будет скачана заново.'
+        description="Обычно НЕ нужно: без него после сброса платформа не сможет считать эмбеддинги в оффлайне, пока модель не будет скачана заново."
         checked={includeModels}
         onChange={(event) => setIncludeModels(event.currentTarget.checked)}
       />
@@ -853,8 +1121,7 @@ function ResetSection() {
             </Table>
             {plan.data.paths.map((item) => (
               <Text key={item.path} size="sm">
-                <code>{item.path}</code> — {item.files} файлов,{' '}
-                {humanBytes(item.bytes)}
+                <code>{item.path}</code> — {item.files} файлов, {humanBytes(item.bytes)}
               </Text>
             ))}
             <Text size="sm" fw={600}>
@@ -863,8 +1130,8 @@ function ResetSection() {
             </Text>
             {plan.data.kept_paths.length > 0 && (
               <Text size="sm" c="dimmed">
-                Не трогаем: {plan.data.kept_paths.join(', ')} (кэш моделей — нужен
-                для эмбеддингов).
+                Не трогаем: {plan.data.kept_paths.join(', ')} (кэш моделей — нужен для
+                эмбеддингов).
               </Text>
             )}
           </Stack>
@@ -940,16 +1207,16 @@ function BackupsSection() {
   return (
     <Stack gap="sm">
       <Alert color="blue" title="Копия снимается на сервере">
-        Архив содержит базу данных (согласованный снимок), файлы сессий и
-        документов и манифест с ревизией схемы. Копии складываются в каталог{' '}
-        <code>{plan?.backup_dir ?? '—'}</code> — он намеренно вынесен за пределы
-        данных, иначе копия попадала бы сама в себя.
+        Архив содержит базу данных (согласованный снимок), файлы сессий и документов и
+        манифест с ревизией схемы. Копии складываются в каталог{' '}
+        <code>{plan?.backup_dir ?? '—'}</code> — он намеренно вынесен за пределы данных,
+        иначе копия попадала бы сама в себя.
       </Alert>
 
       {plan?.db_exists === false && (
         <Alert color="red" role="alert">
-          База данных не найдена — копия получится без данных. Проверьте, что
-          платформа видит свой каталог данных.
+          База данных не найдена — копия получится без данных. Проверьте, что платформа
+          видит свой каталог данных.
         </Alert>
       )}
 
@@ -964,9 +1231,9 @@ function BackupsSection() {
             {plan.free_human ? `, свободно на диске ${plan.free_human}` : ''}
           </Text>
           <Text size="sm" c="dimmed">
-            Хранится копий: {plan.keep === 0 ? 'без ограничения' : `последние ${plan.keep}`}{' '}
-            (сейчас {plan.existing}); при создании новой более старые удаляются
-            автоматически.
+            Хранится копий:{' '}
+            {plan.keep === 0 ? 'без ограничения' : `последние ${plan.keep}`} (сейчас{' '}
+            {plan.existing}); при создании новой более старые удаляются автоматически.
           </Text>
         </Paper>
       )}
@@ -1018,15 +1285,15 @@ function BackupsSection() {
                   </Text>
                 </Table.Td>
                 <Table.Td>{item.human_size}</Table.Td>
-                <Table.Td>{(item.created_at ?? '').replace('T', ' ').slice(0, 19)}</Table.Td>
+                <Table.Td>
+                  {(item.created_at ?? '').replace('T', ' ').slice(0, 19)}
+                </Table.Td>
                 <Table.Td>
                   <Button
                     size="xs"
                     color="red"
                     variant="outline"
-                    loading={
-                      remove.isPending && remove.variables === item.name
-                    }
+                    loading={remove.isPending && remove.variables === item.name}
                     onClick={() => remove.mutate(item.name)}
                   >
                     Удалить
@@ -1050,8 +1317,8 @@ function BackupsSection() {
       )}
 
       <Alert color="yellow" title="Восстановление — только скриптом">
-        Восстановление требует остановки платформы, поэтому из браузера его
-        делать нельзя. После копии выполните в корне проекта:
+        Восстановление требует остановки платформы, поэтому из браузера его делать
+        нельзя. После копии выполните в корне проекта:
         <code> ./scripts/restore.sh путь/к/архиву.tar.gz</code>
       </Alert>
 

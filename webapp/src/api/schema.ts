@@ -269,6 +269,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/inbox/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inbox Status
+         * @description Что лежит в папке-приёмнике. Быстрый и безопасный вызов для UI.
+         */
+        get: operations["inbox_status_api_admin_inbox_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/inbox/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inbox Runs
+         * @description История прогонов: что добавляли и чем закончилось (журнал, не лог).
+         */
+        get: operations["inbox_runs_api_admin_inbox_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/inbox/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inbox Run Detail */
+        get: operations["inbox_run_detail_api_admin_inbox_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/inbox/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inbox Scan
+         * @description Обработать содержимое папки-приёмника.
+         *
+         *     Синхронный вызов: индексация больших PDF занимает минуты, поэтому UI
+         *     показывает «идёт обработка» и не должен получить таймаут. Повторный
+         *     клик во время прогона получает 409 — два скана одновременно запускать
+         *     нельзя.
+         */
+        post: operations["inbox_scan_api_admin_inbox_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/inbox/rejected": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Inbox Clear Rejected
+         * @description Очистить каталог `rejected` (причины остаются в журнале прогонов).
+         */
+        delete: operations["inbox_clear_rejected_api_admin_inbox_rejected_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions": {
         parameters: {
             query?: never;
@@ -1670,6 +1772,109 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * InboxFileOut
+         * @description Строка журнала: что с файлом и — если не сложилось — почему.
+         */
+        InboxFileOut: {
+            /** Id */
+            id: string;
+            /** Rel Path */
+            rel_path: string;
+            /** Abs Path */
+            abs_path: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Status */
+            status: string;
+            /** Stage */
+            stage: string;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Reason Text */
+            reason_text?: string | null;
+            /** Attempts */
+            attempts: number;
+            /** Document Id */
+            document_id?: string | null;
+            /** Final Path */
+            final_path?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InboxRunOut
+         * @description Прогон сканирования inbox со счётчиками.
+         */
+        InboxRunOut: {
+            /** Id */
+            id: string;
+            /** Trigger */
+            trigger: string;
+            /** Status */
+            status: string;
+            /** Inbox Dir */
+            inbox_dir: string;
+            /** Scanned */
+            scanned: number;
+            /** Indexed */
+            indexed: number;
+            /** Archived */
+            archived: number;
+            /** Rejected */
+            rejected: number;
+            /** Replaced */
+            replaced: number;
+            /** Failed */
+            failed: number;
+            /** Error */
+            error?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Files */
+            files?: components["schemas"]["InboxFileOut"][];
+        };
+        /** InboxScanResultOut */
+        InboxScanResultOut: {
+            run: components["schemas"]["InboxRunOut"];
+            /** Inbox Dir */
+            inbox_dir: string;
+        };
+        /**
+         * InboxStatusOut
+         * @description Текущее состояние папки-приёмника — для включения кнопки в UI.
+         */
+        InboxStatusOut: {
+            /** Inbox Dir */
+            inbox_dir: string;
+            /** Exists */
+            exists: boolean;
+            /** Files */
+            files: number;
+            /** Usable Files */
+            usable_files: number;
+            /** Unsupported Files */
+            unsupported_files: number;
+            /** Bytes */
+            bytes: number;
+            /** Busy */
+            busy: boolean;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Username */
@@ -2242,6 +2447,8 @@ export interface components {
         };
         /** UserUpdateRequest */
         UserUpdateRequest: {
+            /** Username */
+            username?: string | null;
             /** Password */
             password?: string | null;
             role?: components["schemas"]["Role"] | null;
@@ -2808,6 +3015,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inbox_status_api_admin_inbox_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxStatusOut"];
+                };
+            };
+        };
+    };
+    inbox_runs_api_admin_inbox_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxRunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inbox_run_detail_api_admin_inbox_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inbox_scan_api_admin_inbox_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxScanResultOut"];
+                };
+            };
+        };
+    };
+    inbox_clear_rejected_api_admin_inbox_rejected_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
         };

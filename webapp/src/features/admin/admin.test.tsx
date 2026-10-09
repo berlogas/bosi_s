@@ -106,12 +106,16 @@ const ADMIN_TASK = {
   result: null,
 }
 
-/** Достать option открытого Mantine Select: dropdown линкуется на label инпута. */
+/** Достать option открытого Mantine Select.
+ *  Линка списка идёт либо на сам input (без видимой подписи), либо на label. */
 function selectOption(input: HTMLElement, name: string) {
   const label = document.querySelector(`label[for="${input.id}"]`)
-  const listbox = label
-    ? document.querySelector(`[role="listbox"][aria-labelledby="${label.id}"]`)
-    : null
+  const listbox =
+    document.querySelector(`[role="listbox"][aria-labelledby="${input.id}"]`) ??
+    (label
+      ? document.querySelector(`[role="listbox"][aria-labelledby="${label.id}"]`)
+      : null) ??
+    document.querySelector('[role="listbox"]')
   if (!listbox) throw new Error(`Нет listbox для ${input.id}`)
   return within(listbox as HTMLElement).getByRole('option', {
     name,
@@ -130,6 +134,68 @@ function renderApp(path = '/admin') {
   )
 }
 
+const INBOX_STATUS = {
+  inbox_dir: '/data/inbox',
+  exists: true,
+  files: 2,
+  usable_files: 2,
+  unsupported_files: 0,
+  bytes: 2048,
+  busy: false,
+}
+
+const INBOX_RUNS = [
+  {
+    id: 'run-1',
+    trigger: 'manual',
+    status: 'done',
+    inbox_dir: '/data/inbox',
+    scanned: 2,
+    indexed: 1,
+    archived: 1,
+    rejected: 1,
+    replaced: 0,
+    failed: 0,
+    error: null,
+    started_at: '2026-10-09T10:00:00+00:00',
+    finished_at: '2026-10-09T10:00:12+00:00',
+    files: [
+      {
+        id: 'f-1',
+        rel_path: 'годовой отчёт.pdf',
+        abs_path: '/data/inbox/годовой отчёт.pdf',
+        size_bytes: 1024,
+        sha256: 'abc',
+        status: 'archived',
+        stage: 'archived',
+        reason_code: null,
+        reason_text: null,
+        attempts: 1,
+        document_id: 'd-1',
+        final_path: '/data/documents/library/2026-10/годовой отчёт.pdf',
+        created_at: '2026-10-09T10:00:00+00:00',
+        updated_at: '2026-10-09T10:00:12+00:00',
+      },
+      {
+        id: 'f-2',
+        rel_path: 'скан.jpg',
+        abs_path: '/data/inbox/скан.jpg',
+        size_bytes: 1024,
+        sha256: 'def',
+        status: 'rejected',
+        stage: 'rejected',
+        reason_code: 'unsupported_extension',
+        reason_text: 'Неподдерживаемый тип файла: .jpg',
+        attempts: 1,
+        document_id: null,
+        final_path: '/data/rejected/2026-10-09/скан.jpg',
+        created_at: '2026-10-09T10:00:00+00:00',
+        updated_at: '2026-10-09T10:00:12+00:00',
+      },
+    ],
+  },
+]
+
 function adminRoutes(overrides: Record<string, unknown> = {}) {
   return {
     'GET /api/health': HEALTH,
@@ -138,6 +204,8 @@ function adminRoutes(overrides: Record<string, unknown> = {}) {
     'GET /api/admin/users': USERS,
     'GET /api/admin/audit': AUDIT,
     'GET /api/admin/documents': [ADMIN_DOC],
+    'GET /api/admin/inbox/status': INBOX_STATUS,
+    'GET /api/admin/inbox/runs': INBOX_RUNS,
     ...overrides,
   }
 }
@@ -172,9 +240,9 @@ describe('админка', () => {
     renderApp()
 
     expect(await screen.findByRole('tab', { name: 'Пользователи' })).toBeInTheDocument()
-    expect(await screen.findByText(/ivanov/)).toBeInTheDocument()
-    expect(screen.getByText(/Иванов И.И./)).toBeInTheDocument()
-    expect(screen.getByLabelText('Роль: petrov')).toHaveValue('admin')
+    expect(await screen.findByLabelText('Логин: ivanov')).toBeInTheDocument()
+    expect(screen.getByLabelText('ФИО: ivanov')).toHaveValue('Иванов И.И.')
+    expect(screen.getByRole('combobox', { name: 'Роль: petrov' })).toHaveValue('admin')
   })
 
   it('создание пользователя: кнопкаdisabledпока пароль короче 8', async () => {
@@ -194,10 +262,10 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
     await userEvent.click(screen.getByRole('button', { name: 'Создать пользователя' }))
-    await userEvent.type(screen.getByLabelText(/^Логин/), 'sidorov')
+    await userEvent.type(screen.getByLabelText('Логин'), 'sidorov')
     await userEvent.type(screen.getByLabelText(/^Пароль/), 'short')
 
     const submit = screen.getByRole('button', { name: 'Создать' })
@@ -228,13 +296,13 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
-    const roleInput = screen.getByLabelText('Роль: ivanov')
+    const roleInput = screen.getByRole('combobox', { name: 'Роль: ivanov' })
     await userEvent.click(roleInput)
     await userEvent.click(selectOption(roleInput, 'admin'))
     // две строки пользователей — берём кнопку в строке ivanov
-    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => {
@@ -244,7 +312,84 @@ describe('админка', () => {
       expect(call).toBeDefined()
       expect(JSON.parse(String(call?.init.body))).toEqual({ role: 'admin' })
     })
-    expect(await screen.findByText('Сохранено.')).toBeInTheDocument()
+    expect(await screen.findByText(/Сохранено: ivanov/)).toBeInTheDocument()
+  })
+
+  it('смена логина и ФИО шлёт PATCH с username и full_name', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        'PATCH /api/admin/users/u-1': {
+          ...USERS[0],
+          username: 'ivanov.i',
+          full_name: 'Иванов Иван Иванович',
+        },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    const loginInput = await screen.findByLabelText('Логин: ivanov')
+    await userEvent.clear(loginInput)
+    await userEvent.type(loginInput, 'ivanov.i')
+    const fullNameInput = screen.getByLabelText('ФИО: ivanov')
+    await userEvent.clear(fullNameInput)
+    await userEvent.type(fullNameInput, 'Иванов Иван Иванович')
+
+    const row = loginInput.closest('tr') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) => c.init.method === 'PATCH' && c.url.includes('/u-1'),
+      )
+      expect(JSON.parse(String(call?.init.body))).toEqual({
+        role: 'researcher',
+        username: 'ivanov.i',
+        full_name: 'Иванов Иван Иванович',
+      })
+    })
+    // после сохранения поле подстраивается под ответ сервера
+    await waitFor(() => expect(loginInput).toHaveValue('ivanov.i'))
+  })
+
+  it('короткий логин не даёт сохранить и подсказывает причину', async () => {
+    const { calls } = mockApi(adminRoutes())
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    const loginInput = await screen.findByLabelText('Логин: ivanov')
+    await userEvent.clear(loginInput)
+    await userEvent.type(loginInput, 'i')
+
+    const row = loginInput.closest('tr') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'Сохранить' })).toBeDisabled()
+    expect(within(row).getByText(/минимум 2 символа/)).toBeInTheDocument()
+    expect(
+      calls.find((c) => c.init.method === 'PATCH'),
+    ).toBeUndefined()
+  })
+
+  it('снятие активности шлёт PATCH с is_active=false', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        'PATCH /api/admin/users/u-1': { ...USERS[0], is_active: false },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await screen.findByLabelText('Логин: ivanov')
+    await userEvent.click(screen.getByLabelText('Активен: ivanov'))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) => c.init.method === 'PATCH' && c.url.includes('/u-1'),
+      )
+      expect(JSON.parse(String(call?.init.body))).toEqual({
+        role: 'researcher',
+        is_active: false,
+      })
+    })
   })
 
   it('ошибка создания показывается паритетно (alert)', async () => {
@@ -259,10 +404,10 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
     await userEvent.click(screen.getByRole('button', { name: 'Создать пользователя' }))
-    await userEvent.type(screen.getByLabelText(/^Логин/), 'x')
+    await userEvent.type(screen.getByLabelText('Логин'), 'x')
     await userEvent.type(screen.getByLabelText(/^Пароль/), '12345678')
     await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
 
@@ -281,9 +426,9 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
-    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
 
     // предупреждение про каскад видно до отправки запроса
@@ -311,9 +456,9 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
-    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Отмена' }))
 
@@ -332,7 +477,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
     // строка самого администратора (TEST_ADMIN.id === u-admin)
     expect(screen.getByRole('button', { name: 'Удалить: admin' })).toBeDisabled()
@@ -352,15 +497,154 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await screen.findByText(/ivanov/)
+    await screen.findByLabelText('Логин: ivanov')
 
-    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Удалить безвозвратно' }))
 
     expect(
       await screen.findByText('Нельзя удалить самого себя'),
     ).toBeInTheDocument()
+  })
+
+  it('глобальная база: после загрузки файлов поле очищается', async () => {
+    mockApi(
+      adminRoutes({
+        'POST /api/admin/documents/upload': { added: ['a.pdf'], failed: [] },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    )
+
+    await screen.findByLabelText('Или файлы')
+    const fileInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    await userEvent.upload(fileInput, new File(['x'], 'a.pdf'))
+
+    const upload = screen.getByRole('button', { name: 'Загрузить' })
+    await waitFor(() => expect(upload).toBeEnabled())
+    await userEvent.click(upload)
+
+    expect(await screen.findByText('Добавлено 1')).toBeInTheDocument()
+    // выбор очищен: ни названия файла, ни активной кнопки «Загрузить»
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Загрузить' })).toBeDisabled(),
+    )
+    expect(screen.queryByText('a.pdf')).toBeNull()
+  })
+
+  it('массовое добавление: кнопка активна при файлах и шлёт scan', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        'POST /api/admin/inbox/scan': {
+          run: INBOX_RUNS[0],
+          inbox_dir: '/data/inbox',
+        },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    )
+
+    const button = await screen.findByRole('button', {
+      name: 'Запустить массовое добавление',
+    })
+    expect(await screen.findByText(/В папке: 2/)).toBeInTheDocument()
+    await userEvent.click(button)
+
+    expect(await screen.findByText(/Готово: проиндексировано 1/)).toBeInTheDocument()
+    expect(
+      calls.some((c) => c.init.method === 'POST' && c.url.endsWith('/inbox/scan')),
+    ).toBe(true)
+  })
+
+  it('массовое добавление: кнопка заблокирована, когда папка пуста', async () => {
+    mockApi(
+      adminRoutes({
+        'GET /api/admin/inbox/status': {
+          ...INBOX_STATUS,
+          files: 0,
+          usable_files: 0,
+        },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    )
+
+    const button = await screen.findByRole('button', {
+      name: 'Запустить массовое добавление',
+    })
+    await waitFor(() => expect(button).toBeDisabled())
+  })
+
+  it('журнал добавления показывает отчёт с причинами отказа', async () => {
+    mockApi(adminRoutes())
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    )
+
+    expect(await screen.findByText('годовой отчёт.pdf')).toBeInTheDocument()
+    expect(screen.getByText('принят')).toBeInTheDocument()
+    expect(screen.getByText('отклонён')).toBeInTheDocument()
+    // причина спрятана за «почему?» — по кнопке раскрывается
+    await userEvent.click(screen.getByRole('button', { name: 'почему?' }))
+    expect(
+      screen.getByText('Неподдерживаемый тип файла: .jpg'),
+    ).toBeInTheDocument()
+  })
+
+  it('«Пути через запятую» больше нет — ввод путей заменён папкой-приёмником', async () => {
+    mockApi(adminRoutes())
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    )
+
+    expect(
+      screen.queryByLabelText('Пути через запятую или по одному в строке'),
+    ).toBeNull()
+  })
+
+  it('переиндексация осталась у списка документов, а не у массового добавления', async () => {
+    mockApi(
+      adminRoutes({
+        'POST /api/admin/documents/reindex': { status: 'ok' },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    )
+
+    const reindex = await screen.findByRole('button', {
+      name: 'Переиндексировать всё',
+    })
+    // кнопка стоит после заголовка списка документов, а не в блоке inbox
+    const documentsHeading = screen.getByText('Документы глобальной базы')
+    const inboxHeading = screen.getByText('Массовое добавление')
+    const order = documentsHeading.compareDocumentPosition(reindex)
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(inboxHeading.compareDocumentPosition(reindex) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('глобальная база: добавление по пути и переиндексация', async () => {
@@ -394,35 +678,6 @@ describe('админка', () => {
     expect(calls.some((c) => c.url.endsWith('/reindex'))).toBe(true)
   })
 
-  it('массовая индексация: парсинг путей и ответ задачи', async () => {
-    const { calls } = mockApi(
-      adminRoutes({
-        'POST /api/admin/documents/bulk-async': { task_id: 't-bulk', total: 3 },
-      }),
-    )
-    loginAs(TEST_ADMIN)
-
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
-
-    // пустой ввод — русский warning как в admin.py
-    await userEvent.click(screen.getByRole('button', { name: 'Запустить индексацию' }))
-    expect(await screen.findByText('Укажите хотя бы один путь.')).toBeInTheDocument()
-
-    await userEvent.type(
-      screen.getByLabelText('Пути через запятую или по одному в строке'),
-      '/a/1.pdf, /b/2.pdf\n /c/3.pdf',
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Запустить индексацию' }))
-
-    expect(await screen.findByText('Задача поставлена: 3 файлов')).toBeInTheDocument()
-    const call = calls.find((c) => c.url.endsWith('/bulk-async'))
-    expect(call).toBeDefined()
-    expect(JSON.parse(String(call?.init.body))).toEqual({
-      paths: ['/a/1.pdf', '/b/2.pdf', '/c/3.pdf'],
-      tags: [],
-    })
-  })
 
   it('вкладка Задачи: панель прогресса и ошибка задачи', async () => {
     loginAs(TEST_ADMIN)

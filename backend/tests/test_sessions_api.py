@@ -419,6 +419,79 @@ async def test_restore_index_endpoint(client, researcher, session_id, stub_regis
 
 
 # --------------------------------------------------------------------------- RBAC
+# --------------------------------------------------------------------------- админ: правка профиля
+async def test_admin_changes_username_and_full_name(client, admin, researcher) -> None:
+    users = (await client.get("/api/admin/users", headers=admin)).json()
+    target = next(u for u in users if u["username"] == "ivanov")
+
+    response = await client.patch(
+        f"/api/admin/users/{target['id']}",
+        json={"username": "ivanov.i", "full_name": "Иванов Иван Иванович"},
+        headers=admin,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["username"] == "ivanov.i"
+    assert response.json()["full_name"] == "Иванов Иван Иванович"
+
+
+async def test_admin_cannot_take_existing_username(client, admin, researcher) -> None:
+    users = (await client.get("/api/admin/users", headers=admin)).json()
+    target = next(u for u in users if u["username"] == "ivanov")
+
+    response = await client.patch(
+        f"/api/admin/users/{target['id']}",
+        json={"username": "admin"},
+        headers=admin,
+    )
+
+    assert response.status_code == 409
+    assert "уже существует" in response.json()["detail"]
+
+
+async def test_admin_can_clear_full_name(client, admin, researcher) -> None:
+    users = (await client.get("/api/admin/users", headers=admin)).json()
+    target = next(u for u in users if u["username"] == "ivanov")
+
+    response = await client.patch(
+        f"/api/admin/users/{target['id']}",
+        json={"full_name": ""},
+        headers=admin,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["full_name"] == ""
+
+
+async def test_username_too_short_rejected(client, admin, researcher) -> None:
+    users = (await client.get("/api/admin/users", headers=admin)).json()
+    target = next(u for u in users if u["username"] == "ivanov")
+
+    response = await client.patch(
+        f"/api/admin/users/{target['id']}",
+        json={"username": "x"},
+        headers=admin,
+    )
+
+    assert response.status_code == 422
+
+
+async def test_new_username_works_in_login(client, admin, researcher) -> None:
+    users = (await client.get("/api/admin/users", headers=admin)).json()
+    target = next(u for u in users if u["username"] == "ivanov")
+    await client.patch(f"/api/admin/users/{target['id']}",
+                       json={"username": "ivanov.i"}, headers=admin)
+
+    ok = await client.post("/api/auth/login",
+                           json={"username": "ivanov.i",
+                                 "password": "researcher-pass-123"})
+    old = await client.post("/api/auth/login",
+                            json={"username": "ivanov",
+                                  "password": "researcher-pass-123"})
+    assert ok.status_code == 200, ok.text
+    assert old.status_code == 403  # старый логин больше не существует
+
+
 async def test_researcher_cannot_open_admin_routes(client, researcher) -> None:
     assert (await client.get("/api/admin/documents",
                              headers=researcher)).status_code == 403

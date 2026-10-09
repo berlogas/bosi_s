@@ -56,9 +56,9 @@ describe('ApiError / explainError', () => {
     expect(explained.meta).toEqual({ limit: 5 })
   })
 
-  it('meta: null не роняет разбор (detail пуст → fallback)', () => {
+  it('meta: null не роняет разбор (detail пуст → русский текст по статусу)', () => {
     const explained = explainError(500, { detail: null, meta: null }, '')
-    expect(explained.message).toBe('Ошибка 500')
+    expect(explained.message).toBe('Внутренняя ошибка сервера')
     expect(explained.meta).toBeNull()
   })
 

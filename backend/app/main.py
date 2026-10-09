@@ -57,6 +57,24 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     except Exception:
         logger.exception("PaperQA: не удалось восстановить состояние глобальной базы")
 
+    # Прогон массового добавления, оставшийся `running`, означает обрыв
+    # процесса посреди обработки inbox: закрываем его с причиной и убираем
+    # незавершённые файлы `*.inbox-partial` (см. services/inbox.py).
+    try:
+        from app.db.session import get_session_factory
+        from app.services.inbox import InboxService
+
+        session_factory = get_session_factory()
+        if session_factory is not None:
+            with session_factory() as scan_db:
+                closed = InboxService(settings).reconcile_interrupted(scan_db)
+            if closed:
+                logger.warning(
+                    "Inbox: закрыто прерванных прогонов — %d "
+                    "(файлы ждут повторного запуска)", closed)
+    except Exception:
+        logger.exception("Inbox: не удалось проверить прерванные прогоны")
+
     # Фоновые задачи: heartbeat (TTL открытых сессий) и reaper (архив/purge).
     # Первый проход reaper'а выполняем сразу — протухшее архивируется без задержки.
     background = [asyncio.create_task(heartbeat_loop(), name="heartbeat"),

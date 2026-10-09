@@ -233,14 +233,17 @@ def test_save_state_skips_identical_snapshot(db, research_session) -> None:
 
 
 def test_save_state_without_payload_does_nothing(db, research_session) -> None:
-    """Пустое сохранение — не пишем в БД (TTL продлечает отдельный heartbeat)."""
-    research_session.expires_at = utcnow() + timedelta(days=1)
+    """Пустое сохранение — не пишем в БД (TTL продлевает отдельный heartbeat)."""
+    # Срок фиксируем один раз: два вызова utcnow() дают разные микросекунды,
+    # и сравнение `expires_at == utcnow() + …` падало на границе секунды.
+    expires_at = utcnow() + timedelta(days=1)
+    research_session.expires_at = expires_at
     db.commit()
 
     _, written = sessions_repo.save_state(db, research_session)
 
     assert written is False
-    assert research_session.expires_at == utcnow() + timedelta(days=1)
+    assert research_session.expires_at == expires_at
     assert research_session.state_snapshot == {}
 
 

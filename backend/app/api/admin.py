@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError, UpstreamError
+from app.core.errors import AppError, ConflictError, NotFoundError, UpstreamError
 from app.core.security import hash_password, require_admin
 from app.db.models import User
 from app.db.repositories.users import audit, get_user, get_user_by_username
@@ -20,6 +20,10 @@ from app.schemas.api import (
     BackupListOut,
     BackupResultOut,
     CreateUserRequest,
+    InboxFileOut,
+    InboxRunOut,
+    InboxScanResultOut,
+    InboxStatusOut,
     ResetPlanOut,
     ResetRequest,
     ResetResultOut,
@@ -29,6 +33,7 @@ from app.schemas.api import (
 )
 from app.services import backup as backup_service
 from app.services.backup import plan_backup
+from app.services.inbox import InboxService
 from app.services.reset import (
     CONFIRM_PHRASES,
     plan_reset,
@@ -107,6 +112,16 @@ def update_user(
     if not user:
         raise NotFoundError("Пользователь не найден")
     changes: dict[str, Any] = {}
+    if payload.username is not None:
+        new_username = payload.username.strip()
+        if not new_username:
+            raise AppError("Логин не может быть пустым")
+        if new_username != user.username:
+            taken = get_user_by_username(db, new_username)
+            if taken and taken.id != user.id:
+                raise ConflictError(f"Пользователь «{new_username}» уже существует")
+            user.username = new_username
+            changes["username"] = new_username
     if payload.email is not None:
         user.email = payload.email
         changes["email"] = payload.email
@@ -304,3 +319,89 @@ def delete_backup(
         raise NotFoundError(f"Копия не найдена: {name}")
     audit(db, action="admin.backup.delete", actor=actor, target_type="backup",
           target_id=name, **_client_meta(request))
+
+
+# --------------------------------------------------------------------- inbox
+def _run_out(service: InboxService, db: Session, run: Any) -> InboxRunOut:
+    from app.db.models import InboxFile
+
+    files = db.scalars(
+        select(InboxFile).where(InboxFile.run_id == run.id)
+        .order_by(InboxFile.rel_path)
+    )
+    return InboxRunOut(
+        id=run.id, trigger=run.trigger, status=run.status.value,
+        inbox_dir=run.inbox_dir, scanned=run.scanned, indexed=run.indexed,
+        archived=run.archived, rejected=run.rejected, replaced=run.replaced,
+        failed=run.failed, error=run.error, started_at=run.started_at,
+        finished_at=run.finished_at,
+        files=[InboxFileOut.model_validate(f) for f in files],
+    )
+
+
+@router.get("/inbox/status", response_model=InboxStatusOut)
+def inbox_status(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Что лежит в папке-приёмнике. Быстрый и безопасный вызов для UI."""
+    return InboxService().peek(db)
+
+
+@router.get("/inbox/runs", response_model=list[InboxRunOut])
+def inbox_runs(
+    limit: int = Query(default=20, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[InboxRunOut]:
+    """История прогонов: что добавляли и чем закончилось (журнал, не лог)."""
+    service = InboxService()
+    return [_run_out(service, db, run) for run in service.runs(db, limit=limit)]
+
+
+@router.get("/inbox/runs/{run_id}", response_model=InboxRunOut)
+def inbox_run_detail(run_id: str, db: Session = Depends(get_db)) -> InboxRunOut:
+    service = InboxService()
+    return _run_out(service, db, service.get_run(db, run_id))
+
+
+@router.post("/inbox/scan", response_model=InboxScanResultOut)
+async def inbox_scan(
+    request: Request,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Обработать содержимое папки-приёмника.
+
+    Синхронный вызов: индексация больших PDF занимает минуты, поэтому UI
+    показывает «идёт обработка» и не должен получить таймаут. Повторный
+    клик во время прогона получает 409 — два скана одновременно запускать
+    нельзя.
+    """
+    from app.services.paperqa_service import get_registry
+
+    service = InboxService()
+    status = service.peek(db)
+    if status["busy"]:
+        raise ConflictError("Обработка inbox уже идёт — дождитесь окончания.")
+    if not status["exists"]:
+        raise NotFoundError(
+            f"Папка-приёмник не найдена: {status['inbox_dir']}. "
+            "Проверьте INBOX_DIR и монтирование в docker-compose.yml.")
+
+    run = await service.scan(db, get_registry().global_service(), actor)
+    audit(db, action="admin.inbox.scan", actor=actor, target_type="inbox_run",
+          target_id=run.id, **_client_meta(request),
+          scanned=run.scanned, indexed=run.indexed, archived=run.archived,
+          rejected=run.rejected, replaced=run.replaced, failed=run.failed)
+    return {"run": _run_out(service, db, run).model_dump(),
+            "inbox_dir": status["inbox_dir"]}
+
+
+@router.delete("/inbox/rejected", response_model=dict[str, int])
+def inbox_clear_rejected(
+    request: Request,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Очистить каталог `rejected` (причины остаются в журнале прогонов)."""
+    removed = InboxService().clear_rejected(db)
+    audit(db, action="admin.inbox.rejected.clear", actor=actor, target_type="inbox",
+          target_id="rejected", **_client_meta(request), removed=removed)
+    return {"removed": removed}

@@ -21,6 +21,8 @@ export const adminKeys = {
   tasks: ['admin', 'tasks'] as const,
   reset: ['admin', 'reset'] as const,
   backups: ['admin', 'backups'] as const,
+  inbox: ['admin', 'inbox'] as const,
+  inboxRuns: ['admin', 'inbox', 'runs'] as const,
 }
 
 export function useAdminUsers() {
@@ -53,7 +55,13 @@ export function useUpdateUser() {
       fields,
     }: {
       userId: string
-      fields: { role?: string; password?: string }
+      fields: {
+        username?: string
+        full_name?: string
+        role?: string
+        password?: string
+        is_active?: boolean
+      }
     }) => client.adminUpdateUser(userId, fields),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: adminKeys.users })
@@ -140,12 +148,48 @@ export function useAdminReindex() {
   })
 }
 
-/** Массовая индексация: bulk-async → task_id, дальше поллится в «Задачах». */
-export function useBulkIndex() {
-  const invalidate = useInvalidateGlobalDocs()
+// ------------------------------------------------------------------ inbox
+/** Что лежит в папке-приёмнике: включаем кнопку массового добавления. */
+export function useInboxStatus() {
+  return useQuery({
+    queryKey: adminKeys.inbox,
+    queryFn: () => client.adminInboxStatus(),
+  })
+}
+
+/** Журнал прогонов (последние). Обновляется после скана. */
+export function useInboxRuns() {
+  return useQuery({
+    queryKey: adminKeys.inboxRuns,
+    queryFn: () => client.adminInboxRuns(),
+  })
+}
+
+/**
+ * Обработка inbox. Долгая операция: сервер вернёт прогон с отчётом по
+ * каждому файлу, поэтому инвалидируем и журнал, и список документов.
+ */
+export function useInboxScan() {
+  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (paths: string[]) => client.submitBulkIndex(paths),
-    onSuccess: invalidate,
+    mutationFn: () => client.adminInboxScan(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.inboxRuns })
+      void queryClient.invalidateQueries({ queryKey: adminKeys.inbox })
+      void queryClient.invalidateQueries({ queryKey: adminKeys.documents })
+    },
+  })
+}
+
+/** Очистка каталога rejected: причины остаются в журнале прогонов. */
+export function useClearRejected() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => client.adminClearRejected(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.inboxRuns })
+      void queryClient.invalidateQueries({ queryKey: adminKeys.inbox })
+    },
   })
 }
 

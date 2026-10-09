@@ -690,6 +690,148 @@ describe('админка', () => {
     expect(screen.getByText('Не удалось проиндексировать')).toBeInTheDocument()
   })
 
+  it('вкладка Задачи: фильтр по статусу оставляет только активные', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(
+      adminRoutes({
+        'GET /api/tasks': {
+          tasks: [
+            ADMIN_TASK,
+            { ...ADMIN_TASK, id: 't-2', status: 'done', title: 'Готовая' },
+            { ...ADMIN_TASK, id: 't-3', status: 'error', title: 'Ошибка' },
+          ],
+          active: 1,
+        },
+      }),
+    )
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+
+    expect(await screen.findByText(/Показано 3 из 3/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('combobox', { name: /Фильтр: статус/ }))
+    await userEvent.click(selectOption(
+      screen.getByRole('combobox', { name: /Фильтр: статус/ }), 'Активные',
+    ))
+
+    expect(await screen.findByText(/Показано 1 из 3/)).toBeInTheDocument()
+    expect(screen.queryByText('Готовая')).toBeNull()
+  })
+
+  it('вкладка Задачи: фильтр по пользователю', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(
+      adminRoutes({
+        'GET /api/tasks': {
+          tasks: [
+            { ...ADMIN_TASK, id: 't-1', user_id: 'u-1', title: 'Иванова' },
+            { ...ADMIN_TASK, id: 't-2', user_id: 'u-2', title: 'Петрова' },
+          ],
+          active: 2,
+        },
+      }),
+    )
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+
+    const userFilter = await screen.findByRole('combobox', {
+      name: /Фильтр: пользователь/,
+    })
+    await userEvent.click(userFilter)
+    await userEvent.click(selectOption(userFilter, 'petrov'))
+
+    expect(await screen.findByText(/Показано 1 из 2/)).toBeInTheDocument()
+    expect(screen.queryByText('Иванова')).toBeNull()
+  })
+
+  it('вкладка Задачи: автор задачи показан по имени', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(
+      adminRoutes({
+        'GET /api/tasks': {
+          tasks: [{ ...ADMIN_TASK, user_id: 'u-1', title: 'С индексацией' }],
+          active: 1,
+        },
+      }),
+    )
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+
+    expect(await screen.findByText('Автор: ivanov')).toBeInTheDocument()
+  })
+
+  it('вкладка Задачи: очистка завершённых с подтверждением', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        'GET /api/tasks': {
+          tasks: [
+            ADMIN_TASK,
+            { ...ADMIN_TASK, id: 't-2', status: 'done', title: 'Готовая' },
+          ],
+          active: 1,
+        },
+        'POST /api/tasks/clear': new Response(null, { status: 204 }),
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+
+    await userEvent.click(await screen.findByRole('button', {
+      name: 'Очистить завершённые',
+    }))
+    // без подтверждения запрос не уходит
+    expect(calls.some((c) => c.url.endsWith('/api/tasks/clear'))).toBe(false)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Очистить' }))
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) => c.init.method === 'POST' && c.url.endsWith('/api/tasks/clear'),
+        ),
+      ).toBe(true),
+    )
+  })
+
+  it('вкладка Задачи: ссылки на сессию и документы задачи', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(
+      adminRoutes({
+        'GET /api/tasks': {
+          tasks: [
+            {
+              ...ADMIN_TASK,
+              status: 'done',
+              title: 'Загрузка документов',
+              session_id: 'abcdefgh',
+              user_id: 'u-1',
+              result: { added: [{ id: 'd-1', title: 'Годовой отчёт' }] },
+            },
+          ],
+          active: 0,
+        },
+      }),
+    )
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Открыть сессию задачи Загрузка документов',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Документы задачи Загрузка документов',
+      }),
+    ).toBeInTheDocument()
+  })
+
+
   it('вкладка Задачи: пустое состояние «Задач нет.»', async () => {
     loginAs(TEST_ADMIN)
     mockApi(adminRoutes())

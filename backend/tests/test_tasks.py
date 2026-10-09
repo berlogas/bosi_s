@@ -224,6 +224,17 @@ def test_task_dict_shape_for_api() -> None:
                             "cancel_requested", "seconds"}
 
 
+def test_task_dict_carries_author_for_admin_filter() -> None:
+    """Админ фильтрует задачи по пользователю — значит автор должен уезжать в API."""
+    task = Task(id="t-1", kind="indexing", title="Индексация", user_id="u-1",
+                session_id="s-1", project_id=None)
+
+    payload = task.to_dict()
+
+    assert payload["user_id"] == "u-1"
+    assert payload["session_id"] == "s-1"
+
+
 # --------------------------------------------------------------------------- видимость
 class _FakeUser:
     def __init__(self, user_id: str, role: Role) -> None:

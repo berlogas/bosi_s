@@ -30,16 +30,19 @@ import {
   Title,
 } from '@mantine/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import type { InboxRun } from '../../api/client'
-import type { AuditLogEntry, SessionOut, User } from '../../api/types'
+import type { AuditLogEntry, SessionOut, Task, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
 import { shortWhen } from '../../lib/format'
 import { useAuth } from '../auth/authStore'
+import { isActiveTask } from '../dashboard/queries'
 import {
   useAdminAddPath,
   useAdminCancelTask,
+  useClearFinishedTasks,
   useAdminDeleteDocument,
   useAdminDocuments,
   useAdminReindex,
@@ -803,9 +806,91 @@ function GlobalBaseTab() {
 
 // ---------------------------------------------------------------------- задачи
 
+const TASK_FILTERS = [
+  { value: 'all', label: 'Все' },
+  { value: 'active', label: 'Активные' },
+  { value: 'done', label: 'Завершённые' },
+  { value: 'error', label: 'С ошибкой' },
+  { value: 'cancelled', label: 'Отменённые' },
+]
+
+/** Ссылки «куда смотреть результат»: сессия, проекты и документы задачи. */
+function TaskLinks({ task, userName }: { task: Task; userName: string | null }) {
+  const navigate = useNavigate()
+  const documents = taskDocuments(task)
+  return (
+    <Group gap="xs" mt={4}>
+      {userName && (
+        <Text size="xs" c="dimmed">
+          Автор: {userName}
+        </Text>
+      )}
+      {task.session_id && (
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          onClick={() => navigate(`/s/${task.session_id}`)}
+          aria-label={`Открыть сессию задачи ${task.title}`}
+        >
+          Открыть сессию
+        </Button>
+      )}
+      {task.project_id && task.session_id && (
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          onClick={() => navigate(`/s/${task.session_id}/projects`)}
+          aria-label={`Открыть проекты задачи ${task.title}`}
+        >
+          Открыть проекты
+        </Button>
+      )}
+      {documents.length > 0 && task.session_id && (
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          onClick={() => navigate(`/s/${task.session_id}/documents`)}
+          aria-label={`Документы задачи ${task.title}`}
+        >
+          {`Документы (${documents.length})`}
+        </Button>
+      )}
+    </Group>
+  )
+}
+
+/**
+ * Документы в результате задачи: у загрузок и индексаций это
+ * `result.added`, у прочих операций поля может не быть вовсе.
+ */
+function taskDocuments(task: Task): { id: string; title: string }[] {
+  const result = task.result
+  if (!result || typeof result !== 'object') return []
+  const added = (result as { added?: unknown }).added
+  if (!Array.isArray(added)) return []
+  return added.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const id = (item as { id?: unknown }).id
+    const title = (item as { title?: unknown }).title
+    if (typeof id !== 'string') return []
+    return [{ id, title: typeof title === 'string' ? title : id }]
+  })
+}
+
 function TasksTab() {
   const tasks = useAdminTasks()
+  const users = useAdminUsers()
   const cancel = useAdminCancelTask()
+  const clearFinished = useClearFinishedTasks()
+  const [status, setStatus] = useState<string>('all')
+  const [userId, setUserId] = useState<string>('all')
+  const [confirmClear, setConfirmClear] = useState(false)
+
+  const names = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const user of users.data ?? []) map.set(user.id, user.username)
+    return map
+  }, [users.data])
 
   if (tasks.isPending) return <Loader size="sm" />
   if (tasks.isError) {
@@ -815,17 +900,105 @@ function TasksTab() {
       </Alert>
     )
   }
-  const items = tasks.data ?? []
-  if (items.length === 0) {
-    return (
-      <Text c="dimmed" role="status">
-        Задач нет.
-      </Text>
-    )
-  }
+
+  const all = tasks.data ?? []
+  const items = all.filter((task) => {
+    if (status === 'active' && !isActiveTask(task.status)) return false
+    if (status !== 'all' && status !== 'active' && task.status !== status) {
+      return false
+    }
+    if (userId !== 'all' && (task.user_id ?? '') !== userId) return false
+    return true
+  })
+  const finishedCount = all.filter((task) => !isActiveTask(task.status)).length
 
   return (
-    <Stack gap="xs">
+    <Stack gap="sm">
+      <Group align="flex-end" gap="sm" wrap="wrap">
+        <Select
+          label="Статус"
+          aria-label="Фильтр: статус задачи"
+          data={TASK_FILTERS}
+          value={status}
+          onChange={(value) => value && setStatus(value)}
+          allowDeselect={false}
+          w={180}
+        />
+        <Select
+          label="Пользователь"
+          aria-label="Фильтр: пользователь задачи"
+          data={[
+            { value: 'all', label: 'Все' },
+            ...(users.data ?? []).map((user) => ({
+              value: user.id,
+              label: user.username,
+            })),
+          ]}
+          value={userId}
+          onChange={(value) => value && setUserId(value)}
+          allowDeselect={false}
+          w={200}
+        />
+        <Text size="xs" c="dimmed">
+          {`Показано ${items.length} из ${all.length}`}
+        </Text>
+        <Button
+          color="orange"
+          variant="light"
+          size="xs"
+          style={{ marginLeft: 'auto' }}
+          disabled={finishedCount === 0 || clearFinished.isPending}
+          loading={clearFinished.isPending}
+          onClick={() => setConfirmClear(true)}
+        >
+          Очистить завершённые
+        </Button>
+      </Group>
+      {confirmClear && (
+        <Paper withBorder p="sm">
+          <Text size="sm">
+            {`Убрать из списка завершённые задачи (${finishedCount})? Активные останутся. Действие необратимо — результат задач виден только в их сессиях и документах.`}
+          </Text>
+          <Group mt="xs" justify="flex-end" gap="xs">
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => setConfirmClear(false)}
+              disabled={clearFinished.isPending}
+            >
+              Отмена
+            </Button>
+            <Button
+              size="xs"
+              color="red"
+              loading={clearFinished.isPending}
+              onClick={() => {
+                clearFinished.mutate(undefined, {
+                  onSuccess: () => setConfirmClear(false),
+                })
+              }}
+            >
+              Очистить
+            </Button>
+          </Group>
+        </Paper>
+      )}
+      {clearFinished.isSuccess && !confirmClear && (
+        <Text size="sm" c="green" role="status">
+          Завершённые задачи убраны.
+        </Text>
+      )}
+      {clearFinished.isError && (
+        <Alert color="red" role="alert">
+          {errorText(clearFinished.error, 'Не удалось очистить задачи')}
+        </Alert>
+      )}
+
+      {items.length === 0 && (
+        <Text c="dimmed" role="status">
+          Задач нет.
+        </Text>
+      )}
       {items.map((task) => (
         <Paper key={task.id} withBorder p="sm">
           <TaskPanel
@@ -833,6 +1006,7 @@ function TasksTab() {
             onCancel={(item) => cancel.mutate(item.id)}
             cancelPending={cancel.isPending}
           />
+          <TaskLinks task={task} userName={names.get(task.user_id ?? '') ?? null} />
         </Paper>
       ))}
     </Stack>

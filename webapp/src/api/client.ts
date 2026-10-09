@@ -423,6 +423,11 @@ class ApiClient {
     return this.request(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
   }
 
+  /** Убрать завершённые задачи из реестра (только админ). */
+  clearFinishedTasks(): Promise<void> {
+    return this.request('/api/tasks/clear', { method: 'POST' })
+  }
+
   // ------------------------------------------------------------------ чат
   /** Быстрый вопрос по глобальной базе — долгий (LLM), щадящий таймаут. */
   quickQuery(

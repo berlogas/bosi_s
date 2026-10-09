@@ -205,6 +205,18 @@ export function useAdminCancelTask() {
   })
 }
 
+/** Очистка завершённых задач: на дашборде их тоже видно, поэтому инвалидируем оба. */
+export function useClearFinishedTasks() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => client.clearFinishedTasks(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.tasks })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activeTasks })
+    },
+  })
+}
+
 /**
  * Все задачи для вкладки «Задачи» (админу отдаётся и чужие).
  * Поллинг по той же схеме, что на дашборде: пока есть живые.

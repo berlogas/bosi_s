@@ -84,6 +84,8 @@ export interface Task {
   step: string | null
   error: string | null
   cancel_requested: boolean
+  /** Автор задачи: админ фильтрует по нему, у пользователя — своё же. */
+  user_id: string | null
   session_id: string | null
   project_id: string | null
   created_at: string | null

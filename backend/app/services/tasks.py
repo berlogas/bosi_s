@@ -103,6 +103,9 @@ class Task:
             "status": self.status.value, "progress": self.progress,
             "step": self.step, "error": self.error,
             "cancel_requested": self.cancel_requested,
+            # user_id нужен админу для фильтра «задачи пользователя»: раньше
+            # в списке автор задачи не был виден вовсе.
+            "user_id": self.user_id,
             "session_id": self.session_id, "project_id": self.project_id,
             "created_at": self.created_at, "started_at": self.started_at,
             "finished_at": self.finished_at, "seconds": self.seconds,

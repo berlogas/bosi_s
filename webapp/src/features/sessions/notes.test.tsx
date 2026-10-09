@@ -1,7 +1,7 @@
 /**
- * Тесты вкладки «Заметки и точка возврата» (Фазы 2/4, паритет notes_tab):
- * сохранение resume_note + снапшота, подтверждение/ошибка, read-only,
- * пустая точка возврата.
+ * Тесты вкладки «Заметки» (Фазы 2/4, паритет notes_tab):
+ * сохранение resume_note + снапшота, подтверждение/ошибка, read-only.
+ * Снапшот («точка возврата») сохраняется, но в интерфейсе не показывается.
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -103,8 +103,9 @@ describe('вкладка Заметки', () => {
     })
 
     expect(await screen.findByText('Заметка сохранена.')).toBeInTheDocument()
-    // detail слит из ответа PUT: снапшот показывает новую вкладку без saved_at
-    expect(await screen.findByText(/"tab": "notes"/)).toBeInTheDocument()
+    // отладочный JSON снапшота в интерфейс не выводится (убран на Фазе 11)
+    expect(screen.queryByText(/"tab": "notes"/)).toBeNull()
+    expect(screen.queryByText('Состояние (точка возврата)')).toBeNull()
     expect(screen.queryByText(/saved_at/)).toBeNull()
   })
 
@@ -150,13 +151,18 @@ describe('вкладка Заметки', () => {
     expect(screen.getByRole('button', { name: 'Сохранить заметку' })).toBeDisabled()
   })
 
-  it('пустая точка возврата — «Состояние пока не сохранялось.»', async () => {
+  it('снапшот не показывается: экран остаётся заметкой', async () => {
+    // «точка возврата» продолжает сохраняться, но пользователю не нужна
     renderNotes({
-      'GET /api/sessions/s-1': session({ state_snapshot: {} }),
+      'GET /api/sessions/s-1': session({
+        state_snapshot: { tab: 'notes', saved_at: '2026-10-07T09:00:00Z' },
+      }),
     })
 
-    expect(
-      await screen.findByText('Состояние пока не сохранялось.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByLabelText('Заметка о работе')).toBeInTheDocument()
+    expect(screen.queryByText('Состояние (точка возврата)')).toBeNull()
+    expect(screen.queryByText(/"tab": "notes"/)).toBeNull()
+    // «Состояние системы» в подвале сайдбара — другое дело, его не трогаем
+    expect(screen.queryByText(/точка возврата/i)).toBeNull()
   })
 })

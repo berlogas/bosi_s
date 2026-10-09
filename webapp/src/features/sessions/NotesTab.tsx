@@ -1,10 +1,14 @@
 /**
- * «Заметки и точка возврата» — паритет `notes_tab` (workspace.py).
+ * «Заметки» — паритет `notes_tab` (workspace.py).
  *
  * Заметка (resume_note) и снапшот UI сохраняются через PUT
  * /sessions/{id}/state; в клиенте снапшот несёт активную вкладку —
- * этого достаточно, чтобы после F5 открыться там же (черновики
- * документов придут в Фазе 3).
+ * этого достаточно, чтобы после F5 открыться там же.
+ *
+ * Сам снапшот пользователю не показывается: раньше здесь выводился сырой
+ * JSON `state_snapshot`, то есть отладочная выгрузка вида
+ * `{"tab": "chat", "saved_at": ...}` на главном рабочем экране. Механизм
+ * работает как раньше — «Продолжить» вернёт на ту вкладку, где вы были.
  */
 
 import { Alert, Button, Group, Stack, Text, Textarea, Title } from '@mantine/core'
@@ -53,13 +57,9 @@ export function NotesTab({
     )
   }
 
-  const snapshot = { ...(session.state_snapshot ?? {}) }
-  delete snapshot.saved_at
-  const hasSnapshot = Object.keys(snapshot).length > 0
-
   return (
     <Stack gap="sm">
-      <Title order={5}>Заметки и точка возврата</Title>
+      <Title order={5}>Заметки</Title>
 
       <Textarea
         label="Заметка о работе"
@@ -92,25 +92,6 @@ export function NotesTab({
         <Alert color="red" role="alert">
           {save.error instanceof Error ? save.error.message : 'Не удалось сохранить'}
         </Alert>
-      )}
-
-      <Title order={6}>Состояние (точка возврата)</Title>
-      {hasSnapshot ? (
-        <pre
-          style={{
-            margin: 0,
-            padding: '8px 12px',
-            background: 'var(--mantine-color-gray-0)',
-            borderRadius: 6,
-            fontSize: 'var(--mantine-font-size-sm)',
-          }}
-        >
-          {JSON.stringify(snapshot, null, 2)}
-        </pre>
-      ) : (
-        <Text size="sm" c="dimmed">
-          Состояние пока не сохранялось.
-        </Text>
       )}
 
       {session.last_action_label && (

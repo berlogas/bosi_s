@@ -13,7 +13,9 @@ import {
   Button,
   Divider,
   Group,
+  List,
   Loader,
+  Paper,
   Select,
   Stack,
   Text,
@@ -24,6 +26,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 
 import { client } from '../../api/client'
+import type { ExportFormat } from '../../api/client'
 import type { GenerateResult, ProjectOut } from '../../api/types'
 import { MarkdownText } from '../../components/MarkdownText'
 import { TaskPanel } from '../../components/TaskPanel'
@@ -32,6 +35,7 @@ import {
   useBindDocument,
   useCreateProject,
   useDeleteProject,
+  useExportProject,
   useGenerate,
   usePatchProject,
   useProjectDocuments,
@@ -109,6 +113,8 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   return (
     <Stack gap="sm">
       <Text fw={600}>Проекты статей</Text>
+
+      <HowToPanel hasProjects={list.length > 0} />
 
       {actionError && (
         <Alert color="red" role="alert">
@@ -197,6 +203,125 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         />
       )}
     </Stack>
+  )
+}
+
+// --------------------------------------------------------------------------- экспорт
+const EXPORT_FORMATS: { value: ExportFormat; label: string; hint: string }[] = [
+  { value: 'docx', label: 'Word (.docx)', hint: 'готовый файл для журнала' },
+  { value: 'markdown', label: 'Markdown (.md)', hint: 'для репозитория или вики' },
+  { value: 'zip', label: 'ZIP', hint: 'статья + библиография + исходники' },
+]
+
+function ExportPanel({
+  sessionId,
+  project,
+}: {
+  sessionId: string
+  project: ProjectOut
+}) {
+  const exportProject = useExportProject(sessionId)
+  const [format, setFormat] = useState<ExportFormat>('docx')
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <Paper withBorder p="sm">
+      <Group align="flex-end" gap="sm">
+        <Select
+          label="Выгрузка статьи"
+          data={EXPORT_FORMATS.map((item) => ({
+            value: item.value,
+            label: item.label,
+          }))}
+          value={format}
+          onChange={(value) => value && setFormat(value as ExportFormat)}
+          allowDeselect={false}
+          w={200}
+        />
+        <Button
+          variant="light"
+          loading={exportProject.isPending}
+          onClick={() => {
+            setMessage(null)
+            setError(null)
+            exportProject.mutate(
+              { projectId: project.id, format },
+              {
+                onSuccess: ({ filename }) => setMessage(`Файл сохранён: ${filename}`),
+                onError: (cause) =>
+                  setError(
+                    cause instanceof Error
+                      ? cause.message
+                      : 'Не удалось выгрузить файл',
+                  ),
+              },
+            )
+          }}
+        >
+          Выгрузить
+        </Button>
+        <Text size="xs" c="dimmed">
+          {EXPORT_FORMATS.find((item) => item.value === format)?.hint}
+        </Text>
+      </Group>
+      {message && (
+        <Text size="sm" c="green" role="status" mt={6}>
+          {message}
+        </Text>
+      )}
+      {error && (
+        <Text size="sm" c="red" role="alert" mt={6}>
+          {error}
+        </Text>
+      )}
+    </Paper>
+  )
+}
+
+// ------------------------------------------------------------------ как работать
+/**
+ * Короткая инструкция прямо на странице: порядок работы с проектом статьи
+ * нигде в интерфейсе не был описан, и без него первый заход упирается в
+ * вопрос «что нажимать первым».
+ */
+function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
+  return (
+    <Paper withBorder p="sm">
+      <Text size="sm" fw={600}>
+        Как работать с проектом статьи
+      </Text>
+      <List size="sm" spacing={2} mt={4}>
+        <List.Item>
+          Создайте проект и выберите целевой журнал — план разделов (Introduction,
+          Methods, Results, Discussion, Conclusions) создастся сам.
+        </List.Item>
+        <List.Item>
+          Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}
+          <b>Данные</b> — ваши CSV (участвуют в сверке), <b>Черновик</b> — попадёт в
+          контекст как есть.
+        </List.Item>
+        <List.Item>
+          Раздел можно дописать руками или сгенерировать: модель использует контекст
+          сессии и обязана ставить ссылки на источники. Каждая генерация сохраняется как
+          версия — прошлый текст не пропадает.
+        </List.Item>
+        <List.Item>
+          «Разбор черновика» покажет проблемы: число без ссылки, не написан обязательный
+          раздел, есть результаты, но нет методики. Работает мгновенно, без обращения к
+          модели.
+        </List.Item>
+        <List.Item>
+          Готовую статью выгрузите внизу экрана: Word, Markdown или ZIP с библиографией
+          и исходниками.
+        </List.Item>
+      </List>
+      {!hasProjects && (
+        <Text size="xs" c="dimmed" mt={4}>
+          Начните с первого шага — поля «Название» и «Целевой журнал» ниже.
+        </Text>
+      )}
+    </Paper>
   )
 }
 
@@ -299,6 +424,8 @@ function ProjectEditor({
           </div>
         </div>
       )}
+
+      <ExportPanel sessionId={sessionId} project={project} />
 
       <GeneratePanel sessionId={sessionId} project={project} readOnly={readOnly} />
       <SectionsList sessionId={sessionId} project={project} readOnly={readOnly} />

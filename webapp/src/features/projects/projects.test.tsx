@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
-import { loginAs, mockApi, resetAuth } from '../../test/helpers'
+import { json, loginAs, mockApi, resetAuth } from '../../test/helpers'
 
 const HEALTH = {
   status: 'ok',
@@ -115,6 +115,78 @@ afterEach(() => {
 })
 
 describe('вкладка Проекты', () => {
+  it('на странице есть порядок работы, а не только кнопки', async () => {
+    mockProjectsApi()
+    renderApp()
+
+    expect(
+      await screen.findByText('Как работать с проектом статьи'),
+    ).toBeInTheDocument()
+    // три шага, без которых не понять, что нажимать первым
+    expect(screen.getByText(/Привяжите документы с ролью/)).toBeInTheDocument()
+    expect(screen.getByText(/обязана ставить ссылки на источники/)).toBeInTheDocument()
+    expect(screen.getByText(/Разбор черновика/)).toBeInTheDocument()
+    expect(screen.getByText(/Word, Markdown или ZIP/)).toBeInTheDocument()
+  })
+
+  it('подсказка подсказывает начать с создания, когда проектов нет', async () => {
+    mockProjectsApi({ 'GET /api/sessions/s-1/projects': [] })
+    renderApp()
+
+    expect(await screen.findByText(/Начните с первого шага/)).toBeInTheDocument()
+  })
+
+  it('выгрузка: Word по умолчанию, имя файла из заголовка', async () => {
+    const downloads: string[] = []
+    const createObjectURL = vi.fn(() => 'blob:article')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    })
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloads.push(this.download)
+      })
+
+    mockProjectsApi({
+      'GET /api/sessions/s-1/projects/p-1/export': new Response('binary', {
+        status: 200,
+        headers: {
+          'Content-Disposition':
+            'attachment; filename="article.docx"; filename*=UTF-8\'\'%D0%91%D0%B0%D0%BD%D0%BA%D0%B0.docx',
+          'Content-Type': 'application/octet-stream',
+        },
+      }),
+    })
+    renderApp()
+
+    const button = await screen.findByRole('button', { name: 'Выгрузить' })
+    await userEvent.click(button)
+
+    expect(await screen.findByText('Файл сохранён: Банка.docx')).toBeInTheDocument()
+    expect(downloads).toEqual(['Банка.docx'])
+    expect(createObjectURL).toHaveBeenCalled()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:article')
+    click.mockRestore()
+  })
+
+  it('выгрузка: ошибка показывается текстом, а не молчит', async () => {
+    mockProjectsApi({
+      'GET /api/sessions/s-1/projects/p-1/export': json(
+        { detail: 'Проект не готов' },
+        500,
+      ),
+    })
+    renderApp()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Выгрузить' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Не удалось выгрузить/)
+  })
+
   it('пустой список — «Проектов нет — создайте первый»', async () => {
     mockProjectsApi({ 'GET /api/sessions/s-1/projects': [] })
 

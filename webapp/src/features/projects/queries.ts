@@ -142,25 +142,20 @@ export function useGenerate(sessionId: string, projectId: string) {
   })
 }
 
-/** Экспорт: ответ — файл, скачиваем blob'ом (паритет download_button). */
+/**
+ * Экспорт статьи: ответ — файл, поэтому качаем blob'ом (обычный request
+ * разбирает тело как JSON). Имя файла берём из Content-Disposition, чтобы
+ * в архиве было «Название статьи.docx», а не «article.docx».
+ */
 export function useExportProject(sessionId: string) {
   return useMutation({
-    mutationFn: async ({
-      projectId,
-      format,
-    }: {
-      projectId: string
-      format: ExportFormat
-    }) => {
-      const response = await client.exportProjectRaw(sessionId, projectId, format)
-      const blob = await response.blob()
-      return { blob, format }
-    },
-    onSuccess: ({ blob, format }) => {
+    mutationFn: ({ projectId, format }: { projectId: string; format: ExportFormat }) =>
+      client.downloadProject(sessionId, projectId, format),
+    onSuccess: ({ blob, filename }) => {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `article.${format}`
+      link.download = filename
       link.click()
       URL.revokeObjectURL(url)
     },

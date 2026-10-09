@@ -40,7 +40,7 @@ type TokenPair = components['schemas']['TokenPair']
 type HealthResponse = components['schemas']['HealthResponse']
 type SuggestionsResponse = components['schemas']['SuggestionsResponse']
 /** Схема openapi: ExportFormat = markdown | docx | zip. */
-type ExportFormat = components['schemas']['ExportFormat']
+export type ExportFormat = components['schemas']['ExportFormat']
 /** Схема openapi: scope сброса состояния. */
 type ResetScope = components['schemas']['ResetRequest']['scope']
 type ResetPlan = components['schemas']['ResetPlanOut']
@@ -681,16 +681,16 @@ class ApiClient {
   }
 
   /** Экспорт статьи — отдаёт готовый файл (blob скачивается в UI). */
-  exportProjectRaw(
+  /** Выгрузка статьи: markdown | docx | zip (в zip — библиография и sources). */
+  downloadProject(
     sessionId: string,
     projectId: string,
     fmt: ExportFormat,
-  ): Promise<Response> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/export`, {
-      query: { fmt },
-      raw: true,
-      timeoutMs: 120_000,
-    })
+  ): Promise<{ blob: Blob; filename: string }> {
+    return this.downloadFile(
+      `/api/sessions/${sessionId}/projects/${projectId}/export`,
+      { fmt },
+    )
   }
 
   // ------------------------------------------------------------ админка
@@ -819,6 +819,38 @@ class ApiClient {
   /** Журнал прогонов: последние по дате, с файлами внутри. */
   adminInboxRuns(limit = 20): Promise<InboxRun[]> {
     return this.request('/api/admin/inbox/runs', { query: { limit } })
+  }
+
+  /**
+   * Скачать бинарный ответ (выгрузка статьи). Обычный `request` тут не
+   * годится: он пытается разобрать тело как JSON и теряет заголовки.
+   * Имя файла берём из Content-Disposition — сервер уже транслитерирует
+   * его для latin-1 и отдаёт оригинал в RFC 5987.
+   */
+  async downloadFile(
+    path: string,
+    query: Record<string, QueryValue> = {},
+  ): Promise<{ blob: Blob; filename: string }> {
+    const headers: Record<string, string> = {}
+    const access = tokens.getAccess()
+    if (access) headers['Authorization'] = `Bearer ${access}`
+
+    const response = await fetch(buildUrl(path, query), {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(120_000),
+    })
+    if (!response.ok) {
+      throw new ApiError(`Не удалось выгрузить файл (${response.status})`, {
+        status: response.status,
+      })
+    }
+
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+    const plain = disposition.match(/filename="([^"]+)"/i)
+    const filename = decodeURIComponent(utf8?.[1] ?? plain?.[1] ?? 'article')
+    return { blob: await response.blob(), filename }
   }
 
   /** Очистить каталог rejected (причины остаются в журнале). */

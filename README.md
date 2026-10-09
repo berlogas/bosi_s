@@ -19,6 +19,10 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"   # в SECRET_KEY
 ./scripts/start.sh                                            # или ./scripts/start.sh docker
 ```
 
+Полная первичная установка на новом сервере (`.env`, ключ, модели, стек,
+первый администратор) — одной командой `make bootstrap`. Смотрите
+`make reset-plan` (сброс данных), `make reset-data`, `make reset-all`.
+
 UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 
 `./scripts/start.sh` поднимает backend и React-интерфейс; на Windows —
@@ -26,7 +30,11 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 `./scripts/start.sh status`.
 
 **Пошаговая инструкция:** [docs/LAUNCH.md](docs/LAUNCH.md).
-Развёртывание и бэкапы: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Развёртывание, бэкап и восстановление: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+Бэкап и восстановление: `make backup`, `make backup-verify ARCHIVE=...`, `make restore ARCHIVE=...`.
+
+На Windows `make` нет в стандартной постановке: используйте `scripts\boasi.bat <команда>` — тот же набор (включая `backup`, `restore`, `reset-*`, `up`, `down`, `health`).
 
 ## Документация
 
@@ -36,9 +44,9 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 | [PLAN.md](PLAN.md) | План работ по фазам и статус каждой |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Исследователю: сессии, категории документов, режимы поиска, проекты |
 | [docs/REACT_UI_CHECKLIST.md](docs/REACT_UI_CHECKLIST.md) | Регрессия React-интерфейса: чек-лист приёмки (Streamlit → React) |
-| [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Администратору: пользователи, глобальная база, аудит, регламент |
+| [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Администратору: пользователи, глобальная база, сброс состояния, аудит, регламент |
 | [docs/LAUNCH.md](docs/LAUNCH.md) | **Как запустить**: скрипты, порты, типичные ошибки |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Развёртывание, бэкап, диагностика, hardening |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Развёртывание, бэкап, сброс состояния, диагностика, hardening |
 | [docs/SPICE_REPORT.md](docs/SPICE_REPORT.md) | Предварительное исследование PaperQA2 |
 | `docs/PHASE*_REPORT.md` | Отчёты по фазам: что сделано, какие грабли встретились |
 

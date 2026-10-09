@@ -26,6 +26,9 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 COPY tests ./tests
+# scripts/ нужны и в контейнере: create_admin и reset_state запускаются
+# через `docker compose run --rm backend python scripts/...` (см. Makefile).
+COPY scripts ./scripts
 
 RUN useradd -m -u 1000 boasi && mkdir -p /data && chown -R boasi:boasi /app /data
 USER boasi

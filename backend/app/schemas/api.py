@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -409,3 +409,97 @@ class ExportFormat(str, Enum):
     markdown = "markdown"
     docx = "docx"
     zip = "zip"
+
+
+# --------------------------------------------------------------------- сброс
+class ResetRequest(BaseModel):
+    """Запрос на сброс состояния.
+
+    `confirm` — фраза из `ResetPlanOut.confirmation`: защита от случайного
+    нажатия кнопки в админке (принцип как в Grafana/Datadog).
+    """
+
+    scope: Literal["data", "users", "all"] = "data"
+    confirm: str = ""
+    include_models: bool = False
+
+
+class PathTargetOut(BaseModel):
+    path: str
+    files: int
+    bytes: int
+
+
+class ResetPlanOut(BaseModel):
+    scope: str
+    tables: dict[str, int]
+    rows: int
+    paths: list[PathTargetOut]
+    files: int
+    total_bytes: int
+    kept_paths: list[str]
+    includes_models: bool
+    allowed: bool
+    blocked_reason: str | None = None
+    confirmation: str
+
+
+class ResetResultOut(BaseModel):
+    scope: str
+    dry_run: bool
+    deleted_tables: dict[str, int]
+    deleted_rows: int
+    deleted_paths: list[str]
+    freed_bytes: int
+    kept_paths: list[str]
+    includes_models: bool
+
+
+class BackupEntryOut(BaseModel):
+    name: str
+    bytes: int
+    human_size: str
+    created_at: str | None = None
+    has_sha256: bool
+    has_manifest: bool
+
+
+class BackupPlanOut(BaseModel):
+    data_dir: str
+    backup_dir: str
+    files: int
+    source_bytes: int
+    source_human: str
+    estimated_bytes: int
+    estimated_human: str
+    free_bytes: int | None = None
+    free_human: str | None = None
+    existing: int
+    keep: int
+    db_exists: bool
+    # Предупреждение для показа в окне подтверждения: сколько займёт копия
+    # и сколько старых копий исчезнет по ротации. Фразы подтверждения нет:
+    # операция ничего не разрушает.
+    warning: str | None = None
+
+
+class BackupListOut(BaseModel):
+    backups: list[BackupEntryOut]
+    plan: BackupPlanOut
+
+
+class BackupCreateRequest(BaseModel):
+    """Создание копии.
+
+    Фразы подтверждения нет: операция неразрушающая, её
+    план показывается в UI до кнопки. `keep` — сколько копий остать
+    (None — взять из BACKUP_KEEP).
+    """
+
+    keep: int | None = Field(default=None, ge=0, le=500)
+
+
+class BackupResultOut(BaseModel):
+    entry: BackupEntryOut
+    deleted_old: list[str]
+    restore_hint: str

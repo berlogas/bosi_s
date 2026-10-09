@@ -7,9 +7,11 @@
  * рисуется task_panel и кнопка отмены).
  */
 
+import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
+import type { ResetScope } from '../../api/client'
 import { isActiveTask, queryKeys } from '../dashboard/queries'
 
 export const adminKeys = {
@@ -17,6 +19,8 @@ export const adminKeys = {
   audit: ['admin', 'audit'] as const,
   documents: ['admin', 'documents'] as const,
   tasks: ['admin', 'tasks'] as const,
+  reset: ['admin', 'reset'] as const,
+  backups: ['admin', 'backups'] as const,
 }
 
 export function useAdminUsers() {
@@ -53,6 +57,28 @@ export function useUpdateUser() {
     }) => client.adminUpdateUser(userId, fields),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: adminKeys.users })
+    },
+  })
+}
+
+/**
+ * Удаление пользователя. Действие необратимо (каскад по сессиям и
+ * документам), поэтому подтверждение живёт в UI, здесь — только запрос.
+ * После успеха перечитываем список пользователей и аудит (в нём появится
+ * запись admin.user.delete).
+ */
+export function useDeleteUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) => client.adminDeleteUser(userId),
+    onSuccess: (_data, userId) => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.users })
+      void queryClient.invalidateQueries({ queryKey: adminKeys.audit })
+      notifications.show({
+        title: 'Пользователь удалён',
+        message: userId,
+        color: 'red',
+      })
     },
   })
 }
@@ -160,5 +186,71 @@ export function useSessionsTable() {
   return useQuery({
     queryKey: queryKeys.sessions,
     queryFn: () => client.sessions(),
+  })
+}
+
+// ------------------------------------------------------------------ сброс
+/** План сброса: что будет удалено при выбранном scope. */
+export function useResetPreview(scope: ResetScope, includeModels: boolean) {
+  return useQuery({
+    queryKey: [...adminKeys.reset, 'preview', scope, includeModels],
+    queryFn: () => client.adminResetPreview(scope, includeModels),
+  })
+}
+
+/**
+ * Сброс состояния. После успеха сбрасываем ВСЕ ключи приложения:
+ * удалены сессии, документы и сообщения, поэтому старые данные на экране
+ * больше невалидны (принцип: после сброса нужен чистый клиент).
+ */
+export function useResetState() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (fields: {
+      scope: ResetScope
+      confirm: string
+      include_models?: boolean
+    }) => client.adminReset(fields),
+    onSuccess: () => {
+      queryClient.clear()
+    },
+  })
+}
+
+// ------------------------------------------------------- резервные копии
+/** Список копий и план следующей. */
+export function useBackups() {
+  return useQuery({
+    queryKey: adminKeys.backups,
+    queryFn: () => client.adminBackups(),
+    // план зависит от размера данных — после сброса он меняется
+    refetchOnWindowFocus: false,
+  })
+}
+
+/** Снять копию. После успеха перечитываем список. */
+export function useCreateBackup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (keep?: number) => client.adminCreateBackup(keep),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.backups })
+    },
+  })
+}
+
+/** Удалить копию. */
+export function useDeleteBackup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => client.adminDeleteBackup(name),
+    onSuccess: async (_data, name) => {
+      await queryClient.invalidateQueries({ queryKey: adminKeys.backups })
+      notifications.show({
+        title: 'Копия удалена',
+        message: name,
+        color: 'gray',
+      })
+    },
   })
 }

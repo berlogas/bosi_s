@@ -329,7 +329,7 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
       body: [
         {
           id: 'abcdefgh-1234',
-          user_id: 'user-5678',
+          user_id: 'u-1',
           title: 'Баренцево',
           status: 'active',
           last_action_label: 'chat',
@@ -365,10 +365,12 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
   await page.getByRole('tab', { name: 'Задачи' }).click()
   await expect(page.getByText(/45%/)).toBeVisible()
 
-  // Сессии: таблица с колонками
+  // Сессии: сгруппированы по пользователям (ivanov — из списка users)
   await page.getByRole('tab', { name: 'Сессии' }).click()
+  await expect(page.getByRole('region', { name: /ivanov/ })).toBeVisible()
+  await expect(page.getByText('1 сессия')).toBeVisible()
+  await page.getByRole('button', { name: /ivanov/ }).click()
   const table = page.getByRole('table')
-  await expect(table.getByText('пользователь')).toBeVisible()
   await expect(table.getByText('abcdefgh')).toBeVisible()
   await expect(table.getByText('2026-10-07 12:34')).toBeVisible()
 

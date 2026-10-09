@@ -41,6 +41,26 @@ type HealthResponse = components['schemas']['HealthResponse']
 type SuggestionsResponse = components['schemas']['SuggestionsResponse']
 /** Схема openapi: ExportFormat = markdown | docx | zip. */
 type ExportFormat = components['schemas']['ExportFormat']
+/** Схема openapi: scope сброса состояния. */
+type ResetScope = components['schemas']['ResetRequest']['scope']
+type ResetPlan = components['schemas']['ResetPlanOut']
+type ResetResult = components['schemas']['ResetResultOut']
+
+/** Резервные копии: список + план следующей + результат создания. */
+type BackupEntry = components['schemas']['BackupEntryOut']
+type BackupPlan = components['schemas']['BackupPlanOut']
+type BackupListing = components['schemas']['BackupListOut']
+type BackupResult = components['schemas']['BackupResultOut']
+
+export type {
+  BackupEntry,
+  BackupListing,
+  BackupPlan,
+  BackupResult,
+  ResetPlan,
+  ResetResult,
+  ResetScope,
+}
 
 /** Путь, на котором refresh самому себе не нужен (иначе рекурсия). */
 const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'])
@@ -685,6 +705,14 @@ class ApiClient {
     })
   }
 
+  /**
+   * Удаление пользователя. Необратимо: вместе с учёткой каскадно удаляются
+   * его сессии, сообщения, документы и проекты (ondelete=CASCADE).
+   */
+  adminDeleteUser(userId: string): Promise<void> {
+    return this.request(`/api/admin/users/${userId}`, { method: 'DELETE' })
+  }
+
   adminAudit(
     options: { limit?: number; offset?: number; action?: string } = {},
   ): Promise<AuditLogEntry[]> {
@@ -739,6 +767,54 @@ class ApiClient {
     return this.request('/api/admin/documents/bulk-async', {
       method: 'POST',
       json: { paths, tags },
+    })
+  }
+
+  // --------------------------------------------------------------- сброс
+  /** План сброса: что именно будет удалено. Ничего не меняет. */
+  adminResetPreview(
+    scope: ResetScope,
+    includeModels = false,
+  ): Promise<ResetPlan> {
+    return this.request('/api/admin/reset/preview', {
+      query: { scope, include_models: includeModels },
+    })
+  }
+
+  /** Выполнить сброс. Требует точной фразы подтверждения из плана. */
+  adminReset(fields: {
+    scope: ResetScope
+    confirm: string
+    include_models?: boolean
+  }): Promise<ResetResult> {
+    return this.request('/api/admin/reset', {
+      method: 'POST',
+      json: fields,
+      timeoutMs: 600_000,
+    })
+  }
+
+  // -------------------------------------------------------- резервные копии
+  /** Список копий и план следующей (что и сколько займёт). */
+  adminBackups(): Promise<BackupListing> {
+    return this.request('/api/admin/backup', { timeoutMs: 60_000 })
+  }
+
+  /**
+   * Снять копию. На больших данных операция долгая, поэтому таймаут
+   * увеличен до 10 минут — как и у реиндексации.
+   */
+  adminCreateBackup(keep?: number): Promise<BackupResult> {
+    return this.request('/api/admin/backup', {
+      method: 'POST',
+      json: { keep },
+      timeoutMs: 600_000,
+    })
+  }
+
+  adminDeleteBackup(name: string): Promise<void> {
+    return this.request(`/api/admin/backup/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
     })
   }
 }

@@ -32,11 +32,16 @@ services:
       DATA_DIR: /data
       DATABASE_URL: sqlite:////data/boasi.sqlite3
       PQA_HOME: /data/pqa
+      # Бэкапы — в ОТДЕЛЬНЫЙ том. Кладя их внутрь /data, мы получили бы
+      # бэкап внутри бэкапа: архив рос бы с каждой копией.
+      BACKUP_DIR: /backups
+      BACKUP_KEEP: "14"
       OLLAMA_BASE_URL: http://ollama:11434
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - boasi_data:/data
+      - boasi_backups:/backups
     # Явный healthcheck (в Dockerfile тоже есть, но здесь видно и можно задать
     # запас: первый старт грузит модель эмбеддингов и восстанавливает индекс —
     # это минуты, а не секунды).
@@ -58,3 +63,7 @@ volumes:
     name: boasi_ollama_models
   boasi_data:
     name: boasi_data
+  # Копии данных. Отдельный том: снимать их из /data нельзя, иначе архив
+  # будет содержать предыдущие архивы. Ротацию делает backend (BACKUP_KEEP).
+  boasi_backups:
+    name: boasi_backups

@@ -271,6 +271,98 @@ describe('админка', () => {
     ).toBeInTheDocument()
   })
 
+  it('удаление: кнопка в строке, каскад-предупреждение и DELETE', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        // 204 без тела — как отдаёт backend на удаление пользователя
+        'DELETE /api/admin/users/u-1': new Response(null, { status: 204 }),
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await screen.findByText(/ivanov/)
+
+    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+
+    // предупреждение про каскад видно до отправки запроса
+    expect(await screen.findByText(/Действие необратимо/)).toBeInTheDocument()
+    expect(screen.getByText(/сессии, сообщения, документы и проекты/)).toBeInTheDocument()
+    expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Удалить безвозвратно' }))
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (c) => c.init.method === 'DELETE' && c.url.endsWith('/api/admin/users/u-1'),
+        ),
+      ).toBe(true)
+    })
+    // окно закрылось
+    await waitFor(() => {
+      expect(screen.queryByText(/Действие необратимо/)).toBeNull()
+    })
+  })
+
+  it('удаление: отмена не шлёт запрос', async () => {
+    const { calls } = mockApi(adminRoutes())
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await screen.findByText(/ivanov/)
+
+    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Отмена' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Действие необратимо/)).toBeNull()
+    })
+    expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false)
+  })
+
+  it('удаление себя запрещено: кнопка задизейблена', async () => {
+    mockApi(
+      adminRoutes({
+        'GET /api/admin/users': [TEST_ADMIN, ...USERS],
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await screen.findByText(/ivanov/)
+
+    // строка самого администратора (TEST_ADMIN.id === u-admin)
+    expect(screen.getByRole('button', { name: 'Удалить: admin' })).toBeDisabled()
+    // чужие — доступны
+    expect(screen.getByRole('button', { name: 'Удалить: ivanov' })).toBeEnabled()
+  })
+
+  it('удаление: ошибка 409 показывается в модалке', async () => {
+    mockApi(
+      adminRoutes({
+        'DELETE /api/admin/users/u-1': json(
+          { detail: 'Нельзя удалить самого себя' },
+          409,
+        ),
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp()
+    await screen.findByText(/ivanov/)
+
+    const row = screen.getByText('ivanov').closest('tr') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Удалить безвозвратно' }))
+
+    expect(
+      await screen.findByText('Нельзя удалить самого себя'),
+    ).toBeInTheDocument()
+  })
+
   it('глобальная база: добавление по пути и переиндексация', async () => {
     const { calls } = mockApi(
       adminRoutes({
@@ -368,19 +460,29 @@ describe('админка', () => {
     expect(await screen.findByText('Задач нет.')).toBeInTheDocument()
   })
 
-  it('вкладка Сессии: колонки таблицы', async () => {
+  it('вкладка Сессии: сессии сгруппированы по пользователям', async () => {
     loginAs(TEST_ADMIN)
     mockApi(
       adminRoutes({
         'GET /api/sessions': [
           {
             id: 'abcdefgh-1234',
-            user_id: 'user-5678',
+            user_id: 'u-1',
             title: 'Баренцево',
             status: 'active',
             last_action_label: 'chat',
             last_activity_at: '2026-10-07T12:34:00+00:00',
             created_at: '2026-10-01T00:00:00+00:00',
+            expires_at: '2026-12-01T00:00:00+00:00',
+          },
+          {
+            id: '11112222-aaaa',
+            user_id: 'u-2',
+            title: 'Статья про моржей',
+            status: 'archived',
+            last_action_label: 'edit',
+            last_activity_at: '2026-10-06T10:00:00+00:00',
+            created_at: '2026-10-02T00:00:00+00:00',
             expires_at: '2026-12-01T00:00:00+00:00',
           },
         ],
@@ -390,13 +492,21 @@ describe('админка', () => {
     renderApp()
     await userEvent.click(await screen.findByRole('tab', { name: 'Сессии' }))
 
+    // группы по логинам из списка пользователей (u-1=ivanov, u-2=petrov)
+    // (логины есть и в соседних вкладках/сайдбаре — ищем именно группы)
+    const group = await screen.findByRole('region', { name: /ivanov/ })
+    expect(group).toBeInTheDocument()
+    expect(screen.getAllByText('petrov').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1 сессия').length).toBeGreaterThan(0)
+
+    // внутри группы — таблица сессий; колонка «пользователь» убрана
+    await userEvent.click(screen.getByRole('button', { name: /ivanov/ }))
     const table = await screen.findByRole('table')
     const header = within(table)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
     expect(header).toEqual([
       'id',
-      'пользователь',
       'название',
       'статус',
       'действие',

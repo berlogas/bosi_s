@@ -10,9 +10,12 @@ import {
   Accordion,
   Alert,
   Button,
+  Checkbox,
+  Divider,
   FileInput,
   Group,
   Loader,
+  Modal,
   Pagination,
   Paper,
   Select,
@@ -26,7 +29,8 @@ import {
 } from '@mantine/core'
 import { useMemo, useState } from 'react'
 
-import type { AuditLogEntry, User } from '../../api/types'
+import type { AuditLogEntry, SessionOut, User } from '../../api/types'
+import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
 import { shortWhen } from '../../lib/format'
 import { useAuth } from '../auth/authStore'
@@ -40,8 +44,14 @@ import {
   useAdminUpload,
   useAdminUsers,
   useAudit,
+  useBackups,
   useBulkIndex,
+  useCreateBackup,
   useCreateUser,
+  useDeleteBackup,
+  useDeleteUser,
+  useResetPreview,
+  useResetState,
   useSessionsTable,
   useUpdateUser,
 } from './queries'
@@ -148,6 +158,78 @@ function CreateUser() {
   )
 }
 
+/**
+ * Кнопка удаления. Показываем её только там, где действие имеет смысл:
+ * удалить себя нельзя (backend отдаёт 409), поэтому для текущего
+ * администратора кнопка задизейблена с подсказкой.
+ *
+ * Подтверждение — отдельная модалка с перечислением того, что исчезнет
+ * каскадом: удаление необратимо, отмены нет.
+ */
+function DeleteUserButton({ user }: { user: User }) {
+  const remove = useDeleteUser()
+  const currentUserId = useAuth((state) => state.user?.id)
+  const [opened, setOpened] = useState(false)
+  const isSelf = currentUserId === user.id
+
+  return (
+    <>
+      <Button
+        size="xs"
+        color="red"
+        variant="light"
+        disabled={isSelf}
+        title={isSelf ? 'Нельзя удалить самого себя' : undefined}
+        aria-label={`Удалить: ${user.username}`}
+        onClick={() => setOpened(true)}
+      >
+        Удалить
+      </Button>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Подтвердите удаление"
+        centered
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            Удалить пользователя <b>{user.username}</b>?
+          </Text>
+          <Alert color="red" role="alert">
+            Действие необратимо. Вместе с учётной записью каскадно удалятся его
+            сессии, сообщения, документы и проекты. Восстановление возможно
+            только из резервной копии. Если достаточно закрыть доступ —
+            используйте снятие галочки активности.
+          </Alert>
+          {remove.isError && (
+            <Alert color="red" role="alert">
+              {errorText(remove.error, 'Ошибка запроса')}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setOpened(false)}
+              disabled={remove.isPending}
+            >
+              Отмена
+            </Button>
+            <Button
+              color="red"
+              loading={remove.isPending}
+              onClick={() =>
+                remove.mutate(user.id, { onSuccess: () => setOpened(false) })
+              }
+            >
+              Удалить безвозвратно
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  )
+}
+
 function UserRow({ user }: { user: User }) {
   const update = useUpdateUser()
   const [role, setRole] = useState<string>(
@@ -190,6 +272,7 @@ function UserRow({ user }: { user: User }) {
         <Group gap="xs" wrap="nowrap">
           <Button
             size="xs"
+            variant="default"
             disabled={!canSave}
             loading={update.isPending && update.variables?.userId === user.id}
             onClick={() => {
@@ -219,6 +302,7 @@ function UserRow({ user }: { user: User }) {
               {errorText(update.error, 'Ошибка запроса')}
             </Text>
           )}
+          <DeleteUserButton user={user} />
         </Group>
       </td>
     </tr>
@@ -242,6 +326,7 @@ function UsersTab() {
       <CreateUser />
       {users.data.length === 0 && <Text c="dimmed">Пользователей нет.</Text>}
       {users.data.length > 0 && (
+        <>
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -257,6 +342,12 @@ function UsersTab() {
             ))}
           </Table.Tbody>
         </Table>
+        <Text size="xs" c="dimmed">
+          «Удалить» стирает учётную запись вместе с её сессиями и документами, и
+          отменить это нельзя. Если достаточно закрыть доступ — снимите галочку
+          активности вместо удаления.
+        </Text>
+        </>
       )}
     </Stack>
   )
@@ -488,10 +579,34 @@ function TasksTab() {
 
 // --------------------------------------------------------------------- сессии
 
+type AdminSessionRow = SessionOut
+
 function SessionsTab() {
+  const users = useAdminUsers()
   const sessions = useSessionsTable()
 
-  if (sessions.isPending) return <Loader size="sm" />
+  // «сессии сгруппированы по пользователям» — пользователь решает, чью
+  // сессию смотреть; сам список остаётся прежним (все сессии админу видны)
+  const grouped = useMemo(() => {
+    const byUser = new Map<string, AdminSessionRow[]>()
+    for (const session of sessions.data ?? []) {
+      const bucket = byUser.get(session.user_id ?? '') ?? []
+      bucket.push(session)
+      byUser.set(session.user_id ?? '', bucket)
+    }
+    const names = new Map((users.data ?? []).map((u) => [u.id, u.username]))
+    return [...byUser.entries()]
+      .map(([userId, rows]) => ({
+        userId,
+        label: names.get(userId) ?? userId.slice(0, 8),
+        rows: rows.sort((a, b) =>
+          (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? ''),
+        ),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [sessions.data, users.data])
+
+  if (sessions.isPending || users.isPending) return <Loader size="sm" />
   if (sessions.isError) {
     return (
       <Alert color="red" role="alert">
@@ -499,33 +614,59 @@ function SessionsTab() {
       </Alert>
     )
   }
+  if (grouped.length === 0) {
+    return <Text c="dimmed">Сессий нет.</Text>
+  }
 
   return (
-    <Table>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>id</Table.Th>
-          <Table.Th>пользователь</Table.Th>
-          <Table.Th>название</Table.Th>
-          <Table.Th>статус</Table.Th>
-          <Table.Th>действие</Table.Th>
-          <Table.Th>активность</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {sessions.data.map((session) => (
-          <Table.Tr key={session.id}>
-            <Table.Td>{(session.id ?? '').slice(0, 8)}</Table.Td>
-            <Table.Td>{(session.user_id ?? '').slice(0, 8)}</Table.Td>
-            <Table.Td>{session.title ?? ''}</Table.Td>
-            <Table.Td>{session.status ?? ''}</Table.Td>
-            <Table.Td>{session.last_action_label ?? ''}</Table.Td>
-            <Table.Td>{shortWhen(session.last_activity_at)}</Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+    <Accordion defaultValue={`user:${grouped[0]?.userId}`}>
+      {grouped.map((group) => (
+        <Accordion.Item key={group.userId} value={`user:${group.userId}`} role="region" aria-label={group.label}>
+          <Accordion.Control aria-label={`${group.label}, ${group.rows.length} ${pluralizeSession(group.rows.length)}`}>
+            <Group justify="space-between" wrap="nowrap">
+              <Text fw={600}>{group.label}</Text>
+              <Text c="dimmed" size="sm">
+                {group.rows.length}{' '}
+                {pluralizeSession(group.rows.length)}
+              </Text>
+            </Group>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>id</Table.Th>
+                  <Table.Th>название</Table.Th>
+                  <Table.Th>статус</Table.Th>
+                  <Table.Th>действие</Table.Th>
+                  <Table.Th>активность</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {group.rows.map((session) => (
+                  <Table.Tr key={session.id}>
+                    <Table.Td>{(session.id ?? '').slice(0, 8)}</Table.Td>
+                    <Table.Td>{session.title ?? ''}</Table.Td>
+                    <Table.Td>{session.status ?? ''}</Table.Td>
+                    <Table.Td>{session.last_action_label ?? ''}</Table.Td>
+                    <Table.Td>{shortWhen(session.last_activity_at)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Accordion.Panel>
+        </Accordion.Item>
+      ))}
+    </Accordion>
   )
+}
+
+function pluralizeSession(count: number): string {
+  const n = count % 10
+  const n100 = count % 100
+  if (n === 1 && n100 !== 11) return 'сессия'
+  if (n >= 2 && n <= 4 && (n100 < 12 || n100 > 14)) return 'сессии'
+  return 'сессий'
 }
 
 // ------------------------------------------------------------------------ аудит
@@ -600,6 +741,371 @@ function AuditTab() {
   )
 }
 
+// ----------------------------------------------------------------------- сброс
+const RESET_SCOPES = [
+  {
+    value: 'data',
+    label: 'Данные (сессии, документы, проекты, переписка)',
+    hint: 'Пользователи и аудит остаются. Документы нужно загрузить заново.',
+  },
+  {
+    value: 'users',
+    label: 'Данные и входы (+ refresh-токены)',
+    hint: 'Все пользователи останутся, но им придётся войти заново.',
+  },
+  {
+    value: 'all',
+    label: 'Всё (полностью пустая платформа)',
+    hint: 'Удаляются и учётные записи. После этого нужен make create-admin.',
+  },
+] as const
+
+/** Человеческий размер: план сброса приходит в байтах. */
+function humanBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`
+  const units = ['КБ', 'МБ', 'ГБ']
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value.toFixed(1)} ${units[unit]}`
+}
+
+function ResetSection() {
+  const [scope, setScope] = useState<ResetScope>('data')
+  const [includeModels, setIncludeModels] = useState(false)
+  const [phrase, setPhrase] = useState('')
+  const [opened, setOpened] = useState(false)
+  const plan = useResetPreview(scope, includeModels)
+  const reset = useResetState()
+
+  const current = RESET_SCOPES.find((item) => item.value === scope)
+  const expected = plan.data?.confirmation ?? ''
+  const canReset = Boolean(expected) && phrase.trim() === expected && !reset.isPending
+
+  function openDialog() {
+    setPhrase('')
+    reset.reset()
+    setOpened(true)
+  }
+
+  return (
+    <Stack gap="sm">
+      <Alert color="yellow" title="Сброс необратим">
+        Удалённые сессии, документы и переписка восстановить нельзя — только из
+        бэкапа (<code>make backup</code>). Сначала посмотрите план.
+      </Alert>
+
+      <Select
+        label="Что сбросить"
+        data={RESET_SCOPES.map((item) => ({ value: item.value, label: item.label }))}
+        value={scope}
+        onChange={(value) => value && setScope(value as ResetScope)}
+        allowDeselect={false}
+        w={520}
+      />
+      {current && (
+        <Text size="sm" c="dimmed">
+          {current.hint}
+        </Text>
+      )}
+
+      <Checkbox
+        label="Также удалить кэш моделей (HF/Torch)"
+        description='Обычно НЕ нужно: без него после сброса платформа не сможет считать эмбеддинги в оффлайне, пока модель не будет скачана заново.'
+        checked={includeModels}
+        onChange={(event) => setIncludeModels(event.currentTarget.checked)}
+      />
+
+      {plan.isPending && <Loader size="sm" />}
+      {plan.isError && (
+        <Alert color="red" role="alert">
+          {errorText(plan.error, 'Ошибка запроса')}
+        </Alert>
+      )}
+      {plan.data && !plan.data.allowed && (
+        <Alert color="red" role="alert">
+          Сброс запрещён: {plan.data.blocked_reason}
+        </Alert>
+      )}
+
+      {plan.data && plan.data.allowed && (
+        <Paper withBorder p="sm">
+          <Stack gap="xs">
+            <Text fw={600}>Будет удалено</Text>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Таблица</Table.Th>
+                  <Table.Th>Строк</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {Object.entries(plan.data.tables).map(([name, rows]) => (
+                  <Table.Tr key={name}>
+                    <Table.Td>{name}</Table.Td>
+                    <Table.Td>{rows}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+            {plan.data.paths.map((item) => (
+              <Text key={item.path} size="sm">
+                <code>{item.path}</code> — {item.files} файлов,{' '}
+                {humanBytes(item.bytes)}
+              </Text>
+            ))}
+            <Text size="sm" fw={600}>
+              Итого: {plan.data.rows} строк, {plan.data.files} файлов,{' '}
+              {humanBytes(plan.data.total_bytes)}
+            </Text>
+            {plan.data.kept_paths.length > 0 && (
+              <Text size="sm" c="dimmed">
+                Не трогаем: {plan.data.kept_paths.join(', ')} (кэш моделей — нужен
+                для эмбеддингов).
+              </Text>
+            )}
+          </Stack>
+        </Paper>
+      )}
+
+      <Group>
+        <Button color="red" onClick={openDialog} disabled={!plan.data?.allowed}>
+          Сбросить…
+        </Button>
+      </Group>
+
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Подтвердите сброс"
+        centered
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            Будет выполнен сброс <b>{scope}</b>. Действие необратимо.
+          </Text>
+          <Text size="sm">
+            Для подтверждения введите: <b>{expected}</b>
+          </Text>
+          <TextInput
+            label="Фраза подтверждения"
+            value={phrase}
+            onChange={(event) => setPhrase(event.currentTarget.value)}
+            data-testid="reset-confirm-input"
+          />
+          {reset.isError && (
+            <Alert color="red" role="alert">
+              {errorText(reset.error, 'Ошибка запроса')}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpened(false)}>
+              Отмена
+            </Button>
+            <Button
+              color="red"
+              disabled={!canReset}
+              loading={reset.isPending}
+              onClick={() => {
+                if (!expected) return
+                reset.mutate(
+                  { scope, confirm: expected, include_models: includeModels },
+                  { onSuccess: () => setOpened(false) },
+                )
+              }}
+            >
+              Выполнить сброс
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
+  )
+}
+
+// ------------------------------------------------------- резервные копии
+function BackupsSection() {
+  const backups = useBackups()
+  const create = useCreateBackup()
+  const remove = useDeleteBackup()
+
+  const [opened, setOpened] = useState(false)
+
+  const plan = backups.data?.plan
+  const items = backups.data?.backups ?? []
+
+  return (
+    <Stack gap="sm">
+      <Alert color="blue" title="Копия снимается на сервере">
+        Архив содержит базу данных (согласованный снимок), файлы сессий и
+        документов и манифест с ревизией схемы. Копии складываются в каталог{' '}
+        <code>{plan?.backup_dir ?? '—'}</code> — он намеренно вынесен за пределы
+        данных, иначе копия попадала бы сама в себя.
+      </Alert>
+
+      {plan?.db_exists === false && (
+        <Alert color="red" role="alert">
+          База данных не найдена — копия получится без данных. Проверьте, что
+          платформа видит свой каталог данных.
+        </Alert>
+      )}
+
+      {plan && (
+        <Paper withBorder p="sm">
+          <Text size="sm">
+            Данные: <code>{plan.data_dir}</code> · файлов: {plan.files} ·{' '}
+            {plan.source_human}
+          </Text>
+          <Text size="sm">
+            Копия займёт около {plan.estimated_human}
+            {plan.free_human ? `, свободно на диске ${plan.free_human}` : ''}
+          </Text>
+          <Text size="sm" c="dimmed">
+            Хранится копий: {plan.keep === 0 ? 'без ограничения' : `последние ${plan.keep}`}{' '}
+            (сейчас {plan.existing}); при создании новой более старые удаляются
+            автоматически.
+          </Text>
+        </Paper>
+      )}
+
+      <Group>
+        <Button
+          onClick={() => {
+            create.reset()
+            setOpened(true)
+          }}
+          disabled={backups.isPending || plan?.db_exists === false}
+        >
+          Создать копию…
+        </Button>
+        <Button
+          variant="default"
+          onClick={() => void backups.refetch()}
+          loading={backups.isFetching}
+        >
+          Обновить
+        </Button>
+      </Group>
+
+      {backups.isPending && <Loader size="sm" />}
+      {backups.isError && (
+        <Alert color="red" role="alert">
+          {errorText(backups.error, 'Ошибка запроса')}
+        </Alert>
+      )}
+
+      {items.length > 0 && (
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Копия</Table.Th>
+              <Table.Th>Размер</Table.Th>
+              <Table.Th>Создана</Table.Th>
+              <Table.Th />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {items.map((item) => (
+              <Table.Tr key={item.name}>
+                <Table.Td>
+                  <Text size="sm">{item.name}</Text>
+                  <Text size="xs" c="dimmed">
+                    {item.has_sha256 ? 'с контрольной суммой' : 'без суммы'}
+                    {item.has_manifest ? ' · с манифестом' : ''}
+                  </Text>
+                </Table.Td>
+                <Table.Td>{item.human_size}</Table.Td>
+                <Table.Td>{(item.created_at ?? '').replace('T', ' ').slice(0, 19)}</Table.Td>
+                <Table.Td>
+                  <Button
+                    size="xs"
+                    color="red"
+                    variant="outline"
+                    loading={
+                      remove.isPending && remove.variables === item.name
+                    }
+                    onClick={() => remove.mutate(item.name)}
+                  >
+                    Удалить
+                  </Button>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+      {items.length === 0 && backups.isSuccess && (
+        <Text size="sm" c="dimmed" role="status">
+          Копий пока нет.
+        </Text>
+      )}
+
+      {remove.isError && (
+        <Alert color="red" role="alert">
+          {errorText(remove.error, 'Не удалось удалить копию')}
+        </Alert>
+      )}
+
+      <Alert color="yellow" title="Восстановление — только скриптом">
+        Восстановление требует остановки платформы, поэтому из браузера его
+        делать нельзя. После копии выполните в корне проекта:
+        <code> ./scripts/restore.sh путь/к/архиву.tar.gz</code>
+      </Alert>
+
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Создать резервную копию"
+        centered
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            Архив займёт около {plan?.estimated_human ?? '?'} и ложится в{' '}
+            <code>{plan?.backup_dir ?? '—'}</code>.
+          </Text>
+          {plan?.warning && (
+            <Text size="sm" c="dimmed">
+              {plan.warning}
+            </Text>
+          )}
+          {create.isError && (
+            <Alert color="red" role="alert">
+              {errorText(create.error, 'Не удалось создать копию')}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpened(false)}>
+              Отмена
+            </Button>
+            <Button
+              loading={create.isPending}
+              onClick={() => {
+                create.mutate(undefined, { onSuccess: () => setOpened(false) })
+              }}
+            >
+              Создать
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
+  )
+}
+
+// -------------------------------------------------------------- обслуживание
+function MaintenanceTab() {
+  return (
+    <Stack gap="lg">
+      <BackupsSection />
+      <Divider label="Сброс состояния" labelPosition="center" />
+      <ResetSection />
+    </Stack>
+  )
+}
+
 // ------------------------------------------------------------------------ page
 
 export function AdminPage() {
@@ -623,6 +1129,7 @@ export function AdminPage() {
           <Tabs.Tab value="tasks">Задачи</Tabs.Tab>
           <Tabs.Tab value="sessions">Сессии</Tabs.Tab>
           <Tabs.Tab value="audit">Аудит</Tabs.Tab>
+          <Tabs.Tab value="service">Обслуживание</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="sm">
@@ -639,6 +1146,9 @@ export function AdminPage() {
         </Tabs.Panel>
         <Tabs.Panel value="audit" pt="sm">
           <AuditTab />
+        </Tabs.Panel>
+        <Tabs.Panel value="service" pt="sm">
+          <MaintenanceTab />
         </Tabs.Panel>
       </Tabs>
     </Stack>

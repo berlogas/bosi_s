@@ -51,6 +51,18 @@ class Settings(BaseSettings):
     database_url: str | None = None  # переопределяет data_dir/db_path
     db_path: Path | None = None
     pqa_home: Path | None = None
+    # Кэш моделей HF и torch. В контейнере они живут ВНУТРИ тома данных
+    # (Dockerfile: HF_HOME=/data/hf, TORCH_HOME=/data/torch), поэтому обычный
+    # сброс «всех данных» обязан их обходить: иначе оффлайн-контур останется
+    # без модели эмбеддингов, пока её не скачают заново.
+    hf_home: Path | None = None
+    torch_home: Path | None = None
+    # Каталог для бэкапов. Намеренно ВНЕ data_dir: иначе архивы попадали бы
+    # сами в себя (бэкап внутри бэкапа) и раздували том без предела.
+    # В контейнере это отдельный том /backups, локально — backups/ в корне.
+    backup_dir: Path | None = None
+    # Сколько последних копий хранить (0 = без ограничения).
+    backup_keep: int = 14
     upload_max_mb: int = 200
     allowed_extensions: list[str] = Field(
         default_factory=lambda: [
@@ -108,6 +120,9 @@ class Settings(BaseSettings):
     login_lockout_seconds: int = 300
     # Минимальная длина SECRET_KEY (короткий ключ ломает подпись JWT)
     min_secret_key_length: int = 32
+    # Разрешить разрушающий сброс состояния в prod. По умолчанию выключено:
+    # сброс безвозвратно удаляет документы, сессии и сообщения.
+    allow_destructive_reset: bool = False
 
     # ---------- фоновая обработка ----------
     indexer_concurrency: int = 1
@@ -134,6 +149,42 @@ class Settings(BaseSettings):
         return self.data_dir / "documents"
 
     @property
+    def resolved_db_path(self) -> Path | None:
+        """Путь к файлу SQLite (None для не-sqlite URL).
+
+        Разбираем URL через SQLAlchemy, а не строковой заменой: путь
+        вида `sqlite:////data/boasi.sqlite3` (в контейнере) и
+        `sqlite:///C:/data/boasi.sqlite3` (на Windows) разбираются по-разному.
+        """
+        try:
+            from sqlalchemy.engine import make_url
+
+            url = make_url(self.resolved_db_url)
+        except Exception:
+            return None
+        if not url.drivername.startswith("sqlite"):
+            return None
+        database = url.database
+        if not database or database == ":memory:":
+            return None
+        return Path(database)
+
+    @property
+    def resolved_hf_home(self) -> Path:
+        """Каталог кэша моделей HuggingFace — не данные, сброс их не трогает."""
+        return self.hf_home or (self.data_dir / "hf")
+
+    @property
+    def resolved_torch_home(self) -> Path:
+        """Каталог кэша torch — тоже не данные."""
+        return self.torch_home or (self.data_dir / "torch")
+
+    @property
+    def resolved_backup_dir(self) -> Path:
+        """Каталог архивов бэкапа. По умолчанию — backups/ в корне проекта."""
+        return self.backup_dir or (PROJECT_ROOT / "backups")
+
+    @property
     def resolved_summary_llm(self) -> str:
         return self.summary_llm_model or self.llm_model
 
@@ -141,7 +192,8 @@ class Settings(BaseSettings):
     def is_sqlite(self) -> bool:
         return self.resolved_db_url.startswith("sqlite")
 
-    @field_validator("data_dir", "db_path", "pqa_home")
+    @field_validator("data_dir", "db_path", "pqa_home", "hf_home", "torch_home",
+                      "backup_dir")
     @classmethod
     def _abs_path(cls, value: Path | None) -> Path | None:
         """Относительные пути в .env разрешаем от корня репозитория, а не от CWD."""
@@ -194,6 +246,10 @@ class Settings(BaseSettings):
         if self.allow_external_import_paths:
             warnings.append("ALLOW_EXTERNAL_IMPORT_PATHS=true: импорт файлов "
                             "разрешён вне каталога данных.")
+        if self.allow_destructive_reset:
+            warnings.append(
+                "ALLOW_DESTRUCTIVE_RESET=true: сброс состояния разрешён даже в "
+                "prod — документы, сессии и сообщения удаляются безвозвратно.")
         return warnings
 
     def ensure_dirs(self) -> None:

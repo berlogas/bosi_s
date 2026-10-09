@@ -177,6 +177,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/reset/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reset Preview
+         * @description Что будет удалено при сбросе. Ничего не меняет — безопасно вызывать.
+         */
+        get: operations["reset_preview_api_admin_reset_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset State
+         * @description Сбросить состояние платформы.
+         *
+         *     Требует точного совпадения `confirm` с фразой из `/reset/preview`:
+         *     одного клика недостаточно. В prod дополнительно нужен
+         *     ALLOW_DESTRUCTIVE_RESET=true в .env.
+         */
+        post: operations["reset_state_api_admin_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Backups
+         * @description Список копий и план следующей (что и сколько займёт).
+         */
+        get: operations["list_backups_api_admin_backup_get"];
+        put?: never;
+        /**
+         * Create Backup
+         * @description Снять копию.
+         *
+         *     Фразы подтверждения здесь нет намеренно: операция неразрушающая, её
+         *     платный исход — свободное место (оценка видна в плане), и всё, что может
+         *     пойти не так, проверяется до записи.
+         */
+        post: operations["create_backup_api_admin_backup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/backup/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Backup
+         * @description Удалить копию. Восстановиться из неё после удаления уже нельзя.
+         */
+        delete: operations["delete_backup_api_admin_backup__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions": {
         parameters: {
             query?: never;
@@ -1186,6 +1278,76 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * BackupCreateRequest
+         * @description Создание копии.
+         *
+         *     Фразы подтверждения нет: операция неразрушающая, её
+         *     план показывается в UI до кнопки. `keep` — сколько копий остать
+         *     (None — взять из BACKUP_KEEP).
+         */
+        BackupCreateRequest: {
+            /** Keep */
+            keep?: number | null;
+        };
+        /** BackupEntryOut */
+        BackupEntryOut: {
+            /** Name */
+            name: string;
+            /** Bytes */
+            bytes: number;
+            /** Human Size */
+            human_size: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Has Sha256 */
+            has_sha256: boolean;
+            /** Has Manifest */
+            has_manifest: boolean;
+        };
+        /** BackupListOut */
+        BackupListOut: {
+            /** Backups */
+            backups: components["schemas"]["BackupEntryOut"][];
+            plan: components["schemas"]["BackupPlanOut"];
+        };
+        /** BackupPlanOut */
+        BackupPlanOut: {
+            /** Data Dir */
+            data_dir: string;
+            /** Backup Dir */
+            backup_dir: string;
+            /** Files */
+            files: number;
+            /** Source Bytes */
+            source_bytes: number;
+            /** Source Human */
+            source_human: string;
+            /** Estimated Bytes */
+            estimated_bytes: number;
+            /** Estimated Human */
+            estimated_human: string;
+            /** Free Bytes */
+            free_bytes?: number | null;
+            /** Free Human */
+            free_human?: string | null;
+            /** Existing */
+            existing: number;
+            /** Keep */
+            keep: number;
+            /** Db Exists */
+            db_exists: boolean;
+            /** Warning */
+            warning?: string | null;
+        };
+        /** BackupResultOut */
+        BackupResultOut: {
+            entry: components["schemas"]["BackupEntryOut"];
+            /** Deleted Old */
+            deleted_old: string[];
+            /** Restore Hint */
+            restore_hint: string;
+        };
         /** Body_upload_api_admin_documents_upload_post */
         Body_upload_api_admin_documents_upload_post: {
             /** Files */
@@ -1563,6 +1725,15 @@ export interface components {
              */
             offset: number;
         };
+        /** PathTargetOut */
+        PathTargetOut: {
+            /** Path */
+            path: string;
+            /** Files */
+            files: number;
+            /** Bytes */
+            bytes: number;
+        };
         /** ProjectCreate */
         ProjectCreate: {
             /** Title */
@@ -1761,6 +1932,79 @@ export interface components {
         RefreshRequest: {
             /** Refresh Token */
             refresh_token: string;
+        };
+        /** ResetPlanOut */
+        ResetPlanOut: {
+            /** Scope */
+            scope: string;
+            /** Tables */
+            tables: {
+                [key: string]: number;
+            };
+            /** Rows */
+            rows: number;
+            /** Paths */
+            paths: components["schemas"]["PathTargetOut"][];
+            /** Files */
+            files: number;
+            /** Total Bytes */
+            total_bytes: number;
+            /** Kept Paths */
+            kept_paths: string[];
+            /** Includes Models */
+            includes_models: boolean;
+            /** Allowed */
+            allowed: boolean;
+            /** Blocked Reason */
+            blocked_reason?: string | null;
+            /** Confirmation */
+            confirmation: string;
+        };
+        /**
+         * ResetRequest
+         * @description Запрос на сброс состояния.
+         *
+         *     `confirm` — фраза из `ResetPlanOut.confirmation`: защита от случайного
+         *     нажатия кнопки в админке (принцип как в Grafana/Datadog).
+         */
+        ResetRequest: {
+            /**
+             * Scope
+             * @default data
+             * @enum {string}
+             */
+            scope: "data" | "users" | "all";
+            /**
+             * Confirm
+             * @default
+             */
+            confirm: string;
+            /**
+             * Include Models
+             * @default false
+             */
+            include_models: boolean;
+        };
+        /** ResetResultOut */
+        ResetResultOut: {
+            /** Scope */
+            scope: string;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Deleted Tables */
+            deleted_tables: {
+                [key: string]: number;
+            };
+            /** Deleted Rows */
+            deleted_rows: number;
+            /** Deleted Paths */
+            deleted_paths: string[];
+            /** Freed Bytes */
+            freed_bytes: number;
+            /** Kept Paths */
+            kept_paths: string[];
+            /** Includes Models */
+            includes_models: boolean;
         };
         /**
          * Role
@@ -2409,6 +2653,153 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuditLogOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_preview_api_admin_reset_preview_get: {
+        parameters: {
+            query?: {
+                scope?: string;
+                include_models?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_state_api_admin_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_backups_api_admin_backup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupListOut"];
+                };
+            };
+        };
+    };
+    create_backup_api_admin_backup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_backup_api_admin_backup__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

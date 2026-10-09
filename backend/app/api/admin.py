@@ -9,17 +9,30 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ConflictError, NotFoundError, UpstreamError
 from app.core.security import hash_password, require_admin
 from app.db.models import User
 from app.db.repositories.users import audit, get_user, get_user_by_username
 from app.db.session import get_db
 from app.schemas.api import (
     AuditLogOut,
+    BackupCreateRequest,
+    BackupListOut,
+    BackupResultOut,
     CreateUserRequest,
+    ResetPlanOut,
+    ResetRequest,
+    ResetResultOut,
     UserOut,
     UserUpdateRequest,
     UserWithPasswordOut,
+)
+from app.services import backup as backup_service
+from app.services.backup import plan_backup
+from app.services.reset import (
+    CONFIRM_PHRASES,
+    plan_reset,
+    run_reset,
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -169,3 +182,125 @@ def list_audit(
         q = q.where(AuditLog.created_at >= since)
     q = q.offset(offset).limit(limit)
     return list(db.scalars(q))
+
+
+# --------------------------------------------------------------- сброс состояния
+@router.get("/reset/preview", response_model=ResetPlanOut)
+def reset_preview(
+    scope: str = Query(default="data"),
+    include_models: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Что будет удалено при сбросе. Ничего не меняет — безопасно вызывать."""
+    try:
+        return plan_reset(scope, include_models=include_models, db=db).as_dict()
+    except ValueError as exc:
+        raise ConflictError(str(exc)) from exc
+
+
+@router.post("/reset", response_model=ResetResultOut)
+def reset_state(
+    payload: ResetRequest,
+    request: Request,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Сбросить состояние платформы.
+
+    Требует точного совпадения `confirm` с фразой из `/reset/preview`:
+    одного клика недостаточно. В prod дополнительно нужен
+    ALLOW_DESTRUCTIVE_RESET=true в .env.
+    """
+    expected = CONFIRM_PHRASES.get(payload.scope)
+    if expected is None:
+        raise ConflictError(f"Неизвестный scope: {payload.scope}")
+    if payload.confirm.strip() != expected:
+        raise ConflictError(
+            f"Неверная фраза подтверждения. Для scope={payload.scope} нужно: "
+            f"{expected!r}")
+    result = run_reset(
+        payload.scope,
+        dry_run=False,
+        include_models=payload.include_models,
+        db=db,
+        actor=actor,
+        meta={"source": "api", **_client_meta(request)},
+    )
+    return result.as_dict()
+
+
+# ------------------------------------------------------------ резервные копии
+# Бэкап снимается изнутри процесса backend, поэтому одинаково работает
+# и в контейнере (данные в томе /data), и на Windows (каталог data/).
+# Восстановления здесь нет намеренно: оно требует остановки платформы и
+# остаётся скриптом scripts/restore.sh.
+@router.get("/backup", response_model=BackupListOut)
+def list_backups(
+    request: Request,
+    actor: User = Depends(require_admin),
+) -> dict[str, Any]:
+    """Список копий и план следующей (что и сколько займёт)."""
+    plan = plan_backup()
+    return {
+        "backups": [entry.as_dict() for entry in backup_service.list_backups()],
+        "plan": plan.as_dict(),
+    }
+
+
+@router.post("/backup", response_model=BackupResultOut)
+def create_backup(
+    payload: BackupCreateRequest,
+    request: Request,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Снять копию.
+
+    Фразы подтверждения здесь нет намеренно: операция неразрушающая, её
+    платный исход — свободное место (оценка видна в плане), и всё, что может
+    пойти не так, проверяется до записи.
+    """
+    plan = plan_backup()
+    if not plan.db_exists:
+        raise ConflictError(
+            "База данных не найдена — копия получится без данных. "
+            "Проверьте, что платформа видит свой каталог данных.")
+    if plan.free_bytes is not None and plan.free_bytes < plan.estimated_bytes:
+        raise ConflictError(
+            f"Не хватает места: свободно {plan.free_human}, "
+            f"копия займёт около {plan.estimated_human}")
+    try:
+        result = backup_service.run_backup(
+            keep=payload.keep, actor=actor)
+    except OSError as exc:
+        raise UpstreamError(f"Не удалось создать копию: {exc}") from exc
+    audit(
+        db,
+        action="admin.backup.create",
+        actor=actor,
+        target_type="backup",
+        target_id=result.entry.name,
+        **_client_meta(request),
+        bytes=result.entry.bytes,
+        deleted_old=result.deleted_old,
+        data_dir=plan.data_dir,
+    )
+    return result.as_dict()
+
+
+@router.delete("/backup/{name}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_backup(
+    name: str,
+    request: Request,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    """Удалить копию. Восстановиться из неё после удаления уже нельзя."""
+    try:
+        removed = backup_service.delete_backup(name)
+    except ValueError as exc:
+        raise ConflictError(str(exc)) from exc
+    if not removed:
+        raise NotFoundError(f"Копия не найдена: {name}")
+    audit(db, action="admin.backup.delete", actor=actor, target_type="backup",
+          target_id=name, **_client_meta(request))

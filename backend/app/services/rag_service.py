@@ -287,7 +287,7 @@ class RagFusionService:
             answer.formatted_answer = formatted
             answer.answer, _ = repair_markers(answer.answer, len(sources),
                                               sources=sources)
-        if citation_report.changed or not citation_report.ok:
+        if citation_report.changed or not citation_report.ok or citation_report.uncited:
             log.warning("fusion: цитаты в ответе: %s", citation_report.to_dict())
 
         # Отказ paperqa («I cannot answer») — показываем по-русски и помечаем,

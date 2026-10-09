@@ -91,11 +91,28 @@ def test_dangling_bracket_is_reported_but_kept() -> None:
 
 
 def test_no_markers_returns_text_unchanged() -> None:
+    """Текст не трогаем, но отсутствие ссылок при источниках — повод для ⚠."""
     fixed, report = repair_markers("Обычный ответ без ссылок.", source_count=3)
 
     assert fixed == "Обычный ответ без ссылок."
     assert report.ok is True
     assert report.changed is False
+    assert report.uncited is True
+    assert any("без ссылок" in warning for warning in report.warnings)
+
+
+def test_no_markers_without_sources_is_silent() -> None:
+    """Нет источников — нечего и предупреждать (ответ по памяти модели)."""
+    _, report = repair_markers("Ответ без ссылок.", source_count=0)
+
+    assert report.uncited is False
+    assert report.warnings == []
+
+
+def test_answer_with_citations_has_no_uncited_warning() -> None:
+    _, report = repair_markers("Факт [1] подтверждён.", source_count=3)
+
+    assert report.uncited is False
     assert report.warnings == []
 
 
@@ -121,7 +138,8 @@ def test_report_serializes_for_api_stats() -> None:
     payload = report.to_dict()
 
     assert set(payload) == {"ok", "changed", "repaired", "dropped",
-                            "reflowed", "cited", "dangling", "warnings"}
+                            "reflowed", "cited", "dangling", "uncited",
+                            "warnings"}
     assert payload["ok"] is False
     assert payload["repaired"] and payload["dropped"]
     assert payload["warnings"]

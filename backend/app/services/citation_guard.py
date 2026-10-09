@@ -156,6 +156,8 @@ class CitationReport:
     reflowed: list[str] = field(default_factory=list)   # «1. [2]:» -> «1. [2]»
     cited: list[int] = field(default_factory=list)      # номера [n] в тексте
     dangling: list[int] = field(default_factory=list)   # [9] при 5 источниках
+    # источники нашлись, а в тексте нет ни одного [n]
+    uncited: bool = False
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -177,6 +179,7 @@ class CitationReport:
             "reflowed": list(self.reflowed),
             "cited": list(self.cited),
             "dangling": list(self.dangling),
+            "uncited": self.uncited,
             "warnings": list(self.warnings),
         }
 
@@ -399,5 +402,13 @@ def _fill_warnings(report: CitationReport, source_count: int) -> None:
     if report.dangling:
         available = f"1..{source_count}" if source_count else "источников нет"
         report.warnings.append(
-            f"Ссылки без источника ({available}): "
+            "Ссылки без источника (" + available + "): "
             + ", ".join(f"[{n}]" for n in report.dangling))
+    # Источники нашлись, а ссылок в тексте нет вообще. Раньше этот случай
+    # считался нормой, и пользователь видел голый ответ с «Источники» внизу,
+    # не понимая, что проверять ему надо всё.
+    if source_count and not report.cited:
+        report.uncited = True
+        report.warnings.append(
+            f"Ответ без ссылок на источники, хотя найдено {source_count}. "
+            "Факты нужно сверить с источниками вручную.")

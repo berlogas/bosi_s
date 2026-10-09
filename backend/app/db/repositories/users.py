@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -211,3 +211,83 @@ def audit(
     db.add(entry)
     db.commit()
     return entry
+
+def audit_stats(db: Session) -> dict[str, Any]:
+    """Сводка по журналу: сколько записей и какая самая старая.
+
+    Нужна UI, чтобы видеть, что ретрация вообще работает: показывать
+    только «последние 50» нельзя — неизвестно, что происходит с хвостом.
+    """
+    total = int(db.scalar(select(func.count()).select_from(AuditLog)) or 0)
+    oldest = db.scalar(select(func.min(AuditLog.created_at)))
+    newest = db.scalar(select(func.max(AuditLog.created_at)))
+    return {"total": total, "oldest_at": oldest, "newest_at": newest}
+
+
+def prune_audit(
+    db: Session,
+    *,
+    retention_days: int | None = None,
+    max_rows: int | None = None,
+    protected: list[str] | None = None,
+) -> dict[str, Any]:
+    """Удалить старые записи аудита: и по сроку, и по объёму.
+
+    Три правила, чтобы журнал оставался полезным, но не рос бесконечно:
+
+    1. **По сроку** — старше `AUDIT_RETENTION_DAYS` дней;
+    2. **По объёму** — если строк больше `AUDIT_MAX_ROWS`, уходят самые
+       старые до порога (важнее срока: при интенсивной работе за день
+       набегает столько, сколько за месяц при редкой);
+    3. **Защита** — записи действий из `AUDIT_PROTECTED_ACTIONS`
+       (префиксное совпадение: `reset.` покрывает `reset.execute`)
+       не выселяются никогда, даже если попали под оба порога.
+
+    Файл SQLite при этом не уменьшается — место возвращает VACUUM
+    (`workers/reaper.py: vacuum_audit`), поэтому функция возвращает
+    признак, стоит ли сжимать.
+    """
+    settings = get_settings()
+    days = settings.audit_retention_days if retention_days is None else retention_days
+    rows_cap = settings.audit_max_rows if max_rows is None else max_rows
+    keep_actions = (settings.audit_protected_actions
+                    if protected is None else protected)
+
+    protected_clauses = [AuditLog.action.like(f"{prefix}%") for prefix in keep_actions]
+    never = or_(*protected_clauses) if protected_clauses else false()
+
+    removed_age = 0
+    removed_overflow = 0
+
+    if days and days > 0:
+        cutoff = utcnow() - timedelta(days=days)
+        result = db.execute(
+            delete(AuditLog).where(AuditLog.created_at < cutoff, ~never))
+        removed_age = int(result.rowcount or 0)
+        db.commit()
+
+    if rows_cap and rows_cap > 0:
+        total = int(db.scalar(select(func.count()).select_from(AuditLog)) or 0)
+        overflow = total - rows_cap
+        if overflow > 0:
+            # сначала самые старые, но не защищённые
+            victims = db.scalars(
+                select(AuditLog.id)
+                .where(~never)
+                .order_by(AuditLog.created_at.asc())
+                .limit(overflow))
+            ids = list(victims)
+            if ids:
+                db.execute(delete(AuditLog).where(AuditLog.id.in_(ids)))
+                db.commit()
+                removed_overflow = len(ids)
+
+    total_left = int(db.scalar(select(func.count()).select_from(AuditLog)) or 0)
+    return {
+        "removed_by_age": removed_age,
+        "removed_overflow": removed_overflow,
+        "removed_total": removed_age + removed_overflow,
+        "total": total_left,
+        # место освободилось — пора сжать файл
+        "needs_vacuum": (removed_age + removed_overflow) > 0,
+    }

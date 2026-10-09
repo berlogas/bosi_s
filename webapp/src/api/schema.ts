@@ -326,6 +326,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/audit/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Stats
+         * @description Сколько записей в журнале и какая самая старая.
+         *
+         *     Без этого не видно, работает ли ретрация: список в UI всегда
+         *     ограничен страницей, а растёт или уменьшается хвост — неизвестно.
+         */
+        get: operations["audit_stats_api_admin_audit_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Export
+         * @description Выгрузка журнала в CSV.
+         *
+         *     Отдельный эндпоинт, а не флаг у списка: файл отдаётся вложением, и
+         *     интерфейсу не нужно уметь разбирать чужой формат.
+         */
+        get: operations["audit_export_api_admin_audit_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/inbox/scan": {
         parameters: {
             query?: never;
@@ -3088,6 +3134,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboxRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_stats_api_admin_audit_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    audit_export_api_admin_audit_export_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                action?: string | null;
+                target_type?: string | null;
+                since?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

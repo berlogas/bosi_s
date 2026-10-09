@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +17,7 @@ from app.core.errors import AppError, ConflictError, NotFoundError, UpstreamErro
 from app.core.security import hash_password, require_admin
 from app.db.models import User
 from app.db.repositories.users import audit, get_user, get_user_by_username
+from app.db.repositories.users import audit_stats as audit_stats_db
 from app.db.session import get_db
 from app.schemas.api import (
     AuditLogOut,
@@ -39,6 +44,12 @@ from app.services.reset import (
     plan_reset,
     run_reset,
 )
+
+# BOM в начале CSV: без него Excel открывает кириллицу как mojibake.
+BOM = chr(0xFEFF)
+NEWLINE = chr(10)
+
+
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -359,6 +370,66 @@ def inbox_runs(
 def inbox_run_detail(run_id: str, db: Session = Depends(get_db)) -> InboxRunOut:
     service = InboxService()
     return _run_out(service, db, service.get_run(db, run_id))
+
+
+@router.get("/audit/stats", response_model=dict)
+def audit_stats(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Сколько записей в журнале и какая самая старая.
+
+    Без этого не видно, работает ли ретрация: список в UI всегда
+    ограничен страницей, а растёт или уменьшается хвост — неизвестно.
+    """
+    stats = audit_stats_db(db)
+    return {
+        "total": stats["total"],
+        "oldest_at": stats["oldest_at"].isoformat() if stats["oldest_at"] else None,
+        "newest_at": stats["newest_at"].isoformat() if stats["newest_at"] else None,
+    }
+
+
+@router.get("/audit/export")
+def audit_export(
+    limit: int = Query(default=10_000, ge=1, le=100_000),
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    since: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> Any:
+    """Выгрузка журнала в CSV.
+
+    Отдельный эндпоинт, а не флаг у списка: файл отдаётся вложением, и
+    интерфейсу не нужно уметь разбирать чужой формат.
+    """
+    from app.db.models import AuditLog
+
+    q = select(AuditLog).order_by(AuditLog.created_at.desc())
+    if action:
+        q = q.where(AuditLog.action.ilike(f"%{action}%"))
+    if target_type:
+        q = q.where(AuditLog.target_type == target_type)
+    if since:
+        q = q.where(AuditLog.created_at >= since)
+    rows = db.scalars(q.limit(limit))
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";", lineterminator=NEWLINE)
+    writer.writerow(["created_at", "actor_username", "action", "target_type",
+                     "target_id", "ip", "ok", "meta"])
+    for row in rows:
+        writer.writerow([
+            row.created_at.isoformat() if row.created_at else "",
+            row.actor_username or "", row.action, row.target_type or "",
+            row.target_id or "", row.ip or "", "1" if row.ok else "0",
+            json.dumps(row.meta or {}, ensure_ascii=False),
+        ])
+    payload = BOM + buffer.getvalue()
+    stamp = datetime.now().strftime("%Y%m%d-%H%M")
+    return Response(
+        content=payload,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition":
+                 f'attachment; filename="audit-{stamp}.csv"'},
+    )
 
 
 @router.post("/inbox/scan", response_model=InboxScanResultOut)

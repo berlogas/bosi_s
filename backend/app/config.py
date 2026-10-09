@@ -116,6 +116,31 @@ class Settings(BaseSettings):
     max_projects_per_session: int = 5
     max_quick_history: int = 200
 
+    # ---------- журнал аудита ----------
+    # Таблица audit_log растёт на каждое действие и без ротации тянет в том
+    # на сотни мегабайт. Два взаимодополняющих лимита: по возрасту и по
+    # объёму (второй спасает при интенсивной работе, когда срок в днях
+    # ни о чём не говорит). 0 = не ограничивать.
+    audit_retention_days: int = 180
+    audit_max_rows: int = 200_000
+    # Как часто прибираться (часами). Проверка лёгкая и идёт в reaper'е,
+    # но VACUUM блокирует запись, поэтому отдельный, редкий такт.
+    audit_prune_interval_hours: int = 24
+    audit_vacuum: bool = True
+    # Эти действия не выселяются никогда: «кто и когда сбросил/удалил»
+    # должно отвечать на вопрос и через год.
+    # Префиксы реальных action из кода (grep `action="..."`); сравнение
+    # по LIKE "префикс%", поэтому `admin.` прикрывает всю админку.
+    audit_protected_actions: list[str] = Field(default_factory=lambda: [
+        "admin.user.delete",
+        "admin.reset",
+        "admin.backup.delete",
+        "admin.documents.clear",
+        "admin.inbox.rejected.clear",
+        "session.delete",
+        "project.delete",
+    ])
+
     # ---------- безопасность (Фаза 9) ----------
     # Разрешить импорт документов откуда угодно. По умолчанию выключено:
     # исследователь может загружать только из каталога своей сессии.

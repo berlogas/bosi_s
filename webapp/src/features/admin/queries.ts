@@ -17,6 +17,7 @@ import { isActiveTask, queryKeys } from '../dashboard/queries'
 export const adminKeys = {
   users: ['admin', 'users'] as const,
   audit: ['admin', 'audit'] as const,
+  auditStats: ['admin', 'audit', 'stats'] as const,
   documents: ['admin', 'documents'] as const,
   tasks: ['admin', 'tasks'] as const,
   reset: ['admin', 'reset'] as const,
@@ -91,10 +92,21 @@ export function useDeleteUser() {
   })
 }
 
-export function useAudit() {
+export function useAudit(since?: string) {
   return useQuery({
-    queryKey: adminKeys.audit,
-    queryFn: () => client.adminAudit({ limit: 200 }),
+    queryKey: [...adminKeys.audit, since ?? 'все'],
+    queryFn: () => client.adminAudit({ limit: 200, since }),
+  })
+}
+
+/**
+ * Сводка по журналу. Показывает, что ретрация работает: без неё не видно,
+ * растёт ли таблица, — список-то всегда ограничен одной страницей.
+ */
+export function useAuditStats() {
+  return useQuery({
+    queryKey: adminKeys.auditStats,
+    queryFn: () => client.adminAuditStats(),
   })
 }
 

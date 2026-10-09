@@ -734,13 +734,20 @@ class ApiClient {
   }
 
   adminAudit(
-    options: { limit?: number; offset?: number; action?: string } = {},
+    options: {
+      limit?: number
+      offset?: number
+      action?: string
+      /** Период: ISO-дата, с которой нужны записи. */
+      since?: string
+    } = {},
   ): Promise<AuditLogEntry[]> {
     return this.request('/api/admin/audit', {
       query: {
         limit: options.limit ?? 200,
         offset: options.offset,
         action: options.action,
+        since: options.since,
       },
     })
   }
@@ -770,6 +777,22 @@ class ApiClient {
 
   adminDeleteDocument(documentId: string): Promise<void> {
     return this.request(`/api/admin/documents/${documentId}`, { method: 'DELETE' })
+  }
+
+  /** Сводка по журналу: всего записей и границы по датам. */
+  adminAuditStats(): Promise<{
+    total: number
+    oldest_at: string | null
+    newest_at: string | null
+  }> {
+    return this.request('/api/admin/audit/stats')
+  }
+
+  /** Ссылка на CSV-выгрузку журнала (тот же период, что и в списке). */
+  adminAuditExportUrl(since?: string): string {
+    const params = new URLSearchParams({ limit: '10000' })
+    if (since) params.set('since', since)
+    return `/api/admin/audit/export?${params.toString()}`
   }
 
   adminReindex(): Promise<{ status?: string }> {

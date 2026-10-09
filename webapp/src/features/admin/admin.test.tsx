@@ -134,6 +134,12 @@ function renderApp(path = '/admin') {
   )
 }
 
+const AUDIT_STATS = {
+  total: 1234,
+  oldest_at: '2026-01-05T10:00:00+00:00',
+  newest_at: '2026-10-09T10:00:00+00:00',
+}
+
 const INBOX_STATUS = {
   inbox_dir: '/data/inbox',
   exists: true,
@@ -204,6 +210,7 @@ function adminRoutes(overrides: Record<string, unknown> = {}) {
     'GET /api/admin/users': USERS,
     'GET /api/admin/audit': AUDIT,
     'GET /api/admin/documents': [ADMIN_DOC],
+    'GET /api/admin/audit/stats': AUDIT_STATS,
     'GET /api/admin/inbox/status': INBOX_STATUS,
     'GET /api/admin/inbox/runs': INBOX_RUNS,
     ...overrides,
@@ -899,6 +906,58 @@ describe('админка', () => {
     expect(within(table2).getByText('abcdefgh')).toBeInTheDocument()
     expect(within(table2).getByText('2026-10-07 12:34')).toBeInTheDocument()
   })
+
+  it('вкладка Аудит: сводка и период фильтруют выборку', async () => {
+    loginAs(TEST_ADMIN)
+    const { calls } = mockApi(adminRoutes())
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Аудит' }))
+
+    // сводка: видно, что ретрация работает и сколько всего записей
+    expect(await screen.findByText(/всего записей: 1234/)).toBeInTheDocument()
+    expect(screen.getByText(/самые старые от/)).toBeInTheDocument()
+    expect(calls.some((c) => c.url.includes('/audit/stats'))).toBe(true)
+
+    // «Всё время» — запрос без since
+    const firstList = calls.find((c) => c.url.includes('/api/admin/audit?'))
+    expect(firstList?.url).not.toContain('since')
+
+    const period = screen.getByRole('combobox', { name: /Фильтр: период/ })
+    await userEvent.click(period)
+    await userEvent.click(selectOption(period, '7 дней'))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) => c.url.includes('/api/admin/audit?') && c.url.includes('since='),
+      )
+      expect(call).toBeDefined()
+      expect(call?.url).toContain('limit=200')
+    })
+  })
+
+  it('вкладка Аудит: кнопка выгрузки CSV и ссылка с текущим периодом', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminRoutes())
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Аудит' }))
+
+    const link = await screen.findByRole('link', {
+      name: 'Выгрузить журнал в CSV',
+    })
+    expect(link).toHaveAttribute('href', expect.stringContaining('/api/admin/audit/export'))
+
+    const period = screen.getByRole('combobox', { name: /Фильтр: период/ })
+    await userEvent.click(period)
+    await userEvent.click(selectOption(period, '30 дней'))
+
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Выгрузить журнал в CSV' }))
+        .toHaveAttribute('href', expect.stringContaining('since=')),
+    )
+  })
+
 
   it('вкладка Аудит: сортировка по времени и ok', async () => {
     loginAs(TEST_ADMIN)

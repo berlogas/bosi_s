@@ -32,6 +32,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { client } from '../../api/client'
 import type { InboxRun } from '../../api/client'
 import type { AuditLogEntry, SessionOut, Task, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
@@ -42,6 +43,7 @@ import { isActiveTask } from '../dashboard/queries'
 import {
   useAdminAddPath,
   useAdminCancelTask,
+  useAuditStats,
   useClearFinishedTasks,
   useAdminDeleteDocument,
   useAdminDocuments,
@@ -1113,8 +1115,30 @@ function pluralizeSession(count: number): string {
 
 // ------------------------------------------------------------------------ аудит
 
+const AUDIT_PERIODS = [
+  { value: 'all', label: 'Всё время', days: 0 },
+  { value: '7', label: '7 дней', days: 7 },
+  { value: '30', label: '30 дней', days: 30 },
+  { value: '90', label: '90 дней', days: 90 },
+]
+
+/** Период как ISO-дата для запроса `since` (граница = начало суток). */
+function sinceFor(days: number): string | undefined {
+  if (!days) return undefined
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  date.setHours(0, 0, 0, 0)
+  return date.toISOString()
+}
+
 function AuditTab() {
-  const audit = useAudit()
+  const [period, setPeriod] = useState('all')
+  const since = useMemo(
+    () => sinceFor(AUDIT_PERIODS.find((p) => p.value === period)?.days ?? 0),
+    [period],
+  )
+  const audit = useAudit(since)
+  const stats = useAuditStats()
   const [sortDesc, setSortDesc] = useState(true)
   const [page, setPage] = useState(1)
 
@@ -1140,18 +1164,53 @@ function AuditTab() {
     )
   }
 
+  const total = stats.data?.total ?? null
+  const oldest = stats.data?.oldest_at
+    ? new Date(stats.data.oldest_at).toLocaleDateString('ru-RU')
+    : null
+
   return (
     <Stack gap="sm">
-      <Button
-        size="xs"
-        variant="outline"
-        onClick={() => {
-          setSortDesc((value) => !value)
-          setPage(1)
-        }}
-      >
-        Время: {sortDesc ? 'сначала новые ↓' : 'сначала старые ↑'}
-      </Button>
+      <Group align="flex-end" gap="sm" wrap="wrap">
+        <Select
+          label="Период"
+          aria-label="Фильтр: период журнала"
+          data={AUDIT_PERIODS.map(({ value, label }) => ({ value, label }))}
+          value={period}
+          onChange={(value) => {
+            if (!value) return
+            setPeriod(value)
+            setPage(1)
+          }}
+          allowDeselect={false}
+          w={160}
+        />
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => {
+            setSortDesc((value) => !value)
+            setPage(1)
+          }}
+        >
+          Время: {sortDesc ? 'сначала новые ↓' : 'сначала старые ↑'}
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          component="a"
+          href={client.adminAuditExportUrl(since)}
+          download
+          aria-label="Выгрузить журнал в CSV"
+        >
+          Выгрузить CSV
+        </Button>
+        <Text size="xs" c="dimmed" role="status">
+          {total === null
+            ? 'считаем журнал…'
+            : `всего записей: ${total}${oldest ? `, самые старые от ${oldest}` : ''}`}
+        </Text>
+      </Group>
       <Table>
         <Table.Thead>
           <Table.Tr>

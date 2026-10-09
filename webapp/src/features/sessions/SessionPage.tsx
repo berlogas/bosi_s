@@ -116,7 +116,7 @@ export function SessionPage() {
         {detail.error instanceof Error ? detail.error.message : 'Сессия не найдена'}
         <Group mt="sm">
           <Button size="xs" variant="light" onClick={() => navigate('/')}>
-            ← Дашборд
+            ← Информационная панель
           </Button>
         </Group>
       </Alert>
@@ -187,7 +187,7 @@ export function SessionPage() {
             Архив
           </Button>
           <Button size="xs" variant="default" onClick={() => navigate('/')}>
-            ← Дашборд
+            ← Информационная панель
           </Button>
         </Group>
       </Group>

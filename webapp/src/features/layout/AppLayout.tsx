@@ -80,7 +80,7 @@ export function AppLayout() {
   const currentSessionPath = currentSessionMatch ? currentSessionMatch[0] : null
 
   const items = [
-    { to: '/', label: 'Дашборд', enabled: true },
+    { to: '/', label: 'Информационная панель', enabled: true },
     // «Текущая сессия» — та, что открыта сейчас (в Streamlit — state.current_session_id())
     {
       to: currentSessionPath ?? '',

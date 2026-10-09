@@ -96,8 +96,10 @@ describe('вход в приложение', () => {
     await userEvent.type(screen.getByLabelText('Пароль'), 'secret')
     await userEvent.click(screen.getByRole('button', { name: 'Войти' }))
 
-    // Дашборд после успешного входа (приёмка Фазы 0)
-    expect(await screen.findByRole('heading', { name: 'Дашборд' })).toBeInTheDocument()
+    // Информационная панель после успешного входа (приёмка Фазы 0)
+    expect(
+      await screen.findByRole('heading', { name: 'Информационная панель' }),
+    ).toBeInTheDocument()
     expect(screen.getByText('Здравствуйте, Иванов Иван Иванович!')).toBeInTheDocument()
 
     // Боковая панель: метка сборки и пользователь

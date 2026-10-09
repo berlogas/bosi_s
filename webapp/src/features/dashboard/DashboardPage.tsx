@@ -1,5 +1,5 @@
 /**
- * Дашборд — паритет Streamlit-версии dashboard.py (Фаза 1).
+ * Информационная панель (дашборд) — паритет Streamlit-версии dashboard.py (Фаза 1).
  *
  * Порядок блоков как в Streamlit: быстрый чат → активные задачи (поллинг
  * 2 с) → создание сессии → мои сессии (active) → «На паузе» → «Архив».
@@ -127,7 +127,7 @@ export function DashboardPage() {
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Title order={3}>Дашборд</Title>
+        <Title order={3}>Информационная панель</Title>
         {user && (
           <Text size="sm" c="dimmed">
             Здравствуйте, {displayName(user)}!

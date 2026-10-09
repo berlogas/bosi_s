@@ -364,9 +364,7 @@ describe('админка', () => {
     const row = loginInput.closest('tr') as HTMLElement
     expect(within(row).getByRole('button', { name: 'Сохранить' })).toBeDisabled()
     expect(within(row).getByText(/минимум 2 символа/)).toBeInTheDocument()
-    expect(
-      calls.find((c) => c.init.method === 'PATCH'),
-    ).toBeUndefined()
+    expect(calls.find((c) => c.init.method === 'PATCH')).toBeUndefined()
   })
 
   it('снятие активности шлёт PATCH с is_active=false', async () => {
@@ -433,7 +431,9 @@ describe('админка', () => {
 
     // предупреждение про каскад видно до отправки запроса
     expect(await screen.findByText(/Действие необратимо/)).toBeInTheDocument()
-    expect(screen.getByText(/сессии, сообщения, документы и проекты/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/сессии, сообщения, документы и проекты/),
+    ).toBeInTheDocument()
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false)
 
     await userEvent.click(screen.getByRole('button', { name: 'Удалить безвозвратно' }))
@@ -501,11 +501,11 @@ describe('админка', () => {
 
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Удалить безвозвратно' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Удалить безвозвратно' }),
+    )
 
-    expect(
-      await screen.findByText('Нельзя удалить самого себя'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Нельзя удалить самого себя')).toBeInTheDocument()
   })
 
   it('глобальная база: после загрузки файлов поле очищается', async () => {
@@ -517,14 +517,10 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await userEvent.click(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
 
     await screen.findByLabelText('Или файлы')
-    const fileInput = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
     await userEvent.upload(fileInput, new File(['x'], 'a.pdf'))
 
     const upload = screen.getByRole('button', { name: 'Загрузить' })
@@ -551,9 +547,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await userEvent.click(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
 
     const button = await screen.findByRole('button', {
       name: 'Запустить массовое добавление',
@@ -580,9 +574,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await userEvent.click(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
 
     const button = await screen.findByRole('button', {
       name: 'Запустить массовое добавление',
@@ -595,18 +587,14 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await userEvent.click(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
 
     expect(await screen.findByText('годовой отчёт.pdf')).toBeInTheDocument()
     expect(screen.getByText('принят')).toBeInTheDocument()
     expect(screen.getByText('отклонён')).toBeInTheDocument()
     // причина спрятана за «почему?» — по кнопке раскрывается
     await userEvent.click(screen.getByRole('button', { name: 'почему?' }))
-    expect(
-      screen.getByText('Неподдерживаемый тип файла: .jpg'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Неподдерживаемый тип файла: .jpg')).toBeInTheDocument()
   })
 
   it('«Пути через запятую» больше нет — ввод путей заменён папкой-приёмником', async () => {
@@ -614,9 +602,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await userEvent.click(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
 
     expect(
       screen.queryByLabelText('Пути через запятую или по одному в строке'),
@@ -632,9 +618,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
 
     renderApp()
-    await userEvent.click(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
 
     const reindex = await screen.findByRole('button', {
       name: 'Переиндексировать всё',
@@ -644,7 +628,9 @@ describe('админка', () => {
     const inboxHeading = screen.getByText('Массовое добавление')
     const order = documentsHeading.compareDocumentPosition(reindex)
     expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(inboxHeading.compareDocumentPosition(reindex) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      inboxHeading.compareDocumentPosition(reindex) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('глобальная база: добавление по пути и переиндексация', async () => {
@@ -677,7 +663,6 @@ describe('админка', () => {
     expect(await screen.findByText('Готово.')).toBeInTheDocument()
     expect(calls.some((c) => c.url.endsWith('/reindex'))).toBe(true)
   })
-
 
   it('вкладка Задачи: панель прогресса и ошибка задачи', async () => {
     loginAs(TEST_ADMIN)
@@ -748,27 +733,29 @@ describe('админка', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Сессии' }))
 
     // группы по логинам из списка пользователей (u-1=ivanov, u-2=petrov)
-    // (логины есть и в соседних вкладках/сайдбаре — ищем именно группы)
-    const group = await screen.findByRole('region', { name: /ivanov/ })
-    expect(group).toBeInTheDocument()
+    // (логины есть и в соседних вкладках/сайдбаре — ищем именно группы).
+    // Роль region есть и у Accordion.Item, и у его панели, поэтому берём
+    // группу от заголовка аккордеона, а не поиском по роли.
+    const control = await screen.findByRole('button', { name: /ivanov/ })
+    const group = control.closest('[role="region"]') as HTMLElement
+    expect(group).toHaveAttribute('aria-label', 'ivanov')
     expect(screen.getAllByText('petrov').length).toBeGreaterThan(0)
     expect(screen.getAllByText('1 сессия').length).toBeGreaterThan(0)
 
-    // внутри группы — таблица сессий; колонка «пользователь» убрана
-    await userEvent.click(screen.getByRole('button', { name: /ivanov/ }))
-    const table = await screen.findByRole('table')
-    const header = within(table)
+    // первая группа раскрыта по умолчанию: таблица видна сразу
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    // закрываем и раскрываем обратно — таблица восстанавливается
+    await userEvent.click(control)
+    expect(screen.queryByRole('table')).toBeNull()
+    await userEvent.click(control)
+    await screen.findByRole('table')
+    const table2 = await screen.findByRole('table')
+    const header = within(table2)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
-    expect(header).toEqual([
-      'id',
-      'название',
-      'статус',
-      'действие',
-      'активность',
-    ])
-    expect(within(table).getByText('abcdefgh')).toBeInTheDocument()
-    expect(within(table).getByText('2026-10-07 12:34')).toBeInTheDocument()
+    expect(header).toEqual(['id', 'название', 'статус', 'действие', 'активность'])
+    expect(within(table2).getByText('abcdefgh')).toBeInTheDocument()
+    expect(within(table2).getByText('2026-10-07 12:34')).toBeInTheDocument()
   })
 
   it('вкладка Аудит: сортировка по времени и ok', async () => {

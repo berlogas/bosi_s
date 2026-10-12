@@ -111,10 +111,28 @@ async def test_hybrid_returns_both_scopes(client, researcher, session_id,
                                           seeded) -> None:
     body = await _query(client, researcher, session_id, mode="hybrid")
 
-    scopes = {s["source_scope"] for s in body["sources"]}
-    assert scopes == {"global", "session"}
+    # Оба scope участвуют в поиске, но в списке источников остаются только те,
+    # на которые модель сослалась в ответе (заглушка цитирует только [1]).
+    cited = body["stats"]["citations"]["cited"]
+    assert set(cited) == {s["index"] for s in body["sources"]}
     assert body["stats"]["candidates"] > 0
     assert body["stats"]["selected"] == len(body["sources"])
+
+
+async def test_sources_only_cited_in_answer(client, researcher, session_id,
+                                            seeded) -> None:
+    """Документ, на который нет ссылки в ответе, в источниках не показывается."""
+    body = await _query(client, researcher, session_id, mode="hybrid",
+                        no_cache=True)
+
+    sources = body["sources"]
+    assert sources, "нужен хотя бы один источник"
+    cited = body["stats"]["citations"]["cited"]
+    assert cited
+    assert [s["index"] for s in sources] == cited
+    # нумерация источников остаётся исходной и совпадает с цитатами в тексте
+    assert f"[{sources[0]['index']}]" in body["answer"]
+    assert len({s["source_scope"] for s in sources}) == 1
 
 
 async def test_sources_are_marked_and_numbered(client, researcher, session_id,

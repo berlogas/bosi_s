@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from paperqa.prompts import CANNOT_ANSWER_PHRASE
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.core.errors import UpstreamError
 from app.db.models import Document, DocumentLink, DocumentStatus, SearchMode
 from app.services.answer_cache import (
@@ -63,6 +65,78 @@ REFUSAL_TEXT = (
     "В предоставленных источниках нет информации, чтобы ответить на этот "
     "вопрос. Уточните запрос или загрузите документы с нужными данными."
 )
+
+# Заголовки, которые paperqa жёстко вписывает в formatted_answer
+# (paperqa/types.py: `f"Question: {question}..."` и `f"\n\nReferences\n\n..."`).
+# Приложение русскоязычное, поэтому переводим их на выходе. Правка самого
+# ответа делается до repair_markers — тот работает по номерам [n] и заголовки
+# не трогает, но текст меняется уже после починки, чтобы отчёт о починке
+# показывал то, что видит пользователь.
+_HEADER_LABELS = {
+    "ru": (("References", "Ссылки"),),
+    "en": (),
+}
+
+
+def _localize_headers(text: str, language: str) -> str:
+    """Перевести служебный заголовок paperqa «References» на язык приложения.
+
+    Без `\s*$` в шаблоне: `\\s` съел бы и перевод строки, склеив заголовок с
+    текстом ответа. Пустые строки вокруг сохраняем — по ним Markdown режет
+    абзацы, без них ответ и список ссылок слипаются в одну строку.
+    """
+    if not text:
+        return text
+    for english, russian in _HEADER_LABELS.get((language or "ru").lower(), ()):
+        text = re.sub(rf"(?m)^{re.escape(english)}$", russian, text)
+    return text
+
+
+def _strip_question_header(text: str, question: str) -> str:
+    """Убрать повтор вопроса в начале ответа.
+
+    paperqa начинает `formatted_answer` со строки «Question: <вопрос>», но в чате
+    вопрос и так уже написан пользователем над ответом — в ответе он лишний.
+    Удаляем только если это действительно наш вопрос (совпадение по тексту):
+    иначе рискуем срезать первую строку содержательного ответа.
+    """
+    if not text or not question:
+        return text
+    lines = text.splitlines()
+    if not lines:
+        return text
+    first = lines[0].strip()
+    if not first.startswith("Question:"):
+        return text
+    echoed = first[len("Question:"):].strip()
+    if echoed != question.strip():
+        return text
+    rest = lines[1:]
+    while rest and not rest[0].strip():
+        rest.pop(0)
+    return "\n".join(rest)
+
+
+def _renumber_citations(text: str, used: list[int]) -> str:
+    """Сдвинуть маркеры `[old]` в `[new]` по порядку номеров `used`.
+
+    Учитывается и многoисточниковый формат «[4, 7]» — citation_guard собирает
+    именно его, когда модель ссылается на несколько документов одним маркером.
+
+    Замена делается одной регуляркой с подстановкой по словарю, а не цепочкой
+    `str.replace`: при последовательных заменах («4→1», затем «1→2») старые
+    номера затирали бы друг друга.
+    """
+    mapping = {old: new for new, old in enumerate(used, start=1)}
+
+    def _sub(match: re.Match[str]) -> str:
+        numbers = [int(part) for part in re.findall(r"\d{1,3}", match.group(1))]
+        if not all(number in mapping for number in numbers):
+            return match.group(0)
+        # «[4, 7]» — несколько источников в одном маркере: переносим вместе.
+        return "[" + ", ".join(str(mapping[number]) for number in numbers) + "]"
+
+    return re.sub(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]", _sub, text)
 
 
 def _apply_refusal(text: str) -> str | None:
@@ -102,9 +176,11 @@ class FusionResult:
 
 class RagFusionService:
     def __init__(self, registry: ServiceRegistry | None = None,
-                 cache: AnswerCache | None = None) -> None:
+                 cache: AnswerCache | None = None,
+                 app: Any | None = None) -> None:
         self.registry = registry or get_registry()
         self.cache = cache or get_answer_cache()
+        self._app = app or get_settings()
 
     # ------------------------------------------------------------- каталог
     @staticmethod
@@ -153,7 +229,9 @@ class RagFusionService:
         """
         catalog, stamp = self.load_catalog(db, session_id)
         candidates = await self._evidence(query, session_id, mode, k, catalog)
-        selected = merge_and_rerank(candidates, mode=mode, k=k, query=query)
+        selected = merge_and_rerank(
+            candidates, mode=mode, k=k, query=query,
+            min_relevance=self._app.evidence_min_relevance)
         sources = [source_dict(c, i + 1) for i, c in enumerate(selected)]
         stats = {"candidates": len(candidates), "selected": len(selected),
                  "stamp": stamp}
@@ -165,6 +243,15 @@ class RagFusionService:
         take = _evidence_k(k)
         tasks: list[Any] = []
 
+        # Коллекции наполняются в память лениво: при старте приложения
+        # восстанавливается только глобальная (main.lifespan), а сервис сессии
+        # создаётся при первом обращении и по умолчанию пуст. Без restore_state
+        # здесь поиск по сессии молча возвращает 0 кандидатов.
+        if mode is not SearchMode.session_only:
+            await self.registry.global_service().restore_state()
+        if session_id and mode is not SearchMode.global_only:
+            await self.registry.session_service(session_id).restore_state()
+
         if mode is not SearchMode.session_only:
             tasks.append(self.registry.global_service().get_evidence(query, k=take))
         if session_id and mode is not SearchMode.global_only:
@@ -175,19 +262,60 @@ class RagFusionService:
             return []
 
         scopes = []
+        services = []
         if mode is not SearchMode.session_only:
             scopes.append(SourceScope.GLOBAL)
+            services.append(self.registry.global_service())
         if session_id and mode is not SearchMode.global_only:
             scopes.append(SourceScope.SESSION)
+            services.append(self.registry.session_service(session_id))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         candidates: list[Candidate] = []
-        for scope, result in zip(scopes, results, strict=False):
+        for scope, service, result in zip(scopes, services, results, strict=False):
             if isinstance(result, BaseException):
                 log.warning("fusion: aget_evidence(%s) не удался: %s", scope.value, result)
                 continue
-            candidates.extend(build_candidates(result[1].contexts, scope, catalog))
+            contexts = result[1].contexts
+            await self._restore_relevance(service, query, contexts)
+            candidates.extend(build_candidates(contexts, scope, catalog))
+            log.info(
+                "fusion: retrieval[%s] вернул %d кандидатов (%s)",
+                scope.value,
+                len(contexts),
+                [c.docname or (c.context.text.doc.dockey or "")[:12]
+                 for c in candidates if c.scope is scope][:10],
+            )
         return candidates
+
+    @staticmethod
+    async def _restore_relevance(service, query: str,  # noqa: ANN001
+                                 contexts: list) -> None:
+        """Заменить синтетический score на косинус, когда сводки отключены.
+
+        При `EVIDENCE_SKIP_SUMMARY=true` paperqa не просит у LLM оценку
+        релевантности и ставит всем контекстам 5 — тогда `final_score` зависит
+        только от категории документа, и в выдачу одинаково попадают и
+        релевантные, и совершенно посторонние тексты. Считаем релевантность
+        сами по уже посчитанным при индексации эмбеддингам.
+        """
+        if not contexts or len({ctx.score for ctx in contexts}) > 1:
+            return  # оценки разные — значит, сводки отработали и оценка настоящая
+        scores = await service.embedding_relevance(query, contexts)
+        if not scores:
+            return
+        for ctx in contexts:
+            value = scores.get((str(ctx.text.doc.dockey), ctx.text.name))
+            if value is not None:
+                ctx.score = float(value) * 10.0  # шкала paperqa — 0..10
+
+        log.info(
+            "fusion: релевантность пересчитана по эмбеддингам для %d контекстов "
+            "(skip_summary=%s), top=%.2f",
+            len(contexts),
+            getattr(service.app, "evidence_skip_summary", None),
+            max(scores.values()),
+        )
 
     # ------------------------------------------------------------- ответ
     async def answer(
@@ -252,7 +380,9 @@ class RagFusionService:
 
         candidates = await self._evidence(query, session_id, mode, k, catalog)
         _stage(35, "переранжирование кандидатов")
-        selected = merge_and_rerank(candidates, mode=mode, k=k, query=query)
+        selected = merge_and_rerank(
+            candidates, mode=mode, k=k, query=query,
+            min_relevance=self._app.evidence_min_relevance)
 
         if not selected:
             return await self._answer_without_base(
@@ -287,8 +417,38 @@ class RagFusionService:
             answer.formatted_answer = formatted
             answer.answer, _ = repair_markers(answer.answer, len(sources),
                                               sources=sources)
+        # Служебные заголовки paperqa и повтор вопроса. Делаем после починки
+        # цитат: citation_guard оперирует номерами [n], но текст на выходе
+        # должен быть ровно таким, каким его увидит человек.
+        answer.formatted_answer = _strip_question_header(
+            answer.formatted_answer, query)
+        answer.formatted_answer = _localize_headers(
+            answer.formatted_answer, getattr(self._app, "answer_language", "ru"))
         if citation_report.changed or not citation_report.ok or citation_report.uncited:
             log.warning("fusion: цитаты в ответе: %s", citation_report.to_dict())
+
+        # Список источников показываем только по факту использования: документ,
+        # на который модель не сослалась, в ответе не участвует и в интерфейсе
+        # только мешает. После отсева перенумеровываем оставшиеся 1..N — иначе
+        # единственный показанный источник вышел бы как «[4]», что читается как
+        # баг. Перенумерация обязана затронуть и маркеры в тексте ответа,
+        # поэтому одной сменой индексов в sources не обойтись.
+        if citation_report.cited:
+            used = sorted(set(citation_report.cited))
+            filtered = [s for s in sources if s["index"] in used]
+            if 0 < len(filtered) < len(sources):
+                log.info("fusion: источников %d -> %d (в тексте ответа упомянуты %s)",
+                         len(sources), len(filtered), used)
+                if filtered[0]["index"] != 1 or len(used) != len(filtered):
+                    answer.formatted_answer = _renumber_citations(
+                        answer.formatted_answer, used)
+                    citation_report.cited = list(range(1, len(filtered) + 1))
+                for new_index, source in enumerate(filtered, start=1):
+                    source["index"] = new_index
+                sources = filtered
+                references = [reference_from_source(s) for s in filtered]
+        else:
+            log.info("fusion: в ответе нет маркеров [n] — показываем все источники")
 
         # Отказ paperqa («I cannot answer») — показываем по-русски и помечаем,
         # иначе пользователь видит англоязычную заглушку посреди ответа.
@@ -316,8 +476,9 @@ class RagFusionService:
         result = FusionResult(
             answer=answer, sources=sources, references=references,
             mode=mode, question=query,
-            stats={"candidates": len(candidates), "selected": len(selected),
-                   "seconds": round(answer.seconds, 2),
+            stats={"candidates": len(candidates), "selected": len(sources),
+                   "selected_before_citation_filter": len(selected),
+                   "seconds": round(answer.seconds),
                    "citations": citation_report.to_dict(),
                    "grounding": grounding.to_dict(),
                    "refusal": bool(refusal)},
@@ -386,7 +547,7 @@ class RagFusionService:
             question=query, answer=text, formatted_answer=text,
             citations=[], context=[], evidence=[],
             has_successful_answer=True, mode=mode.value,
-            seconds=round(time.perf_counter() - t0, 2), base_empty=True,
+            seconds=round(time.perf_counter() - t0), base_empty=True,
         )
         return FusionResult(
             answer=answer, sources=[], references=[], mode=mode,

@@ -48,6 +48,21 @@ def test_duplicate_numbers_in_marker_collapse() -> None:
     assert report.repaired == ["(источник 2, источник 2) → [2]"]
 
 
+def test_repaired_markers_do_not_reach_the_user() -> None:
+    """Починенная нами ссылка — не повод для предупреждения в интерфейсе.
+
+    Текст ответа уже корректен, пользователю нечего делать; подробности остаются
+    в `repaired` для логов и stats.
+    """
+    fixed, report = repair_markers("Факт (2b_context lines 0-47) и "
+                                   "(2b_context lines 0-47).",
+                                   source_count=3, sources=NAMED_SOURCES)
+
+    assert fixed.count("[1]") == 2
+    assert len(report.repaired) == 2
+    assert report.warnings == [], "журнал починки не должен пугать пользователя"
+
+
 @pytest.mark.parametrize("marker, expected", [
     ("(уровень 3)", "[3]"),
     ("(цитата 1)", "[1]"),
@@ -226,7 +241,7 @@ def test_named_marker_of_unknown_document_is_dropped() -> None:
 
     assert "no_such_file" not in fixed
     assert report.dropped == ["(no_such_file lines 0-0)"]
-    assert any("несуществующие" in w for w in report.warnings)
+    assert any("нет в списке" in w for w in report.warnings)
 
 
 def test_ordinary_parens_survive_named_pass() -> None:
@@ -378,3 +393,27 @@ def test_reference_entry_loses_colon_for_markdown() -> None:
     assert report.ok is True, "косметика не должна ломать ok"
     assert report.warnings == [], "пугать предупреждением некорректно"
     assert report.cited == [2, 3] and report.dangling == []
+
+
+def test_multi_document_marker_resolves_to_all_numbers() -> None:
+    """«(doc_a lines .., doc_b lines ..)» → «[1, 2]».
+
+    Модель ссылается на несколько источников одним маркером. Раньше такой
+    маркер не резолвился и удалялся вместе с цитатой — ответ терял ссылку.
+    """
+    fixed, report = repair_markers(
+        "Родилась в Штеттине (2b_context lines 0-47, hot_facts lines 0-12).",
+        source_count=3, sources=NAMED_SOURCES)
+
+    assert fixed.endswith("[1, 3].")
+    assert report.dropped == []
+    assert set(report.cited) == {1, 3}
+
+
+def test_multi_marker_with_unknown_part_is_not_guessed() -> None:
+    """Если часть не разрешилась, маркер не угадываем — удаляем целиком."""
+    _, report = repair_markers(
+        "Факт (2b_context lines 0-47, no_such_file lines 0-1).",
+        source_count=3, sources=NAMED_SOURCES)
+
+    assert report.dropped == ["(2b_context lines 0-47, no_such_file lines 0-1)"]

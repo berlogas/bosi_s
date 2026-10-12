@@ -40,14 +40,14 @@ def _text(text: str, dockey: str, docname: str, name: str = "1",
     return SimpleNamespace(text=text, name=name, doc=_doc(dockey, docname, citation))
 
 
-def _ctx(text: str, dockey: str, docname: str, score: int, name: str = "1",
+def _ctx(text: str, dockey: str, docname: str, score: float, name: str = "1",
          citation: str = "") -> SimpleNamespace:
     return SimpleNamespace(text=_text(text, dockey, docname, name, citation),
                            context=f"ctx:{text[:20]}", score=score)
 
 
 def _cand(scope: SourceScope, category: str | None, *, text: str = "хлорофилл",
-          dockey: str = "d", docname: str = "n", score: int = 10,
+          dockey: str = "d", docname: str = "n", score: float = 10,
           tags: tuple[str, ...] = (), projects: tuple[str, ...] = (),
           title: str | None = None, name: str = "1",
           citation: str = "") -> Candidate:
@@ -386,3 +386,71 @@ def test_build_reference_keeps_marker_first() -> None:
     from app.services.rag_fusion import build_reference
 
     assert build_reference("📁", 3, "Док (data)") == "📁 [3] Док (data)"
+
+
+def test_min_relevance_drops_candidates_after_merge() -> None:
+    """Порог релевантности применяется после слияния коллекций.
+
+    `raw_score` — это косинус, умноженный на 10 (так его проставляет
+    rag_service._restore_relevance при отключённых сводках), то есть шкала
+    0..10, а `min_relevance` задаётся в шкале 0..1.
+    """
+    cands = [
+        _cand(SourceScope.SESSION, DocumentCategory.temp_literature.value,
+              dockey="nap", docname="napoleon", score=8.7),
+        _cand(SourceScope.GLOBAL, DocumentCategory.global_knowledge.value,
+              dockey="pet", docname="peter", score=8.1),
+        _cand(SourceScope.GLOBAL, DocumentCategory.global_knowledge.value,
+              dockey="pet2", docname="peter2", score=8.5),
+    ]
+
+    # порог отключён — решает только приоритет категории
+    assert len(merge_and_rerank(cands, k=10)) == 3
+
+    # порог выше посторонних: остаётся только napoleon, несмотря на вес 0.4
+    # у global_knowledge против 0.6 у temp_literature
+    kept = merge_and_rerank(cands, k=10, min_relevance=0.86)
+    assert _dockeys(kept) == ["nap"]
+
+    # порог ниже всех — ничего не отсекает
+    assert len(merge_and_rerank(cands, k=10, min_relevance=0.5)) == 3
+
+
+def test_max_per_document_limits_chunks_of_one_document() -> None:
+    """Длинный документ не должен занимать всю выдачу."""
+    cands = [
+        _cand(SourceScope.SESSION, DocumentCategory.temp_literature.value,
+              dockey="nap", docname="napoleon", name=str(i), score=90 - i)
+        for i in range(6)
+    ]
+    cands.append(_cand(SourceScope.SESSION,
+                       DocumentCategory.notes.value,
+                       dockey="other", docname="notes", score=50))
+
+    kept = merge_and_rerank(cands, k=10)
+    assert _dockeys(kept).count("nap") == rf.MAX_CHUNKS_PER_DOCUMENT
+    assert "other" in _dockeys(kept)
+
+
+# ------------------------------------------------------- перенумерация цитат
+def test_renumber_citations_shifts_markers_after_filtering() -> None:
+    """После отсева нецитированных источники нумеруются 1..N, а маркеры в тексте
+    следуют за ними. Без этого единственный показанный источник вышел бы «[4]».
+    """
+    from app.services.rag_service import _renumber_citations
+
+    text = "Факт А [4]. Факт Б [7]. Факт В [1]. Вне списка [9]."
+    assert _renumber_citations(text, [4, 7]) == (
+        "Факт А [1]. Факт Б [2]. Факт В [1]. Вне списка [9].")
+
+    # номера не должны «затирать» друг друга (4→1 при уже существующем 1)
+    assert _renumber_citations("[1] и [4]", [1, 2, 4]) == "[1] и [3]"
+
+
+def test_renumber_citations_handles_multi_source_markers() -> None:
+    """citation_guard собирает «[1, 2]», когда модель сослалась на два документа."""
+    from app.services.rag_service import _renumber_citations
+
+    assert _renumber_citations("Факт [4, 7].", [4, 7]) == "Факт [1, 2]."
+    # неполное совпадение не трогаем: перенумеровывать половину маркера нельзя
+    assert _renumber_citations("Факт [4, 9].", [4, 7]) == "Факт [4, 9]."

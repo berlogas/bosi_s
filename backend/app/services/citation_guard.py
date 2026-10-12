@@ -254,6 +254,9 @@ def _repair_named_markers(text: str, sources: list[dict[str, Any]],
 
     Обычные скобки с дефисами — `(1772-1795)`, `(см. раздел lines)` — не
     трогаются: без хвоста «lines/pages N-M» это не маркер.
+
+    Маркер с несколькими документами через запятую разбирается по частям, и в
+    `[n]` попадают номера всех частей.
     """
     pages, by_doc = _source_lookup(sources)
 
@@ -262,6 +265,18 @@ def _repair_named_markers(text: str, sources: list[dict[str, Any]],
         if not _MARK_SUFFIX_RE.search(content):
             return match.group(0)
         original = match.group(0)
+
+        # Модель часто ссылается сразу на несколько источников одним маркером:
+        # «(doc_a lines 0-47, doc_b lines 0-23)». Раньше такой маркер не
+        # резолвился вовсе и удалялся вместе с цитатой — ответ терял ссылку
+        # на факт. Разбираем части по запятой и собираем список номеров.
+        if "," in content:
+            parts = [p.strip() for p in content.split(",") if p.strip()]
+            numbers = [_named_index(part, pages, by_doc)[0] for part in parts]
+            if all(n is not None for n in numbers) and len(set(numbers)) > 1:
+                fixed = "[" + ", ".join(str(n) for n in dict.fromkeys(numbers)) + "]"
+                report.repaired.append(f"{original} → {fixed}")
+                return fixed
 
         index, reason = _named_index(content, pages, by_doc)
         if index is not None:
@@ -391,19 +406,22 @@ def _repair_bare_markers(text: str, sources: list[dict[str, Any]],
 
 
 def _fill_warnings(report: CitationReport, source_count: int) -> None:
-    if report.repaired:
-        report.warnings.append(
-            f"Выдуманные маркеры цитат исправлены на [n]: "
-            f"{', '.join(report.repaired)}")
+    # Про `repaired` — сознательно НЕ попадает в `warnings`.
+    # Это запись о том, что мы САМИ починили ссылку: текст ответа уже корректен,
+    # пользователю нечего решать и не о чем беспокоиться. В интерфейсе такое
+    # сообщение выглядит тревожно и абсурдно («⚠️ исправлено», хотя всё в порядке).
+    # Подробности остаются в `repaired` — в логах и в stats для разбора.
     if report.dropped:
         report.warnings.append(
-            "Удалены ссылки на несуществующие источники: "
-            + ", ".join(report.dropped))
+            "Ответ ссылался на источник, которого нет в списке ("
+            + ", ".join(report.dropped) + " — ссылки убраны). "
+            "Факты из этих мест стоит перепроверить вручную.")
     if report.dangling:
         available = f"1..{source_count}" if source_count else "источников нет"
         report.warnings.append(
-            "Ссылки без источника (" + available + "): "
-            + ", ".join(f"[{n}]" for n in report.dangling))
+            f"В ответе есть номера источников вне списка ({available}): "
+            + ", ".join(f"[{n}]" for n in report.dangling)
+            + " — на них нельзя сослаться, факты стоит перепроверить.")
     # Источники нашлись, а ссылок в тексте нет вообще. Раньше этот случай
     # считался нормой, и пользователь видел голый ответ с «Источники» внизу,
     # не понимая, что проверять ему надо всё.

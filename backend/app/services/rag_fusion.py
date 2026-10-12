@@ -32,6 +32,7 @@ CPU-инференсе означает кратный рост времени �
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -42,6 +43,8 @@ from paperqa import Context, PQASession
 
 from app.db.models import DocumentCategory, SearchMode
 from app.services.types import SOURCE_MARK, ScoredChunk, SourceKind
+
+log = logging.getLogger("boasi.services.rag")
 
 # --------------------------------------------------------------------------- веса
 # Приоритет из ТЗ: проект 1.0 > project_data/draft 0.8 > temp_literature 0.6
@@ -66,6 +69,9 @@ SESSION_MISC_CATEGORIES = frozenset({
 TAG_MATCH_BONUS = 0.10
 PROJECT_LINK_BONUS = 0.05
 DEDUP_PENALTY = 0.50
+# Не больше двух фрагментов одного документа в выдаче (иначе список источников
+# перестаёт быть списком документов).
+MAX_CHUNKS_PER_DOCUMENT = 2
 
 _WORD_RE = re.compile(r"[\w\-]+", re.UNICODE)
 
@@ -250,24 +256,74 @@ def _dedup_key(candidate: Candidate) -> tuple[str, str, str]:
     return (candidate.dockey, candidate.name or "", candidate.text[:80].strip())
 
 
+def _describe(candidate: Candidate) -> dict[str, Any]:
+    return {
+        "scope": candidate.scope.value,
+        "docname": candidate.docname or None,
+        "category": candidate.meta.category,
+        "raw": round(candidate.raw_score, 3),
+        "priority": round(candidate.priority, 2),
+        "bonus": round(max(candidate.final_score - candidate.raw_score * candidate.priority
+                           + candidate.dedup_penalty, 0.0), 3),
+        "final": round(candidate.final_score, 3),
+        "dockey": (candidate.context.text.doc.dockey or "")[:12],
+    }
+
+
+def _log_rerank(kept: Sequence[Candidate], top: Sequence[Candidate],
+                *, k: int, query: str) -> None:
+    """Разбор выдачи: сколько кандидатов, из каких коллекций и с какими весами.
+
+    Нужен, чтобы отличить «документ не нашёл retrieval» от «нашёл, но срезал
+    rerank»: в обоих случаях в ответе источник отсутствует одинаково.
+    """
+    by_scope: dict[str, int] = {}
+    for candidate in kept:
+        key = candidate.scope.value
+        by_scope[key] = by_scope.get(key, 0) + 1
+
+    top_names = {id(c) for c in top}
+    dropped = [c for c in kept if id(c) not in top_names][:10]
+    log.info(
+        "fusion: кандидатов=%d (по коллекциям: %s), в выдачу попшло=%d из k=%d | query=%r",
+        len(kept), by_scope or "{}", len(top), k, query[:120],
+    )
+    for candidate in top[:k]:
+        log.info("fusion: ВЫБРАН %s", _describe(candidate))
+    for candidate in dropped:
+        log.info("fusion: отброшен %s", _describe(candidate))
+
+
 def merge_and_rerank(
     candidates: Sequence[Candidate],
     *,
     mode: SearchMode = SearchMode.hybrid,
     k: int = 10,
     query: str = "",
+    max_per_document: int = MAX_CHUNKS_PER_DOCUMENT,
+    min_relevance: float = 0.0,
 ) -> list[Candidate]:
     """Слить кандидатов из нескольких коллекций и выбрать top-k.
 
     Штраф за дубликат: если тот же фрагмент пришёл и из глобальной базы, и из
     сессии (пользователь загрузил копию статьи в сессию), вторая копия
     получает `DEDUP_PENALTY`, чтобы не занимать два места в выдаче.
+
+    `max_per_document` ограничивает число фрагментов одного документа: длинный
+    документ легко даёт половину выдачи (замер: 6 мест из 10 на вопрос о Наполеоне),
+    и список источников перестаёт показывать, какие документы вообще нашлись.
+
+    `min_relevance` — отсев по косинусу (`raw_score / 10`). Фильтр применяется
+    ПОСЛЕ слияния коллекций: отсекать внутри каждой коллекции бессмысленно,
+    освободившиеся места тут же забьёт другая коллекция.
     """
     query_tokens = stems(query)
 
     kept: list[Candidate] = []
     seen: dict[tuple[str, str, str], int] = {}
     for candidate in candidates:
+        if min_relevance > 0 and candidate.raw_score / 10.0 < min_relevance:
+            continue
         if not is_allowed(candidate.meta.category, candidate.scope, mode=mode,
                           project_linked=candidate.meta.is_project_linked):
             continue
@@ -280,12 +336,32 @@ def merge_and_rerank(
         kept.append(candidate)
 
     kept.sort(key=_sort_key)
-    top = kept[:k]
+    top = _limit_per_document(kept, k, max_per_document)
+
+    _log_rerank(kept, top, k=k, query=query)
 
     # после обрезки пересчитываем итог, чтобы штраф был виден в порядке
     for candidate in top:
         score_candidate(candidate, mode=mode, query_tokens=query_tokens)
     top.sort(key=_sort_key)
+    return top
+
+
+def _limit_per_document(kept: list[Candidate], k: int,
+                         max_per_document: int) -> list[Candidate]:
+    """Оставить не больше `max_per_document` лучших фрагментов каждого документа."""
+    if max_per_document <= 0:
+        return kept[:k]
+    used: dict[str, int] = {}
+    top: list[Candidate] = []
+    for candidate in kept:
+        if len(top) >= k:
+            break
+        seen = used.get(candidate.dockey, 0)
+        if seen >= max_per_document:
+            continue
+        used[candidate.dockey] = seen + 1
+        top.append(candidate)
     return top
 
 
@@ -333,6 +409,11 @@ def source_dict(candidate: Candidate, index: int) -> dict[str, Any]:
         "tags": list(meta.tags),
         "page": candidate.name,
         "score": candidate.final_score,
+        # Релевантность в 0..1 — то, что пользователю можно показать словами.
+        # `score` для этого не годится: это взвешенная оценка (релевантность ×
+        # вес категории + бонусы), и у одного и того же документа она тем выше,
+        # чем «важнее» его категория, а не чем он релевантнее вопросу.
+        "relevance": round(candidate.raw_score / 10.0, 3),
         "raw_score": candidate.raw_score,
         "priority": candidate.priority,
         "dedup_penalty": candidate.dedup_penalty,

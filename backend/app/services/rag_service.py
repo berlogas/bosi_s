@@ -257,7 +257,7 @@ class RagFusionService:
         candidates = await self._evidence(query, session_id, mode, k, catalog)
         selected = merge_and_rerank(
             candidates, mode=mode, k=k, query=query,
-            min_relevance=self._app.evidence_min_relevance)
+            min_relevance=self._app.evidence_min_relevance_score)
         sources = [source_dict(c, i + 1) for i, c in enumerate(selected)]
         stats = {"candidates": len(candidates), "selected": len(selected),
                  "stamp": stamp}
@@ -429,7 +429,7 @@ class RagFusionService:
         _stage(35, "переранжирование кандидатов")
         selected = merge_and_rerank(
             candidates, mode=mode, k=k, query=query,
-            min_relevance=self._app.evidence_min_relevance)
+            min_relevance=self._app.evidence_min_relevance_score)
 
         if not selected:
             return await self._answer_without_base(

@@ -90,12 +90,15 @@ class Settings(BaseSettings):
     summary_llm_model: str | None = None  # None -> llm_model
     embedding_model: str = "st-multi-qa-MiniLM-L6-cos-v1"
     evidence_k: int = 10
-    # Порог косинуса для отсева нерелевантных (0 = выключено). Включать только
-    # после замера на своей базе: у multilingual-e5-small на нашем корпусе
-    # релевантные документы дают 0.84-0.87, а посторонние 0.81-0.85, причём
-    # посторонние иногда выше релевантных (замер 2026-10-12, 6 вопросов).
-    # Абсолютный порог здесь отсекает живое вместе с мусором — см. .env.example.
-    evidence_min_relevance: float = 0.0
+    # Порог отсева слабо релевантных фрагментов; 0 = не отсекать.
+    # Шкала 0..1 — это relevance_score LLM, делённый на 10 (то есть 0.1
+    # соответствует штатному answer.evidence_relevance_score_cutoff=1 из
+    # PaperQA; оба порога действуют одновременно).
+    # При EVIDENCE_SKIP_SUMMARY=true оценки от LLM нет, и score синтетический
+    # (косинус × 10), поэтому в этом режиме параметр означает порог косинуса.
+    # ВНИМАНИЕ: на корпусе из 9 документов порог включать нельзя — диапазоны
+    # релевантных и посторонних фрагментов перекрываются (см. .env.example).
+    evidence_min_relevance_score: float = 0.0
     # Больше источников в самом ответе = больше проверяемого материала
     # для модели и для проверки обоснованности (стоимость — только prefill).
     answer_max_sources: int = 8
@@ -278,12 +281,12 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("evidence_min_relevance")
+    @field_validator("evidence_min_relevance_score")
     @classmethod
     def _check_relevance_range(cls, value: float) -> float:
         """Порог — доля от 1, вне диапазона он бессмысленен."""
         if not 0.0 <= value <= 1.0:
-            raise ValueError("EVIDENCE_MIN_RELEVANCE должен быть в диапазоне 0..1")
+            raise ValueError("EVIDENCE_MIN_RELEVANCE_SCORE должен быть в диапазоне 0..1")
         return value
 
     def validate_runtime(self) -> list[str]:
@@ -314,12 +317,15 @@ class Settings(BaseSettings):
                 "EVIDENCE_SKIP_SUMMARY=true: сырой текст в контексте вместо "
                 "LLM-сводок — быстрее и честнее, но с облачной моделью растёт "
                 "prefill (замер SPICE_REPORT: ответ 817 с).")
-        if self.evidence_min_relevance > 0:
+        if self.evidence_min_relevance_score > 0:
             warnings.append(
-                f"EVIDENCE_MIN_RELEVANCE={self.evidence_min_relevance}: отсекаются "
-                "фрагменты с меньшим косинусом. У multilingual-e5-small релевантные "
-                "документы держатся в 0.84-0.87, а посторонние — 0.81-0.85, поэтому "
-                "порог выше 0.82 рискует отсечь нужное.")
+                f"EVIDENCE_MIN_RELEVANCE_SCORE={self.evidence_min_relevance_score}: "
+                "отсекаются фрагменты с меньшим relevance_score. Учтите, что "
+                "одновременно действует штатный порог PaperQA "
+                "(answer.evidence_relevance_score_cutoff), выставляемый из этого "
+                "же значения: фактический отсев — больший из двух. На корпусе "
+                "из 9 документов диапазоны релевантных и посторонних фрагментов "
+                "перекрываются, и порог выше 0.82 рискует отсечь нужное.")
         if self.allow_external_import_paths:
             warnings.append("ALLOW_EXTERNAL_IMPORT_PATHS=true: импорт файлов "
                             "разрешён вне каталога данных.")

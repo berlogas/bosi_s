@@ -143,19 +143,19 @@ def test_evidence_skip_summary_defaults_off_and_merges_when_on() -> None:
     assert fast.answer.max_concurrent_requests == app.max_concurrent_requests
 
 
-def test_evidence_min_relevance_is_off_by_default_and_validated() -> None:
+def test_evidence_min_relevance_score_is_off_by_default_and_validated() -> None:
     # 0 = порог не применяется: на текущем корпусе абсолютный порог отсекает
     # релевантное вместе с посторонним (см. комментарий в config.py).
-    assert AppSettings(secret_key="x" * 48).evidence_min_relevance == 0.0
+    assert AppSettings(secret_key="x" * 48).evidence_min_relevance_score == 0.0
     quiet = AppSettings(secret_key="x" * 48)
-    assert not any("EVIDENCE_MIN_RELEVANCE" in w for w in quiet.validate_runtime())
+    assert not any("EVIDENCE_MIN_RELEVANCE_SCORE" in w for w in quiet.validate_runtime())
 
-    noisy = AppSettings(secret_key="x" * 48, evidence_min_relevance=0.9)
-    assert any("EVIDENCE_MIN_RELEVANCE" in w for w in noisy.validate_runtime())
+    noisy = AppSettings(secret_key="x" * 48, evidence_min_relevance_score=0.9)
+    assert any("EVIDENCE_MIN_RELEVANCE_SCORE" in w for w in noisy.validate_runtime())
 
     for bad in (1.5, -0.1):
         with pytest.raises(ValidationError):
-            AppSettings(secret_key="x" * 48, evidence_min_relevance=bad)
+            AppSettings(secret_key="x" * 48, evidence_min_relevance_score=bad)
 
 
 def test_validate_runtime_warns_about_skip_summary() -> None:
@@ -191,3 +191,21 @@ def test_refusal_rule_allows_partial_answer() -> None:
     assert "FACT REQUIREMENT" in RU_RULE
 
     assert "If NO context fragment" in _QA_GROUNDING
+
+
+def test_min_relevance_score_drives_paperqa_cutoff() -> None:
+    """Наш порог выставляется в штатный `evidence_relevance_score_cutoff`.
+
+    Два порога отсекают контексты независимо: наш работает до rerank,
+    встроенный — при сборке контекста (`settings.py:1223`). Если выставлять
+    только наш, фактический отсев остаётся `max(наш, 0.1)` из-за дефолта
+    PaperQA, и получить «порог ниже 0.1» невозможно. Шкалы различаются в 10 раз.
+    """
+    off = build_pqa_settings(_app(evidence_min_relevance_score=0.0))
+    assert off.answer.evidence_relevance_score_cutoff == 0
+
+    tenth = build_pqa_settings(_app(evidence_min_relevance_score=0.1))
+    assert tenth.answer.evidence_relevance_score_cutoff == 1
+
+    high = build_pqa_settings(_app(evidence_min_relevance_score=0.86))
+    assert high.answer.evidence_relevance_score_cutoff == 9

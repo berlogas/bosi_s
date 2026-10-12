@@ -227,6 +227,12 @@ def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Sett
             # Сводка не из сырого текста: пропуск даёт огромный prefill
             # (замер SPICE_REPORT: ответ 817 с) — только по явному флагу.
             "evidence_skip_summary": app.evidence_skip_summary,
+            # Штатный порог PaperQA: оставить контексты с relevance_score >= N
+            # (settings.py:1223). Выставляем из нашей настройки, чтобы два
+            # порога не расходились: наш работает до rerank, встроенный — при
+            # сборке контекста. Наш — в шкале 0..1, здесь нужна целая шкала 0..10.
+            "evidence_relevance_score_cutoff": round(
+                app.evidence_min_relevance_score * 10),
             # Ollama на CPU последователен: параллельные запросы дают очередь в минуты
             "max_concurrent_requests": app.max_concurrent_requests,
         },

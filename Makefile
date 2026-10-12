@@ -3,7 +3,7 @@ PY ?= .venv/Scripts/python.exe
 PYTHON ?= .venv/Scripts/python      # Linux/macOS
 BACKEND := backend
 
-.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup backup-verify backup-config restore restore-list pull-models reindex reindex-all metrics health bootstrap reset-plan reset-data reset-users reset-all
+.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup backup-verify backup-config restore restore-list pull-models reindex reindex-all profile metrics health bootstrap reset-plan reset-data reset-users reset-all
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -24,7 +24,7 @@ lint: ## статическая проверка (ruff)
 	$(PY) -m ruff check $(BACKEND)/app $(BACKEND)/tests
 
 warm-embedding: ## заранее скачать модель эмбеддингов в HF_HOME (для оффлайн-запуска)
-	$(PY) -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('st-multi-qa-MiniLM-L6-cos-v1'); print('ok')"
+	$(PY) -c "import os; from app.config import get_settings; from sentence_transformers import SentenceTransformer; name=get_settings().embedding_model.removeprefix('st-'); print('качаю', name); SentenceTransformer(name); print('ok')"
 
 run: ## запустить backend локально
 	cd $(BACKEND) && ../$(PY) -m uvicorn app.main:app --reload --port 8000
@@ -50,6 +50,9 @@ reindex: ## переиндексация глобальной базы
 
 reindex-all: ## переиндексация всех коллекций (global + сессии), нужно после смены EMBEDDING_MODEL
 	cd $(BACKEND) && ../$(PY) scripts_reindex.py
+
+profile: ## разложить время ответа по этапам: make profile Q="вопрос" SESSION_ID=...
+	cd $(BACKEND) && ../$(PY) scripts/profile_answer.py "$(Q)" --repeat $(or $(REPEAT),3) $(if $(SESSION_ID),--session-id $(SESSION_ID),)
 
 metrics: ## показать метрики платформы
 	@curl -fsS http://127.0.0.1:8000/api/metrics.json || echo "backend не запущен"

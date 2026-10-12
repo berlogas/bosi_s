@@ -449,13 +449,14 @@ class PaperQA2Service:
         query: str,
         k: int | None = None,
         doc_filter: Any | None = None,
+        skip_summary: bool | None = None,
     ) -> tuple[list[ScoredChunk], PQASession]:
         """Найти контекст без генерации ответа.
 
         Возвращает и чанки, и саму `PQASession`: её можно передать в :meth:`ask`,
         чтобы не искать контекст второй раз (Фаза 0: 374 с -> 118 с на dev-машине).
         """
-        settings = self._settings_with_k(k)
+        settings = self._settings_with_k(k, skip_summary)
         async with self.read_lock:
             session = await self.docs.aget_evidence(
                 query, settings=settings, **self._summary_llm_kwargs(),
@@ -593,10 +594,16 @@ class PaperQA2Service:
         return {"documents": documents, "chunks": chunks, "seconds": round(elapsed, 1)}
 
     # ------------------------------------------------------------------ helpers
-    def _settings_with_k(self, k: int | None) -> Settings:
-        if k is None or k == self.app.evidence_k:
+    def _settings_with_k(self, k: int | None,
+                         skip_summary: bool | None = None) -> Settings:
+        overrides: dict[str, Any] = {}
+        if k is not None and k != self.app.evidence_k:
+            overrides["evidence_k"] = k
+        if skip_summary is not None:
+            overrides["evidence_skip_summary"] = skip_summary
+        if not overrides:
             return self.pqa_settings
-        return build_pqa_settings(self.app, answer={"evidence_k": k})
+        return build_pqa_settings(self.app, answer=overrides)
 
     def _settings_with_sources(self, max_sources: int | None) -> Settings:
         if max_sources is None or max_sources == self.app.answer_max_sources:

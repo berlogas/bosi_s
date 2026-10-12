@@ -33,8 +33,16 @@ def normalize_query(text: str) -> str:
     return _NORMALIZE_RE.sub(" ", (text or "").strip().lower())
 
 
-def index_stamp(session_id: str | None, doc_count: int, chunk_count: int) -> str:
-    return f"{session_id or '-'}:{doc_count}:{chunk_count}"
+def index_stamp(session_id: str | None, doc_count: int, chunk_count: int,
+                config: str | None = None) -> str:
+    """Отпечаток того, на чём стоит закэшированный ответ.
+
+    `config` — отпечаток настроек (промпты, модель, размер чанков). Без него
+    правка промпта не сбрасывала кэш, и пользователь получал старый ответ,
+    посчитанный по прежним правилам: после исправления правила отказа
+    закэшированные отказы продолжали выдаваться (замер 2026-10-12).
+    """
+    return f"{session_id or '-'}:{doc_count}:{chunk_count}:{config or '-'}"
 
 
 def make_key(*, session_id: str | None, mode: str, query: str, stamp: str) -> str:

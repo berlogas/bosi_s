@@ -42,7 +42,7 @@ from app.services.citation_guard import repair_markers
 from app.services.generation import parse_citations
 from app.services.grounding import check_grounding
 from app.services.paperqa_service import ServiceRegistry, get_registry
-from app.services.pqa_profile import build_pqa_settings
+from app.services.pqa_profile import build_pqa_settings, settings_fingerprint
 from app.services.rag_fusion import (
     Candidate,
     DocumentCatalog,
@@ -165,7 +165,11 @@ def _apply_refusal(text: str) -> str | None:
 # больше, чем останется в выдаче. Лишние кандидаты бесплатны — они уже в
 # индексе, повторного поиска не происходит.
 def _evidence_k(k: int) -> int:
-    return max(k, 20) if k >= 5 else max(k * 2, 10)
+    # Каждый фрагмент сверх отсева уходит в LLM на сводку (≈7 с на облаке),
+    # поэтому раздувать take дорого: 20 сводок на коллекцию давали 120 с на
+    # вопрос. 12 — эмпирическая середина: хватает, чтобы нужный фрагмент
+    # попал в выдачу, и заметно дешевле.
+    return max(k, 12) if k >= 5 else max(k * 2, 10)
 
 
 @dataclass
@@ -198,10 +202,15 @@ class RagFusionService:
         self.registry = registry or get_registry()
         self.cache = cache or get_answer_cache()
         self._app = app or get_settings()
+        # Отпечаток настроек входит в ключ кэша: правка промпта или смена модели
+        # обязана делать старые ответы недействительными, иначе пользователь
+        # продолжает получать ответ по прежним правилам.
+        self._config_stamp = settings_fingerprint(build_pqa_settings(self._app))
 
     # ------------------------------------------------------------- каталог
     @staticmethod
-    def load_catalog(db: Session, session_id: str | None) -> tuple[DocumentCatalog, str]:
+    def load_catalog(db: Session, session_id: str | None,
+                     config: str | None = None) -> tuple[DocumentCatalog, str]:
         """Собрать метаданные документов (сессии + глобальные) и отпечаток индекса."""
         scope = (
             select(Document).where(
@@ -226,7 +235,7 @@ class RagFusionService:
 
         catalog = DocumentCatalog.from_rows(rows, projects_by_document)
         chunks = sum(row.chunks_count or 0 for row in rows)
-        stamp = index_stamp(session_id, len(rows), chunks)
+        stamp = index_stamp(session_id, len(rows), chunks, config)
         return catalog, stamp
 
     # ------------------------------------------------------------- поиск
@@ -244,7 +253,7 @@ class RagFusionService:
         Нужен Фазе 7: генератор разделов сам строит промпт со своими
         правилами цитирования, а не отдаёт вопрос PaperQA.
         """
-        catalog, stamp = self.load_catalog(db, session_id)
+        catalog, stamp = self.load_catalog(db, session_id, self._config_stamp)
         candidates = await self._evidence(query, session_id, mode, k, catalog)
         selected = merge_and_rerank(
             candidates, mode=mode, k=k, query=query,
@@ -256,7 +265,27 @@ class RagFusionService:
 
     async def _evidence(self, query: str, session_id: str | None, mode: SearchMode,
                         k: int, catalog: DocumentCatalog) -> list[Candidate]:
-        """Параллельно собрать кандидаты из разрешённых режимом коллекций."""
+        """Параллельно собрать кандидаты из разрешённых режимом коллекций.
+
+        Режим сводок (`EVIDENCE_SKIP_SUMMARY=false`) — рекомендация PaperQA, но
+        он опирается на `relevance_score` от LLM. С облачной моделью оценка
+        нестабильна: нередко приходит 0, и paperqa отбрасывает ВСЕ контексты
+        (`c.score > 0` в docs.py), запрос при этом тратит время впустую
+        (замер 2026-10-12: 83 с и 0 кандидатов). Поэтому при пустом результате
+        делаем один повтор без сводок — тогда релевантность считается по
+        эмбеддингам (см. _restore_relevance). Медленно, но не «н��т данных».
+        """
+        candidates = await self._evidence_once(query, session_id, mode, k, catalog,
+                                                skip_summary=None)
+        if candidates or self._app.evidence_skip_summary:
+            return candidates
+        log.warning("fusion: сводки не дали ни одного контекста — повтор без них")
+        return await self._evidence_once(query, session_id, mode, k, catalog,
+                                         skip_summary=True)
+
+    async def _evidence_once(self, query: str, session_id: str | None,
+                             mode: SearchMode, k: int, catalog: DocumentCatalog,
+                             skip_summary: bool | None) -> list[Candidate]:
         take = _evidence_k(k)
         tasks: list[Any] = []
 
@@ -270,10 +299,11 @@ class RagFusionService:
             await self.registry.session_service(session_id).restore_state()
 
         if mode is not SearchMode.session_only:
-            tasks.append(self.registry.global_service().get_evidence(query, k=take))
+            tasks.append(self.registry.global_service().get_evidence(
+                query, k=take, skip_summary=skip_summary))
         if session_id and mode is not SearchMode.global_only:
             tasks.append(self.registry.session_service(session_id).get_evidence(
-                query, k=take))
+                query, k=take, skip_summary=skip_summary))
 
         if not tasks:
             return []
@@ -358,7 +388,7 @@ class RagFusionService:
             if on_stage is not None:
                 on_stage(percent, label)
 
-        catalog, stamp = self.load_catalog(db, session_id)
+        catalog, stamp = self.load_catalog(db, session_id, self._config_stamp)
 
         if use_cache:
             cached = await self.cache.get_or_none(

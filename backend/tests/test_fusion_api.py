@@ -12,7 +12,13 @@ from __future__ import annotations
 
 import pytest
 
+from app.db.models import SearchMode
+from app.services.rag_fusion import DocumentCatalog
 from tests.conftest import StubLLMModel, login_headers
+
+
+def _empty_catalog() -> DocumentCatalog:
+    return DocumentCatalog()
 
 
 @pytest.fixture
@@ -228,9 +234,10 @@ async def test_ready_context_skips_second_search(client, researcher, session_id,
     calls: list[int] = []
     original = PaperQA2Service.get_evidence
 
-    async def counting(self, query, k=None, doc_filter=None):
+    async def counting(self, query, k=None, doc_filter=None, skip_summary=None):
         calls.append(1)
-        return await original(self, query, k=k, doc_filter=doc_filter)
+        return await original(self, query, k=k, doc_filter=doc_filter,
+                              skip_summary=skip_summary)
 
     monkeypatch.setattr(PaperQA2Service, "get_evidence", counting)
 
@@ -380,3 +387,71 @@ async def test_on_stage_reports_growing_progress(db, seeded, session_id) -> None
     assert percents, "fusion не сообщил ни одного этапа"
     assert percents == sorted(percents), percents
     assert any("LLM" in label for _, label in seen), seen
+
+
+async def test_summary_fallback_when_llm_scores_everything_zero(
+        service_app, monkeypatch) -> None:
+    """Пустой результат сводок → один повтор без них.
+
+    Режим сводок (рекомендация PaperQA) опирается на `relevance_score` от LLM.
+    Облачная модель часто ставит 0, и paperqa отбрасывает все контексты, потратив
+    время впустую. Тогда делаем один повтор без сводок — релевантность считается
+    по эмбеддингам.
+    """
+    from app.services.rag_service import RagFusionService
+
+    calls: list[bool | None] = []
+
+    async def fake_once(self, query, session_id, mode, k, catalog, skip_summary):
+        calls.append(skip_summary)
+        return [] if skip_summary is None else ["fallback-ok"]
+
+    monkeypatch.setattr(RagFusionService, "_evidence_once", fake_once)
+    service = RagFusionService(app=service_app)
+
+    result = await service._evidence("вопрос", "sid", SearchMode.hybrid, 10,
+                                     _empty_catalog())
+
+    assert calls == [None, True], "сначала сводки, затем повтор без них"
+    assert result == ["fallback-ok"]
+
+
+async def test_no_fallback_when_summaries_returned_something(
+        service_app, monkeypatch) -> None:
+    """Если сводки дали результат, повтор не делаем — лишних вызовов не нужно."""
+    from app.services.rag_service import RagFusionService
+
+    calls: list[bool | None] = []
+
+    async def fake_once(self, query, session_id, mode, k, catalog, skip_summary):
+        calls.append(skip_summary)
+        return ["ok"]
+
+    monkeypatch.setattr(RagFusionService, "_evidence_once", fake_once)
+    service = RagFusionService(app=service_app)
+
+    result = await service._evidence("вопрос", "sid", SearchMode.hybrid, 10,
+                                     _empty_catalog())
+
+    assert calls == [None]
+    assert result == ["ok"]
+
+
+async def test_no_fallback_when_skip_summary_is_configured(
+        service_app, monkeypatch) -> None:
+    """Если сводки выключены конфигом, повтор делать нечего."""
+    from app.services.rag_service import RagFusionService
+
+    calls: list[bool | None] = []
+
+    async def fake_once(self, query, session_id, mode, k, catalog, skip_summary):
+        calls.append(skip_summary)
+        return []
+
+    monkeypatch.setattr(RagFusionService, "_evidence_once", fake_once)
+    service = RagFusionService(app=service_app.model_copy(
+        update={"evidence_skip_summary": True}))
+
+    await service._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
+
+    assert calls == [None]

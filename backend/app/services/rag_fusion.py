@@ -69,9 +69,13 @@ SESSION_MISC_CATEGORIES = frozenset({
 TAG_MATCH_BONUS = 0.10
 PROJECT_LINK_BONUS = 0.05
 DEDUP_PENALTY = 0.50
-# Не больше двух фрагментов одного документа в выдаче (иначе список источников
-# перестаёт быть списком документов).
-MAX_CHUNKS_PER_DOCUMENT = 2
+# Один документ не должен занимать всю выдачу, но жёсткий предел в 2 фрагмента
+# вредил качеству: сильно релевантный третий фрагмент (замер: вопрос о маршалах
+# Наполеона — релевантность 0.808 против 0.789 у посторонних документов)
+# отбрасывался, а вместо него в выдачу попадали чужие тексты. Поэтому не
+# отсекаем, а понижаем вес каждого следующего фрагмента документа.
+MAX_CHUNKS_PER_DOCUMENT = 4
+SAME_DOCUMENT_DECAY = 0.85
 
 _WORD_RE = re.compile(r"[\w\-]+", re.UNICODE)
 
@@ -343,6 +347,7 @@ def merge_and_rerank(
     # после обрезки пересчитываем итог, чтобы штраф был виден в порядке
     for candidate in top:
         score_candidate(candidate, mode=mode, query_tokens=query_tokens)
+    _apply_document_decay(top, query)
     top.sort(key=_sort_key)
     return top
 
@@ -362,6 +367,26 @@ def _limit_per_document(kept: list[Candidate], k: int,
             continue
         used[candidate.dockey] = seen + 1
         top.append(candidate)
+    return top
+
+
+def _apply_document_decay(top: list[Candidate], query: str) -> list[Candidate]:
+    """Понизить вес каждого следующего фрагмента одного документа.
+
+    Замена жёсткому ограничению «2 фрагмента на документ»: тот выкидывал
+    релевантные куски нужного документа в пользу чужих (замер: вопрос о маршалах
+    Наполеона — релевантность 0.808 у нужного чанка против 0.789 у посторонних).
+    Здесь третий фрагмент получает вес 0.85, четвёртый — 0.72, и если он заметно
+    релевантнее чужих — всё равно попадёт в выдачу.
+
+    Вызывается ПОСЛЕ пересчёта `final_score`, иначе тот затрёт множитель.
+    """
+    seen: dict[str, int] = {}
+    for candidate in top:
+        count = seen.get(candidate.dockey, 0)
+        seen[candidate.dockey] = count + 1
+        if count:
+            candidate.final_score *= SAME_DOCUMENT_DECAY ** count
     return top
 
 

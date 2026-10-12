@@ -39,6 +39,7 @@ from app.services.answer_cache import (
     index_stamp,
 )
 from app.services.citation_guard import repair_markers
+from app.services.generation import parse_citations
 from app.services.grounding import check_grounding
 from app.services.paperqa_service import ServiceRegistry, get_registry
 from app.services.pqa_profile import build_pqa_settings
@@ -137,6 +138,22 @@ def _renumber_citations(text: str, used: list[int]) -> str:
         return "[" + ", ".join(str(mapping[number]) for number in numbers) + "]"
 
     return re.sub(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]", _sub, text)
+
+
+def _strip_references_block(text: str) -> str:
+    """Убрать служебный список литературы в конце ответа paperqa.
+
+    PaperQA дописывает в `formatted_answer` блок «References» со списком ключей
+    (types.py:522). В интерфейсе тот же список показывается отдельным блоком
+    «Источники» — и он полнее: с областью хранения, категорией и
+    релевантностью. Дубликат убираем, экономя место; маркеры `[n]` внутри
+    самого ответа остаются, они и нужны для связи утверждения с источником.
+    """
+    for heading in ("References", "Ссылки"):
+        match = re.search(rf"(?m)^{heading}\s*$", text)
+        if match and match.start() > 0:
+            return text[:match.start()].rstrip() + "\n"
+    return text
 
 
 def _apply_refusal(text: str) -> str | None:
@@ -424,6 +441,13 @@ class RagFusionService:
             answer.formatted_answer, query)
         answer.formatted_answer = _localize_headers(
             answer.formatted_answer, getattr(self._app, "answer_language", "ru"))
+        answer.formatted_answer = _strip_references_block(
+            answer.formatted_answer)
+        # Цитаты пересчитываем ПОСЛЕ удаления блока литературы: номера, которые
+        # встречались только в нём, не должны считаться процитированными в
+        # ответе, иначе в списке источников появятся документы, на которые
+        # сам текст не ссылается.
+        citation_report.cited = parse_citations(answer.formatted_answer)
         if citation_report.changed or not citation_report.ok or citation_report.uncited:
             log.warning("fusion: цитаты в ответе: %s", citation_report.to_dict())
 
@@ -457,6 +481,16 @@ class RagFusionService:
             answer.formatted_answer = refusal
             answer.answer = refusal
             answer.has_successful_answer = False
+            # Модель честно сказала, что в базе нет ответа. Показывать 10 найденных
+            # документов, на которые она не сослалась, бессмысленно: они не имеют
+            # отношения к ответу, а выглядит как «вот что мы нашли вместо ответа».
+            # Список очищаем, и предупреждение «ответ без ссылок» снимаем —
+            # при отказе отсутствие ссылок это норма, а не проблема.
+            sources = []
+            references = []
+            citation_report.uncited = False
+            citation_report.warnings = [
+                w for w in citation_report.warnings if "без ссылок" not in w]
 
         # Обоснованность: сущности ответа против найденного контекста.
         # Ловит выдуманные факты («дочерью Петра I»), которых нет в источниках,
@@ -466,6 +500,14 @@ class RagFusionService:
         grounding = check_grounding(answer.formatted_answer, contexts)
         if not grounding.ok:
             log.warning("fusion: обоснованность ответа: %s", grounding.to_dict())
+
+        # Флаг успеха приводим в соответствие с фактическим текстом: paperqa
+        # помечает ответ неуспешным по своим внутренним правилам, а после
+        # перевода отказа в русский текст (и тем более при частичном ответе
+        # «в контексте упомянуто только…») флаг уезжает в False. В API и кэш
+        # уходит именно он, поэтому здесь — единственное место, где он честен.
+        if not refusal and answer.formatted_answer.strip():
+            answer.has_successful_answer = True
 
         # источники нумеруем и приклеиваем ссылки к тексту ответа
         answer.citations = references

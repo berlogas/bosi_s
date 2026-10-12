@@ -454,3 +454,57 @@ def test_renumber_citations_handles_multi_source_markers() -> None:
     assert _renumber_citations("Факт [4, 7].", [4, 7]) == "Факт [1, 2]."
     # неполное совпадение не трогаем: перенумеровывать половину маркера нельзя
     assert _renumber_citations("Факт [4, 9].", [4, 7]) == "Факт [4, 9]."
+
+
+# ------------------------------------------- удаление дубля списка источников
+def test_strip_references_block_removes_paperqa_bibliography() -> None:
+    """Блок литературы paperqa дублирует список источников в интерфейсе."""
+    from app.services.rag_service import _strip_references_block
+
+    text = "Факт [1].\n\nСсылки\n\n1. [1] doc_a\n\n2. [2] doc_b"
+    assert _strip_references_block(text) == "Факт [1].\n"
+
+
+def test_strip_references_block_keeps_answer_without_bibliography() -> None:
+    """Без блока литературы и заголовка в тексте — ничего не трогаем."""
+    from app.services.rag_service import _strip_references_block
+
+    for text in ("Факт [1].", "Список источников обсуждается ниже.", ""):
+        assert _strip_references_block(text) == text
+
+
+def test_strip_references_block_does_not_eat_word_in_prose() -> None:
+    """Заголовок ищется только как отдельная строка: слово «Ссылки» внутри
+    предложения не должно обрезать ответ."""
+    from app.services.rag_service import _strip_references_block
+
+    text = "См. ссылки ниже.\n\nИ ещё абзац."
+    assert _strip_references_block(text) == text
+
+
+def test_document_decay_lets_relevant_chunk_outrank_foreign_documents() -> None:
+    """Регрессия: вопрос о маршалах Наполеона.
+
+    Нужный третий фрагмент документа (косинус 0.808) проигрывал постороннему
+    тексту (0.789), потому что жёсткий предел в 2 фрагмента на документ его
+    отбрасывал. Затухание вместо отсечения возвращает его в выдачу.
+    """
+    session, glob = SourceScope.SESSION, SourceScope.GLOBAL
+    nap = DocumentCategory.temp_literature.value
+    globcat = DocumentCategory.global_knowledge.value
+    cands = [
+        _cand(session, nap, dockey="nap", docname="napoleon",
+              name="a", score=8.32),
+        _cand(session, nap, dockey="nap", docname="napoleon",
+              name="b", score=8.22),
+        # третий фрагмент того же документа — тот самый вопрос про маршалов
+        _cand(session, nap, dockey="nap", docname="napoleon",
+              name="c", score=8.08),
+        _cand(glob, globcat, dockey="elizabeth", docname="elizabeth",
+              score=7.89),
+    ]
+
+    kept = _dockeys(merge_and_rerank(cands, k=10, query="маршалы Наполеона"))
+    assert kept.count("nap") == 3, "нужный фрагмент не должен теряться"
+    # посторонний документ при этом всё равно проигрывает нужному чанку
+    assert kept[-1] == "elizabeth"

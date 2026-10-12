@@ -79,12 +79,23 @@ class Settings(BaseSettings):
 
     # ---------- LLM / эмбеддинги (единственный источник правды для paper-qa) ----------
     ollama_base_url: str = "http://localhost:11434"
+    # Облачный провайдер (OpenAI-совместимый): если задан LLM_API_BASE,
+    # вместо ollama_base_url используется он, а ключ берётся из LLM_API_KEY.
+    # Пример: LLM_API_BASE=https://api.atria-asi.ai/v1, LLM_MODEL=openai/Atria-Dawn-Preview
+    llm_api_base: str | None = None
+    llm_api_key: str | None = None
     llm_model: str = "ollama/qwen2.5:3b"  # в бою — более мощная модель, меняется здесь
     llm_timeout_seconds: int = 3600  # большой таймаут обязателен на медленном inference
     llm_max_retries: int = 2
     summary_llm_model: str | None = None  # None -> llm_model
     embedding_model: str = "st-multi-qa-MiniLM-L6-cos-v1"
     evidence_k: int = 10
+    # Порог косинуса для отсева нерелевантных (0 = выключено). Включать только
+    # после замера на своей базе: у multilingual-e5-small на нашем корпусе
+    # релевантные документы дают 0.84-0.87, а посторонние 0.81-0.85, причём
+    # посторонние иногда выше релевантных (замер 2026-10-12, 6 вопросов).
+    # Абсолютный порог здесь отсекает живое вместе с мусором — см. .env.example.
+    evidence_min_relevance: float = 0.0
     # Больше источников в самом ответе = больше проверяемого материала
     # для модели и для проверки обоснованности (стоимость — только prefill).
     answer_max_sources: int = 8
@@ -231,6 +242,11 @@ class Settings(BaseSettings):
         return self.backup_dir or (PROJECT_ROOT / "backups")
 
     @property
+    def resolved_llm_api_base(self) -> str:
+        """Облачный endpoint, если настроен, иначе локальный Ollama."""
+        return self.llm_api_base or self.ollama_base_url
+
+    @property
     def resolved_summary_llm(self) -> str:
         return self.summary_llm_model or self.llm_model
 
@@ -252,7 +268,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "database_url", "db_path", "pqa_home", "summary_llm_model", "prompts_system",
-        "prompts_qa",
+        "prompts_qa", "llm_api_base", "llm_api_key",
         mode="before",
     )
     @classmethod
@@ -260,6 +276,14 @@ class Settings(BaseSettings):
         """Пустая переменная в .env означает «не задано», а не пустую строку."""
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("evidence_min_relevance")
+    @classmethod
+    def _check_relevance_range(cls, value: float) -> float:
+        """Порог — доля от 1, вне диапазона он бессмысленен."""
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("EVIDENCE_MIN_RELEVANCE должен быть в диапазоне 0..1")
         return value
 
     def validate_runtime(self) -> list[str]:
@@ -287,8 +311,15 @@ class Settings(BaseSettings):
                                 "к Crossref/Semantic Scholar.")
         if self.evidence_skip_summary:
             warnings.append(
-                "EVIDENCE_SKIP_SUMMARY=true: сырой текст в контексте даёт "
-                "огромный prefill (замер SPICE_REPORT: ответ 817 с).")
+                "EVIDENCE_SKIP_SUMMARY=true: сырой текст в контексте вместо "
+                "LLM-сводок — быстрее и честнее, но с облачной моделью растёт "
+                "prefill (замер SPICE_REPORT: ответ 817 с).")
+        if self.evidence_min_relevance > 0:
+            warnings.append(
+                f"EVIDENCE_MIN_RELEVANCE={self.evidence_min_relevance}: отсекаются "
+                "фрагменты с меньшим косинусом. У multilingual-e5-small релевантные "
+                "документы держатся в 0.84-0.87, а посторонние — 0.81-0.85, поэтому "
+                "порог выше 0.82 рискует отсечь нужное.")
         if self.allow_external_import_paths:
             warnings.append("ALLOW_EXTERNAL_IMPORT_PATHS=true: импорт файлов "
                             "разрешён вне каталога данных.")

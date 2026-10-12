@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
 from typing import Any
 
 from paperqa import Settings
@@ -25,6 +27,29 @@ from paperqa.prompts import CANNOT_ANSWER_PHRASE
 from paperqa.settings import MultimodalOptions, PromptSettings
 
 from app.config import Settings as AppSettings
+
+
+@lru_cache(maxsize=8)
+def _cached_embedding_model(embedding: str, config_json: str) -> Any:
+    """Один экземпляр модели эмбеддингов на процесс.
+
+    `Settings.get_embedding_model()` создаёт новый объект на каждый вызов, а
+    `SentenceTransformerEmbeddingModel` каждый раз заново читает веса с диска:
+    на запрос это десятки лишних загрузок (замер 2026-10-12 — 12 раз).
+    Ключ кэша — имя модели плюс её конфиг, поэтому смена `EMBEDDING_MODEL`
+    или `embedding_config` даёт новый экземпляр.
+    """
+    from lmi.embeddings import embedding_model_factory
+
+    return embedding_model_factory(embedding, **json.loads(config_json))
+
+
+def get_embedding_model(app: AppSettings) -> Any:
+    """Модель эмбеддингов из настроек boasi_s (общая для всех сервисов)."""
+    return _cached_embedding_model(
+        app.embedding_model,
+        json.dumps({}, sort_keys=True),
+    )
 
 # Правило языка добавляется к дефолтному system-промпту paperqa.
 RU_RULE = (
@@ -36,7 +61,9 @@ RU_RULE = (
     "ключей контекста вида (pqac-1a2b3c4d) — ровно тех, что перечислены в списке "
     "Valid Keys. Свои обозначения запрещены: никаких «(степень 1)», «(степень 1, "
     "степень 2)», «(уровень 2)», «(источник 3)», «(1)» и «[1]» — это не ссылки и они "
-    "будут отброшены. Если подходящего ключа в контексте нет — не ставь скобки вообще.\n"
+    "будут отброшены. Служебные имена фрагментов из контекста тоже запрещены: "
+    "«(имя_файла.md lines 10-44)», «(document lines 0-44)», «(page 3)». "
+    "Если подходящего ключа в контексте нет — не ставь скобки вообще.\n"
     "FACT REQUIREMENT (обязательно): опирайся ТОЛЬКО на факты, прямо указанные в "
     "контексте выше. Не добавляй даты, имена, родственные связи, числа и события из "
     "своей памяти: если этого нет в контексте — не пиши. Если контекста не хватает, "
@@ -50,7 +77,9 @@ EN_RULE = (
     "CITATION REQUIREMENT (mandatory): put citations in parentheses ONLY with the "
     "context keys like (pqac-1a2b3c4d) — exactly the keys listed under Valid Keys. "
     "Invent nothing: no '(degree 1)', '(source 2)', '(1)' or '[1]' — those are not "
-    "citations and will be discarded. If no key fits the claim, omit parentheses.\n"
+    "citations and will be discarded. Never cite file names, document names, "
+    "fragment names or line ranges such as '(report.md lines 10-44)' or '(page 3)'. "
+    "If no key fits the claim, omit parentheses.\n"
     "FACT REQUIREMENT (mandatory): use ONLY facts explicitly stated in the context "
     "above. Never add dates, names, kinship, numbers or events from your own "
     "knowledge — if it is not in the context, do not write it. If the context is "
@@ -77,7 +106,15 @@ _QA_GROUNDING = (
     f'- If the context is insufficient, reply exactly "{CANNOT_ANSWER_PHRASE}."\n'
     "- Answer directly and briefly: no introduction, no conclusions, no filler "
     "and no article structure. This answer will be used directly, so do not add "
-    "any extraneous information."
+    "any extraneous information.\n"
+    # Модель регулярно подхватывает из контекста служебное имя фрагмента
+    # («(napoleon_bonaparte_context lines 0-44)») вместо ключа — ссылки не
+    # распознаются и правятся постфактум regex (см. citation_guard). Здесь же
+    # запрещаем и имён файлов, и диапазонов строк.
+    "- Cite with the context keys ONLY, e.g. (pqac-1a2b3c4d) — the ones listed "
+    "under Valid Keys. Never cite a file name, a document name, a fragment name "
+    "or a line range: no \"(report.md)\", no \"(document lines 10-44)\", no "
+    "\"(page 3)\". Such markers are discarded as broken links."
 )
 
 _built: dict[str, Settings] = {}
@@ -101,16 +138,19 @@ def _merge(payload: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]
 def build_llm_config(app: AppSettings) -> dict[str, Any]:
     """Legacy-форма llm_config, совместимая с валидатором paperqa."""
     model = app.llm_model
+    params: dict[str, Any] = {
+        "model": model,
+        "api_base": app.resolved_llm_api_base,
+        "timeout": app.llm_timeout_seconds,
+        "max_retries": app.llm_max_retries,
+    }
+    if app.llm_api_key:
+        params["api_key"] = app.llm_api_key
     return {
         "model_list": [
             {
                 "model_name": model,
-                "litellm_params": {
-                    "model": model,
-                    "api_base": app.ollama_base_url,
-                    "timeout": app.llm_timeout_seconds,
-                    "max_retries": app.llm_max_retries,
-                },
+                "litellm_params": params,
             }
         ]
     }

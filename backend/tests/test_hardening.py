@@ -254,7 +254,12 @@ def test_placeholder_secret_key_is_rejected() -> None:
 def test_good_secret_key_passes() -> None:
     from app.config import Settings
 
-    settings = Settings(secret_key="x" * 48)
+    # `_env_file=None` недостаточно: `huggingface_hub.utils._dotenv` (подтягивается
+    # через sentence-transformers -> paperqa) вызывает `load_dotenv` при импорте,
+    # поэтому переменные локального .env уже лежат в os.environ и запрещаются флагом
+    # явно — тест проверяет чистую конфигурацию, а не машину разработчика.
+    settings = Settings(_env_file=None, evidence_skip_summary=False,
+                        secret_key="x" * 48)
     assert settings.validate_runtime() == []
 
 

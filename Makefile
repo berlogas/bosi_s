@@ -3,7 +3,7 @@ PY ?= .venv/Scripts/python.exe
 PYTHON ?= .venv/Scripts/python      # Linux/macOS
 BACKEND := backend
 
-.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup backup-verify backup-config restore restore-list pull-models reindex metrics health bootstrap reset-plan reset-data reset-users reset-all
+.PHONY: help venv install test test-integration lint warm-embedding run migrate models up down logs backup backup-verify backup-config restore restore-list pull-models reindex reindex-all metrics health bootstrap reset-plan reset-data reset-users reset-all
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -47,6 +47,9 @@ pull-models: ## предзагрузить модели Ollama в том (для
 reindex: ## переиндексация глобальной базы
 	curl -fsS -X POST http://127.0.0.1:8000/api/admin/documents/reindex 	  -H "Authorization: Bearer $$ADMIN_TOKEN" || echo "нужен ADMIN_TOKEN"
 	@echo "см. docs/OPERATIONS.md"
+
+reindex-all: ## переиндексация всех коллекций (global + сессии), нужно после смены EMBEDDING_MODEL
+	cd $(BACKEND) && ../$(PY) scripts_reindex.py
 
 metrics: ## показать метрики платформы
 	@curl -fsS http://127.0.0.1:8000/api/metrics.json || echo "backend не запущен"

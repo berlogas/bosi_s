@@ -42,7 +42,11 @@ from app.config import get_settings
 from app.core.errors import DocumentProcessingError, UpstreamError
 from app.core.locks import locks
 from app.services.chunk_store import ChunkStore, SqliteChunkStore
-from app.services.pqa_profile import build_pqa_settings, settings_fingerprint
+from app.services.pqa_profile import (
+    build_pqa_settings,
+    get_embedding_model,
+    settings_fingerprint,
+)
 from app.services.pqa_readers import install_utf8_parser
 from app.services.types import (
     SOURCE_MARK,
@@ -132,6 +136,14 @@ class PaperQA2Service:
         if self._llm_model is None:
             return {}
         return {"llm_model": self._llm_model, "summary_llm_model": self._llm_model}
+
+    def _embedding_kwargs(self) -> dict[str, Any]:
+        """Общая модель эмбеддингов вместо новой на каждый вызов paperqa.
+
+        Без этого `Settings.get_embedding_model()` создаёт экземпляр заново, а
+        `SentenceTransformer` каждый раз заново читает веса с диска.
+        """
+        return {"embedding_model": get_embedding_model(self.app)}
 
     def make_citation(self, path: Path, title: str | None = None) -> str:
         """Цитата для не-публикаций (PaperQA не умеет цитировать код/таблицы сам)."""
@@ -229,6 +241,7 @@ class PaperQA2Service:
                 docname=docname,
                 settings=self.pqa_settings,
                 **self._llm_kwargs(),
+                **self._embedding_kwargs(),
             )
             elapsed = time.perf_counter() - t0
             new_keys = set(self.docs.docs) - before
@@ -446,6 +459,7 @@ class PaperQA2Service:
         async with self.read_lock:
             session = await self.docs.aget_evidence(
                 query, settings=settings, **self._summary_llm_kwargs(),
+                **self._embedding_kwargs(),
             )
         return self._to_chunks(session.contexts), session
 
@@ -467,7 +481,9 @@ class PaperQA2Service:
         pqa_settings = settings or self._settings_with_sources(max_sources)
         t0 = time.perf_counter()
         async with self.read_lock:
-            result = await self.docs.aquery(query, settings=pqa_settings, **self._query_kwargs())
+            result = await self.docs.aquery(
+                query, settings=pqa_settings, **self._query_kwargs(),
+                **self._embedding_kwargs())
         elapsed = time.perf_counter() - t0
 
         return AnswerResult(
@@ -481,7 +497,10 @@ class PaperQA2Service:
             cost=result.cost,
             token_counts=dict(result.token_counts or {}),
             mode=mode,
-            seconds=elapsed,
+            # Время ответа наружу — целыми секундами. Сырой float вида
+            # 12.157697999999073 в API, БД и логах выглядит как мусор, а
+            # разница меньше секунды для пользователя ничего не значит.
+            seconds=round(elapsed),
             used_context=reuse,
         )
 
@@ -527,7 +546,8 @@ class PaperQA2Service:
                     continue
                 try:
                     ok = await self.docs.aadd_texts(
-                        item.texts, item.doc, self.pqa_settings)
+                        item.texts, item.doc, self.pqa_settings,
+                        **self._embedding_kwargs())
                 except Exception as exc:
                     log.error("restore_state: %s пропущен: %s", item.docname, exc)
                     continue
@@ -558,7 +578,9 @@ class PaperQA2Service:
                     for text in texts:
                         text.embedding = None
                 try:
-                    ok = await self.docs.aadd_texts(texts, item.doc, self.pqa_settings)
+                    ok = await self.docs.aadd_texts(
+                        texts, item.doc, self.pqa_settings,
+                        **self._embedding_kwargs())
                 except Exception as exc:
                     log.error("rebuild_index: %s пропущен: %s", item.docname, exc)
                     continue
@@ -603,6 +625,43 @@ class PaperQA2Service:
     def _page_count(self, texts: list[Any]) -> int | None:
         pages = {t.name for t in texts if t.name and t.name.isdigit()}
         return len(pages) or None
+
+    async def embedding_relevance(
+        self, question: str, contexts: Iterable[Context],
+    ) -> dict[tuple[str, str], float]:
+        """Косинус вопроса к каждому контексту (0..1).
+
+        Нужен при `evidence_skip_summary=true`: тогда paperqa не спрашивает у LLM
+        `relevance_score` и проставляет всем контекстам синтетическую 5, из-за чего
+        ранжирование теряет релевантность целиком и в выдачу попадают любые
+        документы коллекции. Эмбеддинги текстов уже посчитаны при индексации,
+        поэтому стоимость — один вызов модели на вопрос.
+        """
+        wanted: dict[tuple[str, str], Context] = {
+            (str(ctx.text.doc.dockey), ctx.text.name): ctx for ctx in contexts}
+        if not wanted:
+            return {}
+
+        vectors: dict[tuple[str, str], list[float]] = {}
+        for text in self.docs.texts:
+            key = (str(text.doc.dockey), text.name)
+            if key in wanted and text.embedding is not None:
+                vectors[key] = text.embedding
+
+        if not vectors:
+            return {}
+
+        import numpy as np
+
+        model = get_embedding_model(self.app)
+        query_vector = (await model.embed_documents([question]))[0]
+        scores: dict[tuple[str, str], float] = {}
+        for key, vector in vectors.items():
+            left = np.asarray(query_vector, dtype=float)
+            right = np.asarray(vector, dtype=float)
+            denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+            scores[key] = float(left @ right / denominator) if denominator else 0.0
+        return scores
 
     def _to_chunks(self, contexts: list[Context]) -> list[ScoredChunk]:
         chunks: list[ScoredChunk] = []

@@ -17,6 +17,15 @@ router = APIRouter(prefix="/api", tags=["system"])
 
 
 async def _check_ollama(settings) -> dict[str, Any]:  # noqa: ANN001
+    # В облачном режиме локальный Ollama не нужен — не считаем это ошибкой.
+    if settings.llm_api_base:
+        return {
+            "reachable": True,
+            "cloud": True,
+            "models": [],
+            "llm_model_present": True,
+            "wanted_model": settings.llm_model,
+        }
     url = f"{settings.ollama_base_url.rstrip('/')}/api/tags"
     try:
         # trust_env=False: системный прокси Windows/VPN не должен

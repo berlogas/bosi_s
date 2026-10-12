@@ -66,7 +66,9 @@ class CachedAnswer:
         return cls(answer=str(raw.get("answer", "")),
                    sources=list(raw.get("sources") or []),
                    citations=list(raw.get("citations") or []),
-                   seconds=float(raw.get("seconds") or 0.0),
+                   # Записи, записанные до округления, могли сохранить сырой
+                   # float (12.157697999999073) — нормализуем на чтении.
+                   seconds=round(float(raw.get("seconds") or 0.0)),
                    created_at=float(raw.get("created_at") or 0.0),
                    checks=dict(checks) if isinstance(checks, dict) else None)
 

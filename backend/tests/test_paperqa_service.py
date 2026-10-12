@@ -256,7 +256,7 @@ def test_settings_keep_phase0_invariants(service_app) -> None:
     assert list(settings.llm_config) == ["model_list"]
     params = settings.llm_config["model_list"][0]["litellm_params"]
     assert params["timeout"] == service_app.llm_timeout_seconds
-    assert params["api_base"] == service_app.ollama_base_url
+    assert params["api_base"] == service_app.resolved_llm_api_base
     assert settings.embedding == "st-multi-qa-MiniLM-L6-cos-v1"
     assert settings.parsing.use_doc_details is False
     assert settings.parsing.reader_config == {

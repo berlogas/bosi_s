@@ -17,6 +17,7 @@ import pytest
 from paperqa import Settings as PqaSettings
 from paperqa.prompts import CANNOT_ANSWER_PHRASE
 from paperqa.settings import PromptSettings
+from pydantic import ValidationError
 
 from app.config import Settings as AppSettings
 from app.services import pqa_profile
@@ -129,7 +130,9 @@ def test_settings_keep_generation_narrow() -> None:
 
 
 def test_evidence_skip_summary_defaults_off_and_merges_when_on() -> None:
-    app = _app()
+    # `_env_file=None`: тест проверяет дефолт и merge-логику, а не содержимое
+    # локального .env, где флаг может быть включён осознанно.
+    app = _app(evidence_skip_summary=False)
     settings = build_pqa_settings(app)
     assert settings.answer.evidence_skip_summary is False
 
@@ -138,6 +141,21 @@ def test_evidence_skip_summary_defaults_off_and_merges_when_on() -> None:
     # переопределение одного ключа не должно терять соседи подраздела
     assert fast.answer.evidence_k == app.evidence_k
     assert fast.answer.max_concurrent_requests == app.max_concurrent_requests
+
+
+def test_evidence_min_relevance_is_off_by_default_and_validated() -> None:
+    # 0 = порог не применяется: на текущем корпусе абсолютный порог отсекает
+    # релевантное вместе с посторонним (см. комментарий в config.py).
+    assert AppSettings(secret_key="x" * 48).evidence_min_relevance == 0.0
+    quiet = AppSettings(secret_key="x" * 48)
+    assert not any("EVIDENCE_MIN_RELEVANCE" in w for w in quiet.validate_runtime())
+
+    noisy = AppSettings(secret_key="x" * 48, evidence_min_relevance=0.9)
+    assert any("EVIDENCE_MIN_RELEVANCE" in w for w in noisy.validate_runtime())
+
+    for bad in (1.5, -0.1):
+        with pytest.raises(ValidationError):
+            AppSettings(secret_key="x" * 48, evidence_min_relevance=bad)
 
 
 def test_validate_runtime_warns_about_skip_summary() -> None:

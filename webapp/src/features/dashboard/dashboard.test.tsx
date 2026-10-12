@@ -289,6 +289,7 @@ describe('дашборд: быстрый чат', () => {
             title: 'Данные GF/F',
             category: 'global_knowledge',
             score: 0.87,
+            relevance: 0.87,
           },
         ],
         references: ['📚 [1] Данные GF/F (глобальная база)'],
@@ -311,10 +312,12 @@ describe('дашборд: быстрый чат', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Спросить' }))
 
     expect(await screen.findByText(/Ответ по GF\/F/)).toBeInTheDocument()
-    // заголовок источника (внутри <b>) и его строка со score — отдельными
-    // матчами: RTL сравнивает прямые текстовые узлы, сквозной regex не сработает
+    // В UI показывается релевантность («релевантность 87%»), а не взвешенный
+    // score ранжирования: у глобального источника score = relevance × 0.4,
+    // и эти числа не совпадают.
     expect(screen.getAllByText(/Данные GF\/F/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/score 0\.87/)).toBeInTheDocument()
+    expect(screen.getByText(/релевантность 87%/)).toBeInTheDocument()
+    expect(screen.queryByText(/score /)).not.toBeInTheDocument()
 
     // подсказки уточнений (до 4)
     expect(await screen.findByText('Можно уточнить:')).toBeInTheDocument()

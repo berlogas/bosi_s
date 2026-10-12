@@ -8,9 +8,10 @@ import type { RenderResult } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MantineProvider } from '@mantine/core'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AnswerView } from './AnswerView'
+import { MarkdownText } from './MarkdownText'
 
 /** компоненты используют Mantine — без провайдера рендер падает */
 function render(ui: ReactElement): RenderResult {
@@ -120,5 +121,41 @@ describe('AnswerView', () => {
     render(<AnswerView answer={{ answer: '', base_empty: true, from_cache: true }} />)
     expect(screen.getByText(/в базе знаний нет документов/)).toBeInTheDocument()
     expect(screen.getByText('Ответ взят из кэша')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Плотная вёрстка ответа: стандартные margin абзацев съедали место, а ответ
+ * почти всегда состоит из пары абзацев и списка ссылок.
+ */
+describe('MarkdownText: компактные отступы', () => {
+  const answer = 'Текст ответа [1].\n\nСсылки\n\n1. [1] napoleon_bonaparte_context'
+  // Рендер внутри beforeEach: авто-cleanup Testing Library вычищает DOM после
+  // каждого теста, поэтому рендер на уровне describe остался бы пустым.
+  let container: HTMLElement
+  beforeEach(() => {
+    container = rtlRender(
+      <MantineProvider>
+        <MarkdownText text={answer} />
+      </MantineProvider>,
+    ).container
+  })
+
+  it('у абзацев нет собственных вертикальных отступов', () => {
+    for (const p of Array.from(container.querySelectorAll('p'))) {
+      expect((p as HTMLElement).style.margin).toBe('0px')
+    }
+  })
+
+  it('у списка источников обнулены отступы', () => {
+    const list = container.querySelector('ol') as HTMLElement | null
+    expect(list, 'нумерованный список источников должен рендериться').not.toBeNull()
+    expect(list!.style.margin).toBe('0px')
+  })
+
+  it('блоки разнесены малым фиксированным интервалом', () => {
+    const root = container.querySelector('div[style*="flex"]') as HTMLElement | null
+    expect(root, 'контейнер с плотной вёрсткой должен быть').not.toBeNull()
+    expect(root!.style.gap).toBe('2px')
   })
 })

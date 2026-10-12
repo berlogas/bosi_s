@@ -17,6 +17,15 @@ const SCOPE_LABELS = {
   session: 'сессия',
 } as const
 
+/** Категории, которые просто повторяют область хранения — не показываем. */
+const REDUNDANT_CATEGORIES = new Set(['global_knowledge'])
+
+/** «релевантность 87%» из 0..1; без значения — ничего не показываем. */
+function relevanceLabel(value: number | undefined): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return ''
+  return `релевантность ${Math.round(value * 100)}%`
+}
+
 export function SourceList({
   sources,
   highlight = null,
@@ -47,6 +56,10 @@ export function SourceList({
       {sources.map((source) => {
         const label = source.title || source.docname || source.dockey || 'без названия'
         const scope = SCOPE_LABELS[source.source_scope] ?? 'сессия'
+        const category = REDUNDANT_CATEGORIES.has(source.category ?? '')
+          ? null
+          : categoryLabel(source.category)
+        const relevance = relevanceLabel(source.relevance)
         const active = highlight === source.index
         return (
           <Text
@@ -60,9 +73,9 @@ export function SourceList({
               onHighlight ? () => onHighlight(active ? null : source.index) : undefined
             }
           >
-            {source.marker} <code>[{source.index}]</code> <b>{label}</b> — {scope},{' '}
-            {categoryLabel(source.category)}, score{' '}
-            {Number(source.score ?? 0).toFixed(2)}
+            {source.marker} <code>[{source.index}]</code> <b>{label}</b> — {scope}
+            {category ? `, ${category}` : ''}
+            {relevance ? `, ${relevance}` : ''}
           </Text>
         )
       })}

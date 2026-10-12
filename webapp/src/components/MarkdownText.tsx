@@ -19,6 +19,19 @@ import ReactMarkdown from 'react-markdown'
 /** «1. [2]: doc» → «1. [2] doc» — убираем двоеточие после сноски. */
 const REF_ENTRY_RE = /^([ \t]*\d+\.)[ \t]+\[([0-9]+)\]:/gm
 
+/**
+ * Плотная вёрстка ответа: стандартные `margin` абзацев (~1em сверху и снизу)
+ * давали в ответе из двух абзацев и списка ссылок почти треть пустого экрана.
+ * Отступ задаётся один раз здесь, а у абзацев обнуляется (см. `p` ниже).
+ */
+const COMPACT: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '2px',
+  lineHeight: 1.45,
+}
+const COMPACT_LIST: React.CSSProperties = { margin: 0, paddingLeft: '1.4em' }
+
 export function mdSafeReferences(text: string): string {
   return text.replace(REF_ENTRY_RE, '$1 [$2]')
 }
@@ -90,10 +103,26 @@ export function MarkdownText({
   onCitation?: (index: number) => void
 }) {
   return (
+    <div style={COMPACT}>
     <ReactMarkdown
       rehypePlugins={[rehypeSanitize]}
       remarkPlugins={[remarkCitations]}
       components={{
+        // Абзацы ответа не должны разъезжаться пустыми интервалами: в тексте
+        // ответа их обычно два-три, и вертикальные отступы съедали треть
+        // экрана. Верхний отступ оставляем у первого и у заголовков секций,
+        // чтобы структура «ответ → ссылки» всё ещё читалась.
+        p({ children }: { children?: ReactNode }) {
+          return <p style={{ margin: 0, padding: 0 }}>{children}</p>
+        },
+        // Список источников — тоже источник вертикального места: у списка по
+        // умолчанию свой margin сверху и снизу плюс отступ маркеров.
+        ol({ children }: { children?: ReactNode }) {
+          return <ol style={COMPACT_LIST}>{children}</ol>
+        },
+        ul({ children }: { children?: ReactNode }) {
+          return <ul style={COMPACT_LIST}>{children}</ul>
+        },
         a({ href, children }: { href?: string; children?: ReactNode }) {
           const match = href?.match(/^#src-(\d+)$/)
           if (match && onCitation) {
@@ -116,5 +145,6 @@ export function MarkdownText({
     >
       {mdSafeReferences(text)}
     </ReactMarkdown>
+    </div>
   )
 }

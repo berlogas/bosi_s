@@ -120,7 +120,10 @@ export interface AnswerSource {
   category?: string | null
   tags?: string[]
   page?: string | null
+  /** Взвешенная оценка ранжирования (видна в API, в UI не показывается). */
   score?: number
+  /** Релевантность 0..1: насколько документ отвечает на вопрос. */
+  relevance?: number
   [key: string]: unknown
 }
 

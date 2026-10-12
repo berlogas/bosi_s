@@ -66,9 +66,18 @@ RU_RULE = (
     "Если подходящего ключа в контексте нет — не ставь скобки вообще.\n"
     "FACT REQUIREMENT (обязательно): опирайся ТОЛЬКО на факты, прямо указанные в "
     "контексте выше. Не добавляй даты, имена, родственные связи, числа и события из "
-    "своей памяти: если этого нет в контексте — не пиши. Если контекста не хватает, "
-    f"ответь ровно: «{CANNOT_ANSWER_PHRASE}.» Отвечай коротко и по существу — без "
-    "вступлений, выводов и «научно-статьных» фраз."
+    "своей памяти: если этого нет в контексте — не пиши. Отвечай коротко и по "
+    "существу — без вступлений, выводов и «научно-статьных» фраз.\n"
+    # Отказ должен быть исключением, а не страховкой: на пограничных вопросах
+    # модель отказывалась, хотя релевантный фрагмент был в контексте (замер
+    # 2026-10-12: «что мы знаем о Кутузове?» — текст про Кутузова в контексте,
+    # косинус 0.815, ответом был отказ).
+    f"REFUSAL RULE: отказывайся только если НИ ОДИН фрагмент контекста не "
+    f"содержит сведений по вопросу — тогда ответь ровно «{CANNOT_ANSWER_PHRASE}.» "
+    "Если сведения есть хотя бы в одном фрагменте, отвечай по ним, даже если их "
+    "мало или вопрос шире этих сведений: неполноту обозначь словами («в контексте "
+    "упомянуто только…», «про остальное данных нет»), но НЕ отказом. Частичный "
+    "ответ с честной оговоркой полезнее отказа."
 )
 
 EN_RULE = (
@@ -82,9 +91,12 @@ EN_RULE = (
     "If no key fits the claim, omit parentheses.\n"
     "FACT REQUIREMENT (mandatory): use ONLY facts explicitly stated in the context "
     "above. Never add dates, names, kinship, numbers or events from your own "
-    "knowledge — if it is not in the context, do not write it. If the context is "
-    f"insufficient, reply exactly: \"{CANNOT_ANSWER_PHRASE}.\" Answer briefly and "
-    "straight to the point: no introduction, no conclusions, no filler."
+    "knowledge — if it is not in the context, do not write it. Answer briefly and "
+    "straight to the point: no introduction, no conclusions, no filler.\n"
+    "REFUSAL RULE: refuse only if NOT A SINGLE context fragment contains anything "
+    f"about the question — then reply exactly \"{CANNOT_ANSWER_PHRASE}.\" If at "
+    "least one fragment does, answer from it even if the coverage is partial: say "
+    "so in words (\"the context only mentions...\"), do not refuse."
 )
 
 LANGUAGE_RULES = {"ru": RU_RULE, "en": EN_RULE}
@@ -103,7 +115,9 @@ _QA_GROUNDING = (
     "GROUNDING RULES (mandatory):\n"
     "- State ONLY facts that are explicitly present in the context above. Never "
     "add names, dates, numbers, kinship or events from your own knowledge.\n"
-    f'- If the context is insufficient, reply exactly "{CANNOT_ANSWER_PHRASE}."\n'
+    f'- If NO context fragment contains anything about the question, reply '
+    f'exactly "{CANNOT_ANSWER_PHRASE}." If at least one fragment does, answer from '
+    'it and note in words that the context covers only part of the question.\n'
     "- Answer directly and briefly: no introduction, no conclusions, no filler "
     "and no article structure. This answer will be used directly, so do not add "
     "any extraneous information.\n"

@@ -171,3 +171,23 @@ def test_validate_runtime_warns_about_skip_summary() -> None:
 def test_prompt_settings_default_still_valid() -> None:
     """Санити: дефолт paperqa не должен внезапно исчезнуть из апстрима."""
     assert "{answer_length}" in PromptSettings().qa
+
+
+def test_refusal_rule_allows_partial_answer() -> None:
+    """Модель должна отвечать по имеющемуся фрагменту, а не отказываться.
+
+    Регрессия: на вопрос «что мы знаем о Кутузове?» релевантный текст был в
+    контексте (косинус 0.815), но модель отвечала отказом. Правило отказа
+    теперь разрешает частичный ответ с оговоркой, сохраняя запрет отказа,
+    когда в контексте нет ничего.
+    """
+    from app.services.pqa_profile import _QA_GROUNDING, RU_RULE
+
+    assert "REFUSAL RULE" in RU_RULE
+    assert "только если НИ ОДИН фрагмент" in RU_RULE
+    # частичный ответ предпочтительнее отказа — это и требовалось
+    assert "отвечай по ним, даже если их мало" in RU_RULE
+    # при этом фактическая строгость остаётся
+    assert "FACT REQUIREMENT" in RU_RULE
+
+    assert "If NO context fragment" in _QA_GROUNDING

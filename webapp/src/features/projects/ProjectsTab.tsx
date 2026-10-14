@@ -31,6 +31,13 @@ import type { GenerateResult, ProjectOut } from '../../api/types'
 import { MarkdownText } from '../../components/MarkdownText'
 import { TaskPanel } from '../../components/TaskPanel'
 import { loadDrafts, saveDraft } from './drafts'
+import { sectionTitle } from '../../lib/sections'
+import { kindOptions } from '../../lib/kinds'
+import {
+  docRoleLabel,
+  docRoleOptions,
+  projectStatusOptions,
+} from '../../lib/projectOptions'
 import {
   useBindDocument,
   useCreateProject,
@@ -50,8 +57,12 @@ import { useSessionIndexingTasks } from '../documents/queries'
 
 const STATUSES = ['planning', 'drafting', 'reviewing', 'done'] as const
 
+// Полный набор GenerationKind из backend. `discussion` отдельной ветки
+// промпта не имеет и собирается как `section`, но для раздела Discussion
+// отрабатывает надёжнее: на прогонах `section` возвращал пустой текст.
 const KINDS = [
   'section',
+  'discussion',
   'literature_review',
   'data_comparison',
   'gap_analysis',
@@ -293,8 +304,9 @@ function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
       </Text>
       <List size="sm" spacing={2} mt={4}>
         <List.Item>
-          Создайте проект и выберите целевой журнал — план разделов (Introduction,
-          Methods, Results, Discussion, Conclusions) создастся сам.
+          Создайте проект и выберите целевой журнал — план разделов создастся
+          сам: Введение, Методы исследования, Результаты, Обсуждение,
+          Заключение.
         </List.Item>
         <List.Item>
           Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}
@@ -369,12 +381,12 @@ function ProjectEditor({
         />
         <Select
           label="Статус"
-          data={[...STATUSES]}
+          data={projectStatusOptions(STATUSES)}
           value={statusValue}
           onChange={(value) => value && onStatusChange(value)}
           disabled={readOnly}
           allowDeselect={false}
-          w={160}
+          w={230}
         />
         <Button
           variant="default"
@@ -485,12 +497,12 @@ function GeneratePanel({
       <Group align="flex-end" gap="sm">
         <Select
           label="Вид"
-          data={[...KINDS]}
+          data={kindOptions(KINDS)}
           value={kind}
           onChange={(value) => value && setKind(value)}
           disabled={readOnly}
           allowDeselect={false}
-          w={200}
+          w={260}
         />
         <TextInput
           label="Вопрос или тема"
@@ -534,7 +546,7 @@ function GeneratePanel({
                       data.gaps
                         .map(
                           (gap) =>
-                            `- **${gap.severity}** · ${gap.where}: ${gap.hint}` +
+                            `- **${gap.severity}** · ${sectionTitle(gap.where)}: ${gap.hint}` +
                             (gap.excerpt ? ` — «${gap.excerpt}»` : ''),
                         )
                         .join('\n'),
@@ -703,12 +715,12 @@ function SectionsList({
           return (
             <Accordion.Item key={section.name} value={section.name}>
               <Accordion.Control>
-                {section.name} — {section.word_target} слов
+                {sectionTitle(section.name)} — {section.word_target} слов
               </Accordion.Control>
               <Accordion.Panel>
                 <Stack gap="xs">
                   <textarea
-                    aria-label={`Текст раздела: ${section.name}`}
+                    aria-label={`Текст раздела: ${sectionTitle(section.name)}`}
                     value={value}
                     onChange={(event) => handleChange(section.name, event.target.value)}
                     disabled={readOnly}
@@ -828,7 +840,7 @@ function ProjectDocumentsPanel({
       {(bound.data ?? []).map((item) => (
         <Group key={item.document.id} justify="space-between">
           <Text size="sm">
-            {item.document.title} — роль: {item.role}
+            {item.document.title} — роль: {docRoleLabel(item.role)}
           </Text>
           <Button
             size="compact-xs"
@@ -866,12 +878,12 @@ function ProjectDocumentsPanel({
           />
           <Select
             label="Роль"
-            data={[...ROLES]}
+            data={docRoleOptions(ROLES)}
             value={role}
             onChange={(value) => value && setRole(value)}
             disabled={readOnly}
             allowDeselect={false}
-            w={140}
+            w={200}
           />
           <Button
             disabled={readOnly || !chosen}

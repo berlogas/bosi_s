@@ -13,6 +13,7 @@ from app.services.analyses import (
     analyze_draft,
     coverage_line,
     data_comparison_prompt,
+    discussion_prompt,
     find_citation_gaps,
     find_methodology_gaps,
     find_structure_gaps,
@@ -20,6 +21,7 @@ from app.services.analyses import (
     literature_review_prompt,
     render_gaps,
     report_prompt,
+    written_sections,
 )
 from app.services.generation import normalize_sections
 
@@ -208,6 +210,46 @@ def test_data_comparison_prompt_contains_computed_numbers() -> None:
 def test_data_comparison_prompt_without_data() -> None:
     prompt = data_comparison_prompt("вопрос", [], _sources())
     assert "Сводка данных недоступна" in prompt
+
+
+def test_discussion_prompt_contains_written_sections() -> None:
+    """Обсуждение без уже написанных разделов обсуждать нечего."""
+    sections = normalize_sections([
+        {"name": "Results", "required": True,
+         "content_md": "Средняя биомасса 0,66 мг/м3 [1]."},
+        {"name": "Methods", "required": True,
+         "content_md": "Пробы отбирали батернет-граблями."},
+        {"name": "Conclusions", "required": True, "content_md": ""},
+    ])
+
+    prompt = discussion_prompt("сопоставление", written_sections(sections), [],
+                               _sources())
+
+    assert "УЖЕ НАПИСАННЫЕ РАЗДЕЛЫ" in prompt
+    assert "## Results" in prompt
+    assert "0,66" in prompt, "числа написанного раздела должны попасть в промпт"
+    assert "Conclusions" not in prompt, "пустой раздел в обсуждение не идёт"
+
+
+def test_discussion_prompt_forbids_inventing_explanation() -> None:
+    prompt = discussion_prompt("тема", "", [], _sources())
+
+    assert "выдуманное объяснение" in prompt
+    assert "не пересчитывай" in prompt
+    assert "ограничениями работы" in prompt
+
+
+def test_written_sections_respects_limit() -> None:
+    sections = normalize_sections([
+        {"name": "Results", "required": True, "content_md": "а" * 500},
+        {"name": "Methods", "required": True, "content_md": "б" * 500},
+    ])
+
+    block = written_sections(sections, limit=300)
+
+    assert "## Results" in block
+    assert "## Methods" not in block, "длинный раздел не должен вытеснять остальные"
+    assert len(block) < 600, "лимит общий на все разделы, а не на каждый"
 
 
 def test_report_prompt_keeps_template() -> None:

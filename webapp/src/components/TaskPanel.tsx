@@ -13,7 +13,7 @@
 import { Alert, Box, Button, Group, Progress, Stack, Text } from '@mantine/core'
 
 import type { Task } from '../api/types'
-import { fmtSeconds, STATUS_ICONS } from '../lib/format'
+import { fmtSeconds, taskStatusLabel, STATUS_ICONS } from '../lib/format'
 
 export function TaskPanel({
   task,
@@ -58,7 +58,7 @@ export function TaskPanel({
                 <b>
                   {icon} {task.title}
                 </b>{' '}
-                — {task.status}
+                — {taskStatusLabel(task.status)}
               </Text>
               {task.step && (
                 <Text size="xs" c="dimmed">

@@ -55,6 +55,7 @@ from app.services.projects import (
     find_project,
     linked_documents,
 )
+from app.services.section_labels import section_title
 
 log = logging.getLogger("boasi.api.projects")
 
@@ -203,7 +204,8 @@ def update_section(session_id: str, project_id: str, name: str,
             return ProjectSectionOut(
                 **section, words=len((section.get("content_md") or "").split()),
                 written=bool((section.get("content_md") or "").strip()))
-    raise NotFoundError(f"Раздел «{name}» не найден в плане проекта")
+    raise NotFoundError(
+        f"Раздел «{section_title(name)}» не найден в плане проекта")
 
 
 # --------------------------------------------------------------------------- документы

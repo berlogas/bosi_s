@@ -19,6 +19,7 @@ from typing import Any
 
 from app.services.data_extract import DataSummary
 from app.services.generation import _sources_block, normalize_sections, parse_citations
+from app.services.section_labels import section_title
 
 # Абзац с числом или сильным утверждением требует ссылки.
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
@@ -128,7 +129,8 @@ def find_structure_gaps(sections: Sequence[dict[str, Any]]) -> list[DraftGap]:
             continue
         gaps.append(DraftGap(
             kind="missing_section", severity="high", where=section["name"],
-            excerpt="", hint=f"Раздел «{section['name']}» не написан."))
+            excerpt="",
+            hint=f"Раздел «{section_title(section['name'])}» не написан."))
     return gaps
 
 
@@ -176,7 +178,8 @@ def render_gaps(analysis: DraftAnalysis, limit: int = 20) -> str:
              f"(критичных {analysis.by_severity['high']}, "
              f"средних {analysis.by_severity['medium']}).", ""]
     for gap in analysis.gaps[:limit]:
-        location = f"{gap.where}" + (f", строка {gap.line}" if gap.line else "")
+        location = section_title(gap.where) + (
+            f", строка {gap.line}" if gap.line else "")
         lines.append(f"- [{gap.severity}] {location}: {gap.hint}")
         if gap.excerpt:
             lines.append(f"    «{gap.excerpt}»")
@@ -221,6 +224,59 @@ def data_comparison_prompt(question: str, summaries: Sequence[DataSummary],
         f"ИСТОЧНИКИ ЛИТЕРАТУРЫ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         "СРАВНЕНИЕ:\n"
     )
+
+
+def discussion_prompt(topic: str, written: str, summaries: Sequence[DataSummary],
+                      sources: Sequence[dict[str, Any]], *,
+                      word_target: int = 900) -> str:
+    """Обсуждение результатов: наши числа против литературы.
+
+    В отличие от `data_comparison` обсуждение получает уже написанные
+    разделы работы: без них модели нечего сопоставлять, и она обсуждает
+    вообще. Порядок разделов и сводка данных — то, что уже посчитано
+    программно, пересчитывать нельзя.
+    """
+    data_block = "\n\n".join(s.render() for s in summaries)
+    return (
+        "Напиши обсуждение результатов по теме:\n"
+        f"{topic}\n\n"
+        "ЖЁСТКИЕ ПРАВИЛА:\n"
+        "1. Опирайся ровно на приведённые ниже числа и текст разделов: "
+        "не пересчитывай и не выдумывай значений.\n"
+        "2. Каждое утверждение о других работах подкрепляй ссылкой [n].\n"
+        "3. Сначала скажи, где наши результаты согласуются с литературой, "
+        "затем — где расходятся, и назови возможную причину расхождения.\n"
+        "4. Расхождение без объяснения лучше, чем выдуманное объяснение: "
+        "если причину из источников вывести нельзя, скажи это прямо.\n"
+        "5. Не повторяй числа из раздела Results списком — обсуждай их.\n"
+        "6. Заверши ограничениями работы и тем, что стоит сделать дальше.\n"
+        f"7. Объём: примерно {word_target} слов.\n\n"
+        "СВОИ ДАННЫЕ (сводка посчитана программно):\n"
+        f"{data_block or 'Сводка данных недоступна.'}\n\n"
+        f"УЖЕ НАПИСАННЫЕ РАЗДЕЛЫ:\n{written or '—'}\n\n"
+        f"ИСТОЧНИКИ ЛИТЕРАТУРЫ ({len(sources)}):\n{_sources_block(sources)}\n\n"
+        "ОБСУЖДЕНИЕ:\n"
+    )
+
+
+def written_sections(sections: Sequence[dict[str, Any]], *,
+                      limit: int = 2400) -> str:
+    """Компактная сводка уже написанных разделов — вход для обсуждения."""
+    blocks: list[str] = []
+    used = 0
+    for section in sections:
+        content = (section.get("content_md") or "").strip()
+        if not content:
+            continue
+        # лимит общий на все разделы: длинный Results не должен вытеснить
+        # Methods и Introduction из контекста обсуждения
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        excerpt = content[:remaining]
+        used += len(excerpt)
+        blocks.append(f"## {section['name']}\n{excerpt}")
+    return "\n\n".join(blocks)
 
 
 def gap_analysis_prompt(topic: str, coverage: str,

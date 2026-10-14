@@ -468,6 +468,26 @@ async def test_data_comparison_uses_computed_numbers(client, researcher,
     assert body["citations"], "сверка обязана ссылаться на источники"
 
 
+async def test_discussion_kind_is_served(client, researcher, project_id,
+                                        session_id, data_bound) -> None:
+    """Вид `discussion` обязан быть в перечислении и доходить до промпта.
+
+    Раньше он существовал в `GenerationKind`, но не был выведен в интерфейс;
+    тест ломается, если ветка исчезнет из `_build_prompt`.
+    """
+    body = await _generate(client, researcher, session_id, project_id,
+                           kind="discussion", section="Discussion",
+                           question="Сопоставление с литературой")
+
+    assert body["word_count"] > 0
+    assert body["citations_ok"] is True
+
+    versions = (await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/versions",
+        headers=researcher)).json()
+    assert versions[0]["kind"] == "discussion"
+
+
 async def test_gap_analysis_of_literature(client, researcher, project_id,
                                           session_id, data_bound) -> None:
     body = await _generate(client, researcher, session_id, project_id,

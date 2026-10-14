@@ -196,6 +196,16 @@ class ProjectService:
                 request.question or request.section, summaries, sources,
                 word_target=request.word_target or 800)
 
+        if request.kind is GenerationKind.discussion:
+            # Обсуждение строится на уже написанном: без разделов Results и
+            # Methods модели нечего сопоставлять с литературой.
+            summaries = self._data_summaries(project, db, request.data_document_ids)
+            written = analyses.written_sections(normalize_sections(project.sections))
+            return analyses.discussion_prompt(
+                request.question or request.section or "Обсуждение результатов",
+                written, summaries, sources,
+                word_target=request.word_target or 900)
+
         if request.kind is GenerationKind.gap_analysis:
             return analyses.gap_analysis_prompt(
                 request.question or request.section,

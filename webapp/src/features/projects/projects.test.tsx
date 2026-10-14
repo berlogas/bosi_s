@@ -243,10 +243,10 @@ describe('вкладка Проекты', () => {
     expect(await screen.findByText(/1\/5 разделов/)).toBeInTheDocument()
     expect(screen.getByText(/3 слов/)).toBeInTheDocument()
     expect(screen.getByLabelText('Статус', { selector: 'input' })).toHaveValue(
-      'planning',
+      'Планирование (planning)',
     )
     // раздел из API, черновик берётся из серверного content_md
-    const area = await screen.findByLabelText('Текст раздела: Introduction')
+    const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
     expect(area).toHaveValue('Серверный текст')
   })
 
@@ -260,7 +260,7 @@ describe('вкладка Проекты', () => {
     })
 
     renderApp()
-    const area = await screen.findByLabelText('Текст раздела: Introduction')
+    const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
 
     await userEvent.clear(area)
     await userEvent.type(area, 'Новый черновик')
@@ -301,7 +301,7 @@ describe('вкладка Проекты', () => {
     })
 
     renderApp()
-    const area = await screen.findByLabelText('Текст раздела: Introduction')
+    const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
     const sectionCard = area.closest('.mantine-Accordion-panel')
 
     await userEvent.click(
@@ -314,7 +314,105 @@ describe('вкладка Проекты', () => {
       screen.getByText('Проверьте ссылки: часть из них не разрешается в источники.'),
     ).toBeInTheDocument()
     expect(screen.getByText(/⚠ Нет методики/)).toBeInTheDocument()
-    expect(screen.getByText(/Отчёт/)).toBeInTheDocument()
+    // список источников свёрнут по умолчанию — раскрываем и ищем в нём
+    await userEvent.click(
+      within(sectionCard as HTMLElement).getByRole('button', { name: 'Источники' }),
+    )
+    expect(
+      within(sectionCard as HTMLElement).getByText(/Отчёт/),
+    ).toBeInTheDocument()
+  })
+
+/**
+ * Открывает список видов и возвращает его узел.
+ *
+ * Mantine держит варианты в портале, а не рядом с полем, и в jsdom
+ * помечает их скрытыми — ищем по связи aria-labelledby, а не по индексу
+ * combobox: на странице их шесть, и по порядку открывается не то поле.
+ */
+async function openKindList(): Promise<HTMLElement> {
+  await screen.findByLabelText('Текст раздела: Введение (Introduction)')
+  const kindInput = screen
+    .getAllByRole('combobox')
+    .find((box) =>
+      document.querySelector(`label[for="${box.id}"]`)?.textContent?.startsWith('Вид'),
+    )
+  if (!kindInput) throw new Error('поле «Вид» не найдено')
+  await userEvent.click(kindInput)
+  return waitFor(() => {
+    const label = document.querySelector(`label[for="${kindInput.id}"]`)
+    const found =
+      document.querySelector(`[role="listbox"][aria-labelledby="${kindInput.id}"]`) ??
+      (label
+        ? document.querySelector(`[role="listbox"][aria-labelledby="${label.id}"]`)
+        : null)
+    if (!found) throw new Error('список видов не открылся')
+    return found as HTMLElement
+  })
+}
+
+  it('в списке видов есть discussion — он есть в GenerationKind', async () => {
+    mockProjectsApi()
+    renderApp()
+
+    const listbox = await openKindList()
+    const options = within(listbox)
+      .getAllByRole('option', { hidden: true })
+      .map((node) => node.textContent)
+    expect(options).toEqual(
+      expect.arrayContaining(['Обсуждение результатов (discussion)']),
+    )
+    // 7 значений в GenerationKind; меньше — признак расхождения с backend
+    expect(options).toHaveLength(7)
+    // техническое значение уходит в запрос, а не подпись
+    expect(options.some((label) => /^[a-z_]+$/.test(label))).toBe(false)
+  })
+
+  it('выбранный вид уходит в запрос техническим значением, а не подписью', async () => {
+    const { calls } = mockProjectsApi({
+      'POST /api/sessions/s-1/projects/p-1/generate': {
+        body: {
+          section: '',
+          content_md: 'Текст.',
+          word_count: 1,
+          citations_ok: true,
+          sources: [],
+          warnings: [],
+          references: [],
+          kind: 'discussion',
+          from_cache: false,
+        },
+      },
+    })
+
+    renderApp()
+    const listbox = await openKindList()
+    await userEvent.click(
+      within(listbox).getByRole('option', {
+        name: 'Обсуждение результатов (discussion)',
+        hidden: true,
+      }),
+    )
+    const kindField = screen
+      .getAllByRole('combobox')
+      .find((box) =>
+        document.querySelector(`label[for="${box.id}"]`)?.textContent?.startsWith('Вид'),
+      )
+    expect(kindField).toHaveValue('Обсуждение результатов (discussion)')
+    await userEvent.type(
+      screen.getByLabelText('Вопрос или тема'),
+      'Сопоставление с литературой',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }))
+
+    await waitFor(() => {
+      const sent = calls.find(
+        (c) => c.init.method === 'POST' && c.url.includes('/projects/p-1/generate'),
+      )
+      expect(sent, 'POST /generate не ушёл').toBeDefined()
+      // в запрос уходит техническое значение вида, а не подпись из списка
+      expect(String(sent?.init.body)).toContain('"kind":"discussion"')
+    })
   })
 
   it('статус проекта сохраняется PATCH-ом', async () => {
@@ -328,7 +426,7 @@ describe('вкладка Проекты', () => {
     // jsdom: listbox Mantine остаётся display:none — ищем option с hidden
     await userEvent.click(screen.getByLabelText('Статус', { selector: 'input' }))
     await userEvent.click(
-      await screen.findByRole('option', { name: 'drafting', hidden: true }),
+      await screen.findByRole('option', { name: 'Написание текста (drafting)', hidden: true }),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Обновить' }))
 
@@ -346,7 +444,9 @@ describe('вкладка Проекты', () => {
 
     renderApp()
 
-    expect(await screen.findByText(/Отчёт — роль: data/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Отчёт — роль: Данные \(data\)/),
+    ).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Отвязать' }))
     await waitFor(() =>
       expect(
@@ -398,7 +498,7 @@ describe('вкладка Проекты', () => {
     expect(screen.getByRole('button', { name: 'Создать' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Обновить' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Удалить' })).toBeDisabled()
-    const area = await screen.findByLabelText('Текст раздела: Introduction')
+    const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
     expect(area).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeDisabled()
   })

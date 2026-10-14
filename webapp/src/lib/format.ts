@@ -33,6 +33,30 @@ export function categoryLabel(value: string | null | undefined): string {
   return CATEGORY_LABELS[value ?? ''] ?? value ?? 'Без категории'
 }
 
+const SESSION_STATUS_LABELS: Record<string, string> = {
+  active: 'активная',
+  paused: 'приостановлена',
+  archived: 'в архиве',
+}
+
+/** Статус сессии словами: на карточке «active» читалось как метка, а не слово. */
+export function sessionStatusLabel(value: string | null | undefined): string {
+  return SESSION_STATUS_LABELS[value ?? ''] ?? value ?? '—'
+}
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  queued: 'в очереди',
+  running: 'выполняется',
+  done: 'готово',
+  error: 'ошибка',
+  cancelled: 'отменено',
+}
+
+/** Статус фоновой задачи словами — вместо `running` и `error`. */
+export function taskStatusLabel(value: string | null | undefined): string {
+  return TASK_STATUS_LABELS[value ?? ''] ?? value ?? '—'
+}
+
 export const STATUS_ICONS: Record<string, string> = {
   queued: '⏳',
   running: '🔄',

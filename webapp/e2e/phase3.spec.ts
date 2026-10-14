@@ -323,7 +323,7 @@ test('проект-редактор: создание → раздел → со�
   })
 
   // раздел раскрыт (не написан) — правим и сохраняем
-  const area = page.getByLabel('Текст раздела: Introduction')
+  const area = page.getByLabel('Текст раздела: Введение (Introduction)')
   await area.fill('Мой черновик введения')
   await page.getByRole('button', { name: 'Сохранить' }).click()
 
@@ -351,11 +351,11 @@ test('привязка документа к проекту и отвязка', 
   await page.getByRole('option', { name: 'Отчёт 2025', includeHidden: true }).click()
   await page.getByRole('combobox', { name: 'Роль' }).click()
   await page
-    .getByRole('option', { name: 'data', exact: true, includeHidden: true })
+    .getByRole('option', { name: 'Данные (data)', includeHidden: true })
     .click()
   await page.getByRole('button', { name: 'Привязать' }).click()
 
-  await expect(page.getByText(/Отчёт 2025 — роль: data/)).toBeVisible({
+  await expect(page.getByText(/Отчёт 2025 — роль: Данные \(data\)/)).toBeVisible({
     timeout: 15_000,
   })
   await page.getByRole('button', { name: 'Отвязать' }).click()

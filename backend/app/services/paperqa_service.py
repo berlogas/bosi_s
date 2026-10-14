@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
+from aviary.core import Message
 from paperqa import Context, Docs, PQASession
 from paperqa.settings import Settings
 
@@ -715,8 +716,9 @@ class PaperQA2Service:
         (Фаза 7) и чат (Фаза 6) говорят с одной и той же моделью.
         """
         llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
-        result = await llm.call_single(messages=[{"role": "user", "content": prompt}],
-                                       name=name)
+        # Именно Message, а не dict: LLM внутри зовёт model_dump() и на dict
+        # падает с AttributeError (как в rag_service).
+        result = await llm.call_single(messages=[Message(content=prompt)], name=name)
         return (getattr(result, "text", "") or "").strip()
 
     async def _read_upload(self, uploaded: Any) -> bytes:

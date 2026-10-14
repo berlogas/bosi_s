@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { SessionOut } from '../../api/types'
-import { shortWhen, STATUS_ICONS } from '../../lib/format'
+import { shortWhen, sessionStatusLabel, STATUS_ICONS } from '../../lib/format'
 import { useArchiveSession } from './queries'
 
 /** Сколько дней осталось — как days_left() на бэкенде: ceil до суток. */
@@ -53,7 +53,8 @@ export function SessionCard({ session }: { session: SessionOut }) {
         <Stack gap={4} style={{ flex: 1 }}>
           <Text fw={600}>{title}</Text>
           <Text size="xs" c="dimmed">
-            {icon} {session.status} · {label} · {shortWhen(session.last_action_at)}
+            {icon} {sessionStatusLabel(session.status)} · {label} ·{' '}
+            {shortWhen(session.last_action_at)}
           </Text>
           {session.resume_note && (
             <Text size="xs" c="dimmed">

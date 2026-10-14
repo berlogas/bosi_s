@@ -28,7 +28,7 @@ import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { client } from '../../api/client'
 import { useArchiveSession, useSessionDetail } from '../dashboard/queries'
 import { useSaveState } from '../chat/queries'
-import { ttlLabel } from '../../lib/format'
+import { sessionStatusLabel, ttlLabel } from '../../lib/format'
 
 /** Идентификаторы вкладок — как в TABS workspace.py (в$order). */
 export const TABS = ['documents', 'projects', 'chat', 'notes'] as const
@@ -158,7 +158,8 @@ export function SessionPage() {
         <Stack gap={4}>
           <Title order={3}>{session.title}</Title>
           <Text size="sm" c="dimmed">
-            Статус: {session.status} · Срок хранения: {ttlLabel(session.days_left)}
+            Статус: {sessionStatusLabel(session.status)} · Срок хранения:{' '}
+            {ttlLabel(session.days_left)}
           </Text>
           <Limits
             documents={session.summary.documents}

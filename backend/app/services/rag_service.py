@@ -321,7 +321,12 @@ class RagFusionService:
         candidates: list[Candidate] = []
         for scope, service, result in zip(scopes, services, results, strict=False):
             if isinstance(result, BaseException):
-                log.warning("fusion: aget_evidence(%s) не удался: %s", scope.value, result)
+                # С трассировкой, а не только строкой: часть таких сбоев
+                # приходит изнутри paperqa, и без стека видно только
+                # «expected string or bytes-like object, got 'list'» —
+                # почему модель вернула не строку, по этому не понять.
+                log.warning("fusion: aget_evidence(%s) не удался: %s",
+                            scope.value, result, exc_info=result)
                 continue
             contexts = result[1].contexts
             await self._restore_relevance(service, query, contexts)

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -28,6 +29,7 @@ from app.services.rag_fusion import (
     to_pqa_session,
     tokenize,
 )
+from app.services.rag_service import RagFusionService
 
 
 # --------------------------------------------------------------------------- helpers
@@ -508,3 +510,78 @@ def test_document_decay_lets_relevant_chunk_outrank_foreign_documents() -> None:
     assert kept.count("nap") == 3, "нужный фрагмент не должен теряться"
     # посторонний документ при этом всё равно проигрывает нужному чанку
     assert kept[-1] == "elizabeth"
+
+
+# --------------------------------------------------------------------------- сбой ветки
+class _BrokenService:
+    """Коллекция, у которой `get_evidence` падает — как это бывает с моделью."""
+
+    async def get_evidence(self, *args, **kwargs):
+        # Ровно то исключение, что приходит изнутри paperqa, когда модель
+        # возвращает content не строкой: парсер зовёт re.sub по списку.
+        raise TypeError("expected string or bytes-like object, got 'list'")
+
+    async def restore_state(self, *args, **kwargs) -> int:
+        return 0
+
+    @staticmethod
+    async def embedding_relevance(*args, **kwargs) -> dict:
+        return {}
+
+
+class _GoodService:
+    def __init__(self, contexts: list[SimpleNamespace]) -> None:
+        self._contexts = contexts
+
+    async def get_evidence(self, *args, **kwargs):
+        return [], SimpleNamespace(contexts=self._contexts)
+
+    async def restore_state(self, *args, **kwargs) -> int:
+        return 0
+
+    @staticmethod
+    async def embedding_relevance(*args, **kwargs) -> dict:
+        return {}
+
+
+def _fusion(global_service, session_service) -> RagFusionService:
+    registry = SimpleNamespace(global_service=lambda: global_service,
+                                session_service=lambda _sid: session_service)
+    return RagFusionService(registry=registry)
+
+
+@pytest.mark.asyncio
+async def test_упавшая_коллекция_не_роняет_остальные() -> None:
+    """Одна сломанная ветка не должна обнулять весь поиск.
+
+    Так ведёт себя ошибка внутри paperqa, когда модель отвечает не строкой:
+    ветка выпадает целиком, и если бы падение было фатальным, вопрос остался
+    бы без источников из-за одного API-вызова.
+    """
+    # Контекст в форме, которую ждёт build_candidates: `text` — это объект
+    # paperqa с вложенным `doc`, а не строка.
+    context = SimpleNamespace(
+        text=SimpleNamespace(doc=_doc("d1", "doc1"), name="1", text="фрагмент"),
+        score=5)
+    fusion = _fusion(_BrokenService(), _GoodService([context]))
+
+    candidates = await fusion._evidence_once(
+        "запрос", session_id="s-1", mode=SearchMode.hybrid, k=5,
+        catalog=DocumentCatalog(), skip_summary=False)
+
+    assert [c.context.text.text for c in candidates] == ["фрагмент"]
+    assert [c.scope.value for c in candidates] == ["session"]
+
+
+@pytest.mark.asyncio
+async def test_сбой_логируется_со_стеком(caplog) -> None:
+    """Без трассировки видно только текст ошибки — этого мало для разбора."""
+    fusion = _fusion(_BrokenService(), _GoodService([]))
+
+    with caplog.at_level(logging.WARNING):
+        await fusion._evidence_once(
+            "запрос", session_id="s-1", mode=SearchMode.hybrid, k=5,
+            catalog=DocumentCatalog(), skip_summary=False)
+
+    assert "aget_evidence" in caplog.text
+    assert "expected string or bytes-like object" in caplog.text

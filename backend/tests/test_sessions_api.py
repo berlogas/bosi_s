@@ -243,6 +243,26 @@ async def test_add_document_from_path_and_list(client, researcher, session_id,
     assert [d["dockey"] for d in listed.json()] == [body["dockey"]]
 
 
+async def test_список_документов_отдаёт_число_чанков(client, researcher, session_id,
+                                                    stub_registry, paper) -> None:
+    """Список показывает настоящий счётчик чанков.
+
+    Раньше эндпоинт отдавал ORM-объекты напрямую, а в DTO поле называется
+    `chunk_count`, в модели — `chunks_count`. FastAPI брал второе имя, не
+    находил и молча ставил 0: интерфейс писал «0 чанков» у документов,
+    которые были проиндексированы.
+    """
+    added = await client.post(
+        f"/api/sessions/{session_id}/documents/path",
+        json={"path": str(paper), "category": "project_data"},
+        headers=researcher)
+    assert added.status_code == 200, added.text
+    assert added.json()["chunk_count"] >= 1
+
+    listed = await client.get(f"/api/sessions/{session_id}/documents", headers=researcher)
+    assert listed.json()[0]["chunk_count"] >= 1
+
+
 async def test_add_document_missing_path_404(client, researcher, session_id,
                                              stub_registry) -> None:
     """Разрешённый каталог, но файла нет -> 404 (а не 403)."""

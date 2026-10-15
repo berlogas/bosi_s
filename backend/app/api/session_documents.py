@@ -117,10 +117,18 @@ async def _register(db: Session, session: ResearchSession, user: User,
 def list_session_documents(session_id: str, user: User = Depends(get_current_user),
                            db: Session = Depends(get_db),
                            category: DocumentCategory | None = None
-                           ) -> list[Document]:
+                           ) -> list[DocumentOut]:
+    """Документы сессии.
+
+    Через `document_from_row`, а не ORM напрямую: в DTO поле называется
+    `chunk_count`, а в модели — `chunks_count`, и FastAPI молча ставил бы
+    ноль, показывая «0 чанков» у проиндексированных документов.
+    """
     session = get_owned_session(db, session_id, user)
     touch_session(db, session)
-    return docs_repo.list_documents(db, session_id=session.id, category=category)
+    return [document_from_row(document)
+            for document in docs_repo.list_documents(db, session_id=session.id,
+                                                      category=category)]
 
 
 # --------------------------------------------------------------------------- запись

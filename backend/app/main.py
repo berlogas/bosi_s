@@ -136,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(history.router)
     app.include_router(projects.router)
+    app.include_router(projects.journals_router)
     app.include_router(tasks.router)
     app.include_router(metrics.router)
     return app

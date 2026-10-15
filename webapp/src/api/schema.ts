@@ -1284,6 +1284,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/journals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Journals
+         * @description Справочник требований журналов.
+         *
+         *     Не зависит от сессии: справочник общий, и список нужен до создания
+         *     проекта. Требования подставляются в промпт генерации разделов.
+         */
+        get: operations["list_journals_api_journals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -1920,6 +1943,22 @@ export interface components {
             bytes: number;
             /** Busy */
             busy: boolean;
+        };
+        /**
+         * JournalOut
+         * @description Журнал из справочника требований — для селектора в интерфейсе.
+         */
+        JournalOut: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Article Type */
+            article_type: string;
+            /** Limits */
+            limits: string;
+            /** Source */
+            source: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -5052,6 +5091,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_journals_api_journals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"][];
                 };
             };
         };

@@ -636,3 +636,45 @@ async def test_data_comparison_without_data_documents(client, researcher,
                            question="сравнение")
 
     assert body["citations_ok"] is True
+
+
+async def test_journals_list_is_available_without_session(client,
+                                                          researcher) -> None:
+    """Справочник общий: выбор журнала нужен до создания проекта."""
+    response = await client.get("/api/journals", headers=researcher)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    titles = [item["title"] for item in body]
+    assert "Nature" in titles
+    nature = next(item for item in body if item["title"] == "Nature")
+    assert "2500 слов" in nature["limits"]
+    assert nature["key"] == "nature"
+
+
+async def test_journal_requirements_reach_the_prompt(client, researcher,
+                                                     session_id, docs,
+                                                     monkeypatch) -> None:
+    """Выбранный журнал меняет промпт: иначе выбор остаётся подписью."""
+    project = await client.post(
+        f"/api/sessions/{session_id}/projects",
+        json={"title": "Для Nature", "target_journal": "Nature"},
+        headers=researcher)
+    assert project.status_code == 201, project.text
+
+    captured: dict[str, str] = {}
+
+    async def fake_complete(self, prompt, name=None):
+        captured["prompt"] = prompt
+        return "Текст раздела [1].", 0.5
+
+    monkeypatch.setattr(
+        "app.services.projects.ProjectService._complete", fake_complete)
+
+    response = await client.post(
+        f"/api/sessions/{session_id}/projects/{project.json()['id']}/generate",
+        json={"section": "Introduction", "question": "тема", "kind": "section"},
+        headers=researcher)
+
+    assert response.status_code == 200, response.text
+    assert "ТРЕБОВАНИЯ ЖУРНАЛА NATURE" in captured["prompt"]

@@ -345,6 +345,16 @@ class ProjectOut(ORMModel):
     updated_at: datetime
 
 
+class JournalOut(BaseModel):
+    """Журнал из справочника требований — для селектора в интерфейсе."""
+
+    key: str
+    title: str
+    article_type: str
+    limits: str
+    source: str
+
+
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=512)
     target_journal: str | None = Field(default=None, max_length=255)

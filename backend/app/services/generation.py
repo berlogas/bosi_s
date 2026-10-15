@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.journals import JournalProfile, style_block
 from app.services.types import AnswerResult
 
 log = logging.getLogger("boasi.services.generation")
@@ -124,7 +125,8 @@ def _sources_block(sources: Sequence[dict[str, Any]]) -> str:
 
 def build_prompt(section: str, question: str, sources: Sequence[dict[str, Any]],
                  *, language: str = "ru", notes: str | None = None,
-                 word_target: int | None = None) -> str:
+                 word_target: int | None = None,
+                 journal: JournalProfile | None = None) -> str:
     """Промпт генерации. Правила цитирования — жёсткие и явные."""
     lang = "русском" if language == "ru" else "английском"
     instructions = [
@@ -140,7 +142,11 @@ def build_prompt(section: str, question: str, sources: Sequence[dict[str, Any]],
     ]
     if notes:
         instructions.append(f"7. Указания авторов к разделу: {notes}")
-    return "\n".join(instructions) + (
+    head = "\n".join(instructions)
+    journal_rules = style_block(journal)
+    if journal_rules:
+        head += f"\n\n{journal_rules}\nУЧТИ эти требования в стиле и структуре."
+    return head + (
         f"\n\nВопрос/задача: {question}\n\n"
         f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         f"РАЗДЕЛ «{section}»:\n"

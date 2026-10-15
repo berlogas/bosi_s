@@ -38,6 +38,7 @@ from app.schemas.api import (
     ExportFormat,
     GenerateRequest,
     GenerateResultOut,
+    JournalOut,
     ProjectCreate,
     ProjectDocBind,
     ProjectOut,
@@ -49,6 +50,7 @@ from app.schemas.api import (
 from app.services import analyses
 from app.services import export as export_service
 from app.services.generation import missing_sections, normalize_sections
+from app.services.journals import journal_options
 from app.services.projects import (
     GenerationRequest,
     ProjectService,
@@ -399,3 +401,18 @@ def export_project(session_id: str, project_id: str,
     return Response(content=content, media_type=media_type, headers={
         "Content-Disposition":
             f'attachment; filename="{filename}"; filename*=UTF-8\'\'{quoted}'})
+
+
+# --------------------------------------------------------------------------- журналы
+journals_router = APIRouter(prefix="/api", tags=["journals"],
+                           dependencies=[Depends(require_researcher)])
+
+
+@journals_router.get("/journals", response_model=list[JournalOut])
+def list_journals(user: User = Depends(get_current_user)) -> list[JournalOut]:
+    """Справочник требований журналов.
+
+    Не зависит от сессии: справочник общий, и список нужен до создания
+    проекта. Требования подставляются в промпт генерации разделов.
+    """
+    return [JournalOut(**item) for item in journal_options()]

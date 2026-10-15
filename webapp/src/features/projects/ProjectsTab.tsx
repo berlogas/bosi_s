@@ -45,6 +45,7 @@ import {
   useExportProject,
   useGenerate,
   usePatchProject,
+  useJournals,
   useProjectDocuments,
   useProjectProgress,
   useProjects,
@@ -79,15 +80,29 @@ interface ProjectsTabProps {
 
 export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const projects = useProjects(sessionId)
+  const journals = useJournals()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [journal, setJournal] = useState('')
+  // Журнала может не быть в справочнике: тогда название вводится руками,
+  // требования подставятся те, что есть, а остальное — через указания
+  // автора в разделе.
+  const [ownJournal, setOwnJournal] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const create = useCreateProject(sessionId)
   const patch = usePatchProject(sessionId)
   const remove = useDeleteProject(sessionId)
   const [statusValue, setStatusValue] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const OTHER_JOURNAL = '__other__'
+  const journalChoices = [
+    ...(journals.data ?? []).map((item) => ({
+      value: item.title,
+      label: item.limits ? `${item.title} — ${item.limits}` : item.title,
+    })),
+    { value: OTHER_JOURNAL, label: 'Другой журнал — вписать вручную' },
+  ]
 
   const list = useMemo(() => projects.data ?? [], [projects.data])
 
@@ -142,13 +157,35 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           disabled={readOnly}
           style={{ flex: 2 }}
         />
-        <TextInput
+        <Select
           label="Целевой журнал"
-          value={journal}
-          onChange={(event) => setJournal(event.currentTarget.value)}
+          placeholder="Выберите журнал"
+          data={journalChoices}
+          value={journal || null}
+          onChange={(value) => {
+            if (value === OTHER_JOURNAL) {
+              setOwnJournal(true)
+              setJournal('')
+              return
+            }
+            setOwnJournal(false)
+            setJournal(value ?? '')
+          }}
           disabled={readOnly}
+          searchable
+          allowDeselect={false}
           style={{ flex: 2 }}
         />
+        {ownJournal && (
+          <TextInput
+            label="Название журнала"
+            placeholder="Например, Journal of Marine Biology"
+            value={journal}
+            onChange={(event) => setJournal(event.currentTarget.value)}
+            disabled={readOnly}
+            style={{ flex: 2 }}
+          />
+        )}
         <Button
           onClick={handleCreate}
           disabled={readOnly || !title.trim()}
@@ -305,8 +342,9 @@ function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
       <List size="sm" spacing={2} mt={4}>
         <List.Item>
           Создайте проект и выберите целевой журнал — план разделов создастся
-          сам: Введение, Методы исследования, Результаты, Обсуждение,
-          Заключение.
+          сам: Введение, Методы исследования, Результаты, Обсуждение, Заключение.
+          Требования выбранного журнала (лимиты, структура, ссылки) подставляются
+          в генерацию разделов — их видно под полем «Статус».
         </List.Item>
         <List.Item>
           Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}
@@ -364,6 +402,10 @@ function ProjectEditor({
   projectOptions,
 }: ProjectEditorProps) {
   const progress = useProjectProgress(sessionId, project.id)
+  const journals = useJournals()
+  const profile = (journals.data ?? []).find(
+    (item) => item.title.toLowerCase() === (project.target_journal ?? '').toLowerCase(),
+  )
 
   return (
     <Stack gap="sm">
@@ -405,6 +447,34 @@ function ProjectEditor({
           Удалить
         </Button>
       </Group>
+
+      {/* Требования журнала видны до генерации: иначе выбор журнала выглядит
+          как подпись, а на деле меняет промпт. */}
+      {project.target_journal && (
+        <Alert color={profile ? 'blue' : 'yellow'} variant="light" p="xs">
+          {profile ? (
+            <>
+              <Text size="sm">
+                Требования «{profile.title}» ({profile.article_type}) подставляются
+                в генерацию разделов
+              </Text>
+              {profile.limits && (
+                <Text size="xs" c="dimmed">
+                  Лимиты: {profile.limits}
+                </Text>
+              )}
+              <Text size="xs" c="dimmed">
+                Требования взяты с {profile.source}
+              </Text>
+            </>
+          ) : (
+            <Text size="sm">
+              Журнала «{project.target_journal}» нет в справочнике: требования не
+              подставляются, стиль задавайте в указаниях автора к разделу.
+            </Text>
+          )}
+        </Alert>
+      )}
 
       {progress.data && (
         <div>

@@ -19,6 +19,7 @@ from typing import Any
 
 from app.services.data_extract import DataSummary
 from app.services.generation import _sources_block, normalize_sections, parse_citations
+from app.services.journals import JournalProfile, style_block
 from app.services.section_labels import section_title
 
 # Абзац с числом или сильным утверждением требует ссылки.
@@ -187,8 +188,15 @@ def render_gaps(analysis: DraftAnalysis, limit: int = 20) -> str:
 
 
 # --------------------------------------------------------------------------- промпты
+def journal_rules(profile: JournalProfile | None) -> str:
+    """Требования журнала в промпт: блоком или пустой строкой."""
+    block = style_block(profile)
+    return f"{block}\nУЧТИ эти требования в стиле и структуре.\n" if block else ""
+
+
 def literature_review_prompt(topic: str, sources: Sequence[dict[str, Any]],
-                             *, word_target: int = 1200) -> str:
+                             *, word_target: int = 1200,
+                             journal: JournalProfile | None = None) -> str:
     """Обзор литературы: сгруппируй источники, а не перечисли их по одному."""
     return (
         "Напиши обзор литературы по теме:\n"
@@ -200,14 +208,16 @@ def literature_review_prompt(topic: str, sources: Sequence[dict[str, Any]],
         "4. Не выдумывай источники и не ссылайся на номера вне списка.\n"
         "5. Укажи, какие вопросы остаются нерешёнными.\n"
         f"6. Объём: примерно {word_target} слов.\n\n"
-        f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}\n\n"
+        + journal_rules(journal) + "\n"
+        + f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         "ОБЗОР ЛИТЕРАТУРЫ:\n"
     )
 
 
 def data_comparison_prompt(question: str, summaries: Sequence[DataSummary],
                            sources: Sequence[dict[str, Any]],
-                           *, word_target: int = 800) -> str:
+                           *, word_target: int = 800,
+                           journal: JournalProfile | None = None) -> str:
     """Сверка своих чисел с литературой: числа уже посчитаны, модель их трактует."""
     data_block = "\n\n".join(s.render() for s in summaries) or "Сводка данных недоступна."
     return (
@@ -220,6 +230,7 @@ def data_comparison_prompt(question: str, summaries: Sequence[DataSummary],
         "расходятся, и объясни возможную причину расхождения.\n"
         "4. Если сравнивать нечего — прямо скажи это, не выдумывай выводы.\n"
         f"5. Объём: примерно {word_target} слов.\n\n"
+        + journal_rules(journal) + "\n"
         f"СВОИ ДАННЫЕ (сводка посчитана программно):\n{data_block}\n\n"
         f"ИСТОЧНИКИ ЛИТЕРАТУРЫ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         "СРАВНЕНИЕ:\n"
@@ -228,7 +239,8 @@ def data_comparison_prompt(question: str, summaries: Sequence[DataSummary],
 
 def discussion_prompt(topic: str, written: str, summaries: Sequence[DataSummary],
                       sources: Sequence[dict[str, Any]], *,
-                      word_target: int = 900) -> str:
+                      word_target: int = 900,
+                      journal: JournalProfile | None = None) -> str:
     """Обсуждение результатов: наши числа против литературы.
 
     В отличие от `data_comparison` обсуждение получает уже написанные
@@ -251,6 +263,7 @@ def discussion_prompt(topic: str, written: str, summaries: Sequence[DataSummary]
         "5. Не повторяй числа из раздела Results списком — обсуждай их.\n"
         "6. Заверши ограничениями работы и тем, что стоит сделать дальше.\n"
         f"7. Объём: примерно {word_target} слов.\n\n"
+        + journal_rules(journal) + "\n"
         "СВОИ ДАННЫЕ (сводка посчитана программно):\n"
         f"{data_block or 'Сводка данных недоступна.'}\n\n"
         f"УЖЕ НАПИСАННЫЕ РАЗДЕЛЫ:\n{written or '—'}\n\n"
@@ -280,7 +293,8 @@ def written_sections(sections: Sequence[dict[str, Any]], *,
 
 
 def gap_analysis_prompt(topic: str, coverage: str,
-                        sources: Sequence[dict[str, Any]]) -> str:
+                        sources: Sequence[dict[str, Any]], *,
+                        journal: JournalProfile | None = None) -> str:
     """Поиск пробелов в литературе: что изучали, а что нет."""
     return (
         "Определи пробелы в литературе по теме:\n"
@@ -290,6 +304,7 @@ def gap_analysis_prompt(topic: str, coverage: str,
         "2. Каждый вывод о недостающей работе опирай на источник [n] или "
         "явно помечай как «не найдено в источниках».\n"
         "3. Не выдумывай несуществующие исследования.\n\n"
+        + journal_rules(journal) + "\n"
         f"ЧТО УЖЕ ИЗУЧЕНО (по найденным источникам):\n{coverage or '—'}\n\n"
         f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         "ПРОБЕЛЫ В ЛИТЕРАТУРЕ:\n"
@@ -309,7 +324,8 @@ def coverage_line(sources: Sequence[dict[str, Any]]) -> str:
 
 
 def report_prompt(template: str, sources: Sequence[dict[str, Any]],
-                  *, question: str = "") -> str:
+                  *, question: str = "",
+                  journal: JournalProfile | None = None) -> str:
     """Отчёт по готовому шаблону: структуру задаёт шаблон, факты — источники."""
     return (
         "Заполни отчёт по шаблону ниже, используя факты из источников.\n\n"
@@ -317,6 +333,7 @@ def report_prompt(template: str, sources: Sequence[dict[str, Any]],
         "1. Сохрани заголовки и структуру шаблона.\n"
         "2. Каждое утверждение подкрепляй ссылкой [n].\n"
         "3. Не выдумывай данных; если данных нет — напиши «н/д».\n\n"
+        + journal_rules(journal) + "\n"
         + (f"ТЕМА ОТЧЁТА: {question}\n\n" if question else "")
         + f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         f"ШАБЛОН:\n{template}\n\n"

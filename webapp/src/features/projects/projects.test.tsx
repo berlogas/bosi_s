@@ -81,9 +81,27 @@ function renderApp(path = '/s/s-1/projects') {
   )
 }
 
+const JOURNALS = [
+  {
+    key: 'nature',
+    title: 'Nature',
+    article_type: 'Article',
+    limits: 'abstract до 200 слов, основной текст до 2500 слов, до 50 источников',
+    source: 'https://www.nature.com/nature/for-authors/formatting-guide',
+  },
+  {
+    key: 'science',
+    title: 'Science',
+    article_type: 'Research Article',
+    limits: 'abstract до 125 слов, основной текст до 2500 слов',
+    source: 'https://www.science.org/content/page/instructions-authors-new-research-articles',
+  },
+]
+
 function mockProjectsApi(routes: Record<string, unknown> = {}) {
   return mockApi({
     'GET /api/health': HEALTH,
+    'GET /api/journals': JOURNALS,
     'GET /api/sessions/s-1': DETAIL,
     'GET /api/sessions': [SESSION],
     'GET /api/tasks': { tasks: [], active: 0 },
@@ -184,7 +202,7 @@ describe('вкладка Проекты', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Выгрузить' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Не удалось выгрузить/)
+    expect(await screen.findByText(/Не удалось выгрузить/)).toBeInTheDocument()
   })
 
   it('пустой список — «Проектов нет — создайте первый»', async () => {
@@ -220,7 +238,10 @@ describe('вкладка Проекты', () => {
     await screen.findByText('Проектов нет — создайте первый.')
 
     await userEvent.type(screen.getByLabelText('Название'), 'Новый проект')
-    await userEvent.type(screen.getByLabelText('Целевой журнал'), 'ICES')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Целевой журнал' }))
+    await userEvent.click(
+      await screen.findByRole('option', { name: /Nature/, hidden: true }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
 
     await waitFor(() => {
@@ -230,7 +251,7 @@ describe('вкладка Проекты', () => {
       expect(call).toBeDefined()
       expect(JSON.parse(String(call?.init.body))).toEqual({
         title: 'Новый проект',
-        target_journal: 'ICES',
+        target_journal: 'Nature',
       })
     })
   })
@@ -412,6 +433,60 @@ async function openKindList(): Promise<HTMLElement> {
       expect(sent, 'POST /generate не ушёл').toBeDefined()
       // в запрос уходит техническое значение вида, а не подпись из списка
       expect(String(sent?.init.body)).toContain('"kind":"discussion"')
+    })
+  })
+
+  it('журнал из справочника показывает свои требования', async () => {
+    mockProjectsApi({
+      'GET /api/sessions/s-1/projects': [{ ...PROJECT, target_journal: 'Nature' }],
+    })
+    renderApp()
+
+    expect(await screen.findByText(/Требования «Nature»/)).toBeInTheDocument()
+    // «2500 слов» встречается и в списке выбора, и в блоке требований
+    expect(screen.getByText(/Лимиты: .*2500 слов/)).toBeInTheDocument()
+  })
+
+  it('журнала нет в справочнике — честное предупреждение', async () => {
+    // В проекте «Marine Biology», которого в справочнике нет: выбор не должен
+    // молча выглядеть как применённые требования.
+    mockProjectsApi()
+    renderApp()
+
+    expect(
+      await screen.findByText(/нет в справочнике/),
+    ).toBeInTheDocument()
+  })
+
+  it('журнал вне справочника вводится вручную', async () => {
+    const { calls } = mockProjectsApi({
+      'GET /api/sessions/s-1/projects': [],
+      'POST /api/sessions/s-1/projects': { ...PROJECT, id: 'p-new' },
+      'GET /api/sessions/s-1/projects/p-new/sections': [],
+      'GET /api/sessions/s-1/projects/p-new/documents': [],
+      'GET /api/sessions/s-1/projects/p-new/progress': {
+        project_id: 'p-new', sections: 0, written: 0, words: 0, percent: 0,
+      },
+    })
+
+    renderApp()
+    await screen.findByText('Проектов нет — создайте первый.')
+    await userEvent.type(screen.getByLabelText('Название'), 'Свой журнал')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Целевой журнал' }))
+    await userEvent.click(
+      await screen.findByRole('option', {
+        name: 'Другой журнал — вписать вручную',
+        hidden: true,
+      }),
+    )
+    await userEvent.type(screen.getByLabelText('Название журнала'), 'ICES JCR')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) => c.url.endsWith('/projects') && c.init.method === 'POST',
+      )
+      expect(JSON.parse(String(call?.init.body)).target_journal).toBe('ICES JCR')
     })
   })
 

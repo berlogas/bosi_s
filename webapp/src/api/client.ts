@@ -41,6 +41,8 @@ type HealthResponse = components['schemas']['HealthResponse']
 type SuggestionsResponse = components['schemas']['SuggestionsResponse']
 /** Схема openapi: ExportFormat = markdown | docx | zip. */
 export type ExportFormat = components['schemas']['ExportFormat']
+/** Справочник журналов: требования, которые уходят в промпт генерации. */
+export type JournalOut = components['schemas']['JournalOut']
 /** Схема openapi: scope сброса состояния. */
 type ResetScope = components['schemas']['ResetRequest']['scope']
 type ResetPlan = components['schemas']['ResetPlanOut']
@@ -579,6 +581,11 @@ class ApiClient {
   // ---------------------------------------------------------------- проекты
   projects(sessionId: string): Promise<ProjectOut[]> {
     return this.request(`/api/sessions/${sessionId}/projects`)
+  }
+
+  /** Справочник требований журналов: выбор в проекте влияет на промпт. */
+  journals(): Promise<JournalOut[]> {
+    return this.request('/api/journals')
   }
 
   createProject(

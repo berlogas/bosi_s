@@ -359,6 +359,9 @@ class JournalStyleOut(BaseModel):
     title: str
     summary: str
     journals: list[str]
+    # Строки «TONE: ...», «TARGET AUDIENCE: ...» из самого промпта: интерфейс
+    # показывает исследователю, что именно получит модель.
+    highlights: list[str]
     templates: list[JournalTemplateOut]
 
 

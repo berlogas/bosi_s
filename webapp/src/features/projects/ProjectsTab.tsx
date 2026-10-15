@@ -104,6 +104,11 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
     { value: OTHER_JOURNAL, label: 'Другой журнал — вписать вручную' },
   ]
 
+  // Описание выбранного стиля — словами самого промпта (TONE, TARGET
+  // AUDIENCE). Исследователь должен видеть, что уйдёт в модель, прямо при
+  // выборе: иначе «стиль» остаётся подписью в списке.
+  const chosenStyle = (styles.data ?? []).find((item) => item.key === journal)
+
   const list = useMemo(() => projects.data ?? [], [projects.data])
 
   // первый проект выбран по умолчанию (в Streamlit — current_project_id)
@@ -159,7 +164,7 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         />
         <Select
           label="Стиль журнала"
-          description="Группа журналов: Nature, Science, Cell, PNAS и подобные"
+          description="Группа журналов, определяющая промпт генерации"
           placeholder="Выберите стиль"
           data={journalChoices}
           value={journal || null}
@@ -195,6 +200,22 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           Создать
         </Button>
       </Group>
+      {chosenStyle && (
+        <Alert color="blue" variant="light" p="xs">
+          <Text size="sm">
+            Стиль «{chosenStyle.title}»: {chosenStyle.summary}
+          </Text>
+          {chosenStyle.highlights.map((line) => (
+            <Text key={line} size="xs" c="dimmed">
+              {line}
+            </Text>
+          ))}
+          <Text size="xs" c="dimmed">
+            Журналы группы: {chosenStyle.journals.join(', ')} · разделы:{' '}
+            {chosenStyle.templates.map((item) => item.label).join(', ')}
+          </Text>
+        </Alert>
+      )}
       {createError && (
         <Alert color="red" role="alert">
           {createError}
@@ -467,6 +488,11 @@ function ProjectEditor({
                   {profile.summary}
                 </Text>
               )}
+              {profile.highlights.map((line) => (
+                <Text key={line} size="xs" c="dimmed">
+                  {line}
+                </Text>
+              ))}
               <Text size="xs" c="dimmed">
                 Журналы группы: {profile.journals.join(', ')} · разделы:{' '}
                 {profile.templates.map((item) => item.label).join(', ')}

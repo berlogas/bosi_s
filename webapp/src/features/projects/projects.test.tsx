@@ -87,6 +87,10 @@ const JOURNAL_STYLES = [
     title: 'Мультидисциплинарный прорыв',
     summary: 'Nature, Science, Cell, PNAS: широкая аудитория, активный залог.',
     journals: ['Nature', 'Science', 'Cell', 'PNAS'],
+    highlights: [
+      'TARGET AUDIENCE: Multidisciplinary scientists. Avoid narrow jargon.',
+      'TONE: Engaging, concise, active voice.',
+    ],
     templates: [{ label: 'Abstract и Introduction', sections: ['abstract', 'introduction'] }],
   },
   {
@@ -94,6 +98,7 @@ const JOURNAL_STYLES = [
     title: 'Здоровая наука',
     summary: 'PLOS ONE, Scientific Reports: воспроизводимость и сухое описание.',
     journals: ['PLOS ONE', 'Scientific Reports'],
+    highlights: ['TONE: Dry, descriptive, highly detailed.'],
     templates: [
       { label: 'Materials and Methods', sections: ['methods'] },
       { label: 'Results (описательные)', sections: ['results'] },
@@ -454,6 +459,29 @@ async function openKindList(): Promise<HTMLElement> {
       await screen.findByText(/Стиль «Мультидисциплинарный прорыв»/),
     ).toBeInTheDocument()
     expect(screen.getByText(/Журналы группы: Nature, Science, Cell, PNAS/))
+      .toBeInTheDocument()
+    // Описание стиля — словами промпта, а не выдуманной подписью.
+    expect(screen.getByText(/TONE: Engaging, concise, active voice/))
+      .toBeInTheDocument()
+  })
+
+  it('при выборе стиля показан текст промпта: тон и читатель', async () => {
+    mockProjectsApi({ 'GET /api/sessions/s-1/projects': [] })
+    renderApp()
+    await screen.findByText('Проектов нет — создайте первый.')
+    await userEvent.type(screen.getByLabelText('Название'), 'Новый проект')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Стиль журнала' }))
+    await userEvent.click(
+      await screen.findByRole('option', {
+        name: 'Здоровая наука',
+        hidden: true,
+      }),
+    )
+
+    expect(
+      await screen.findByText(/TONE: Dry, descriptive, highly detailed/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Журналы группы: PLOS ONE, Scientific Reports/))
       .toBeInTheDocument()
   })
 

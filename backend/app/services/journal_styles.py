@@ -29,6 +29,7 @@ Nature и PLOS ONE — это не «два разных журнала», а д
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -41,6 +42,14 @@ PROMPTS_ROOT = Path(__file__).resolve().parent.parent / "prompts" / "journal_sty
 # контекст дописывается в конец промпта. Маркер существует для случая,
 # когда блок данных нужен в середине — так пишут отдельные авторы.
 CONTEXT_MARKER = "{{CONTEXT}}"
+
+# Строки-характеристики стиля в начале промпта: «TONE: ...»,
+# «TARGET AUDIENCE: ...». По ним интерфейс показывает, что именно получит
+# модель, не заставляя редактора дублировать текст в meta.toml.
+_HIGHLIGHT_LABELS = ("TARGET AUDIENCE", "TONE", "AUDIENCE", "ЦЕЛЕВАЯ АУДИТОРИЯ")
+_HIGHLIGHT_RE = re.compile(
+    r"^(" + "|".join(_HIGHLIGHT_LABELS) + r")\s*:\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,19 @@ class JournalStyle:
             if template.file == name:
                 return template
         return self.templates[0] if self.templates else None
+
+    def highlights(self) -> list[str]:
+        """Что этот стиль обещает модели: тон и читатель, словами промпта.
+
+        Берётся из шаблона по умолчанию, потому что он и есть визитная
+        карточка группы; дублировать этот текст в `meta.toml` нельзя —
+        копия разъедется с промптом при первой же правке.
+        """
+        template = self.template_by_file(self.default_template)
+        if template is None:
+            return []
+        return [f"{match.group(1).upper()}: {match.group(2)}"
+                for match in _HIGHLIGHT_RE.finditer(template.prompt)]
 
 
 # --------------------------------------------------------------------------- загрузка
@@ -199,6 +221,7 @@ def style_options() -> list[dict[str, Any]]:
             "title": style.title,
             "summary": style.summary,
             "journals": list(style.journals),
+            "highlights": style.highlights(),
             "templates": [
                 {"label": template.label, "sections": list(template.sections)}
                 for template in style.templates

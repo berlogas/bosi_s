@@ -1958,6 +1958,8 @@ export interface components {
             summary: string;
             /** Journals */
             journals: string[];
+            /** Highlights */
+            highlights: string[];
             /** Templates */
             templates: components["schemas"]["JournalTemplateOut"][];
         };

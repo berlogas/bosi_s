@@ -96,12 +96,37 @@ def test_подстановка_работает_даже_без_заглушк�
         "До\nК\nПосле"
 
 
+def test_описание_стиля_берётся_из_промпта() -> None:
+    """Что покажет интерфейс — должно совпадать с текстом промпта.
+
+    Описание не дублируется в `meta.toml`: иначе первая же правка тона в
+    шаблоне разъедет его с подписью в интерфейсе.
+    """
+    nature = js.find_style("Nature")
+
+    highlights = nature.highlights()
+    prompt = nature.template_for("Introduction").prompt
+    assert highlights
+    for line in highlights:
+        assert line.split(":", 1)[1].strip() in prompt
+    assert any(line.startswith("TONE:") for line in highlights)
+
+
+def test_у_группы_без_аудитории_остаётся_тон() -> None:
+    """Не у каждого промпта есть TARGET AUDIENCE — это не повод падать."""
+    engineering = js.find_style("NeurIPS")
+
+    assert [line.split(":", 1)[0] for line in engineering.highlights()] \
+        == ["TONE"]
+
+
 def test_справочник_для_интерфейса_собран_из_файлов() -> None:
     options = js.style_options()
 
     assert options
     for item in options:
         assert item["key"] and item["title"] and item["journals"]
+        assert item["highlights"]
         assert item["templates"]
         assert all(tpl["label"] and tpl["sections"] for tpl in item["templates"])
 

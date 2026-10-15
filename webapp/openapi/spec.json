@@ -5857,6 +5857,13 @@
             "type": "array",
             "title": "Journals"
           },
+          "highlights": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Highlights"
+          },
           "templates": {
             "items": {
               "$ref": "#/components/schemas/JournalTemplateOut"
@@ -5871,6 +5878,7 @@
           "title",
           "summary",
           "journals",
+          "highlights",
           "templates"
         ],
         "title": "JournalStyleOut",

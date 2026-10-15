@@ -1,0 +1,15 @@
+key = "specialized_top"
+title = "Специализированный топ"
+summary = "Nature Medicine, JACS, PRL, Lancet: экспертная аудитория, механизмы, точная терминология."
+journals = ["Nature Medicine", "JACS", "Physical Review Letters", "PRL", "Lancet", "Nature Physics", "JBC"]
+default_template = "results"
+
+[[templates]]
+file = "results.md"
+label = "Results"
+sections = ["results", "результаты", "результат"]
+
+[[templates]]
+file = "discussion.md"
+label = "Discussion и Conclusions"
+sections = ["discussion", "conclusions", "conclusion", "обсуждение", "заключение", "выводы"]

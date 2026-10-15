@@ -38,7 +38,7 @@ from app.schemas.api import (
     ExportFormat,
     GenerateRequest,
     GenerateResultOut,
-    JournalOut,
+    JournalStyleOut,
     ProjectCreate,
     ProjectDocBind,
     ProjectOut,
@@ -50,7 +50,7 @@ from app.schemas.api import (
 from app.services import analyses
 from app.services import export as export_service
 from app.services.generation import missing_sections, normalize_sections
-from app.services.journals import journal_options
+from app.services.journal_styles import style_options
 from app.services.projects import (
     GenerationRequest,
     ProjectService,
@@ -403,16 +403,18 @@ def export_project(session_id: str, project_id: str,
             f'attachment; filename="{filename}"; filename*=UTF-8\'\'{quoted}'})
 
 
-# --------------------------------------------------------------------------- журналы
+# --------------------------------------------------------------------------- стили
 journals_router = APIRouter(prefix="/api", tags=["journals"],
                            dependencies=[Depends(require_researcher)])
 
 
-@journals_router.get("/journals", response_model=list[JournalOut])
-def list_journals(user: User = Depends(get_current_user)) -> list[JournalOut]:
-    """Справочник требований журналов.
+@journals_router.get("/journal-styles", response_model=list[JournalStyleOut])
+def list_journal_styles(user: User = Depends(get_current_user)
+                        ) -> list[JournalStyleOut]:
+    """Справочник групп журналов и их шаблонов промптов.
 
-    Не зависит от сессии: справочник общий, и список нужен до создания
-    проекта. Требования подставляются в промпт генерации разделов.
+    Не зависит от сессии: справочник общий, и стиль нужен до создания
+    проекта. Сами шаблоны приходят с диска (`app/prompts/journal_styles`),
+    поэтому новая группа появляется без правки кода.
     """
-    return [JournalOut(**item) for item in journal_options()]
+    return [JournalStyleOut(**item) for item in style_options()]

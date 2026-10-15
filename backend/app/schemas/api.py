@@ -345,14 +345,21 @@ class ProjectOut(ORMModel):
     updated_at: datetime
 
 
-class JournalOut(BaseModel):
-    """Журнал из справочника требований — для селектора в интерфейсе."""
+class JournalTemplateOut(BaseModel):
+    """Шаблон промпта группы: под какие разделы он подходит."""
+
+    label: str
+    sections: list[str]
+
+
+class JournalStyleOut(BaseModel):
+    """Группа журналов с общим способом изложения — для селектора в UI."""
 
     key: str
     title: str
-    article_type: str
-    limits: str
-    source: str
+    summary: str
+    journals: list[str]
+    templates: list[JournalTemplateOut]
 
 
 class ProjectCreate(BaseModel):

@@ -1,0 +1,15 @@
+key = "sound_science"
+title = "Здоровая наука"
+summary = "PLOS ONE, Scientific Reports, IEEE Access: воспроизводимость, сухое описание, без попытки продать новизну."
+journals = ["PLOS ONE", "Scientific Reports", "IEEE Access", "PLOS ONE", "Heliyon", "Sensors"]
+default_template = "methods"
+
+[[templates]]
+file = "methods.md"
+label = "Materials and Methods"
+sections = ["methods", "materials", "materials and methods", "методы", "методы исследования", "материалы"]
+
+[[templates]]
+file = "results_objective.md"
+label = "Results (описательные)"
+sections = ["results", "результаты", "результат"]

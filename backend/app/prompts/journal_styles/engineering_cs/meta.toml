@@ -1,0 +1,15 @@
+key = "engineering_cs"
+title = "Инженерия и Computer Science"
+summary = "IEEE Transactions, NeurIPS, ACM: плотный технический текст, алгоритмы, метрики, сравнение с SOTA."
+journals = ["IEEE Transactions", "NeurIPS", "ICML", "ICLR", "ACM Transactions", "IEEE Access"]
+default_template = "introduction"
+
+[[templates]]
+file = "introduction.md"
+label = "Introduction с вкладом работы"
+sections = ["introduction", "введение"]
+
+[[templates]]
+file = "related_work.md"
+label = "Related Work"
+sections = ["related work", "related works", "связанные работы", "обзор подходов", "литература"]

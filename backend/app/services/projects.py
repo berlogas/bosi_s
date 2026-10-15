@@ -43,7 +43,7 @@ from app.services.generation import (
     progress,
     validate_citations,
 )
-from app.services.journals import journal_profile
+from app.services.journal_styles import style_prompt
 from app.services.paperqa_service import ServiceRegistry, get_registry
 from app.services.rag_service import RagFusionService
 
@@ -185,21 +185,22 @@ class ProjectService:
         """Промпт под вид генерации: у каждого своя постановка вопроса."""
         language = self.registry.app.answer_language
         notes = request.notes or self._section_notes(project, request.section)
-        # Требования журнала достаются из поля проекта: пользователь выбрал
-        # его один раз при создании, и дальше они действуют во всех видах
-        # генерации — от обычного раздела до обсуждения.
-        journal = journal_profile(project.target_journal)
+        # Стиль журнала достаётся из поля проекта: пользователь выбрал его
+        # один раз при создании, и дальше он действует во всех видах генерации
+        # — от обычного раздела до обсуждения. Шаблон подбирается под раздел:
+        # у группы журналов их несколько, и для «Methods» нужен свой.
+        style = style_prompt(project.target_journal, request.section)
 
         if request.kind is GenerationKind.literature_review:
             return analyses.literature_review_prompt(
                 request.question or request.section, sources,
-                word_target=request.word_target or 1200, journal=journal)
+                word_target=request.word_target or 1200, style=style)
 
         if request.kind is GenerationKind.data_comparison:
             summaries = self._data_summaries(project, db, request.data_document_ids)
             return analyses.data_comparison_prompt(
                 request.question or request.section, summaries, sources,
-                word_target=request.word_target or 800, journal=journal)
+                word_target=request.word_target or 800, style=style)
 
         if request.kind is GenerationKind.discussion:
             # Обсуждение строится на уже написанном: без разделов Results и
@@ -209,18 +210,18 @@ class ProjectService:
             return analyses.discussion_prompt(
                 request.question or request.section or "Обсуждение результатов",
                 written, summaries, sources,
-                word_target=request.word_target or 900, journal=journal)
+                word_target=request.word_target or 900, style=style)
 
         if request.kind is GenerationKind.gap_analysis:
             return analyses.gap_analysis_prompt(
                 request.question or request.section,
-                analyses.coverage_line(sources), sources, journal=journal)
+                analyses.coverage_line(sources), sources, style=style)
 
         if request.kind is GenerationKind.report:
             template = request.template_md or analyses.DEFAULT_REPORT_TEMPLATE
             return analyses.report_prompt(template, sources,
                                           question=request.question,
-                                          journal=journal)
+                                          style=style)
 
         if request.kind is GenerationKind.draft_analysis:
             # Сначала детерминированный разбор, модель добавляет комментарий.
@@ -229,7 +230,7 @@ class ProjectService:
             base = build_prompt(
                 request.section or "Обзор черновика", request.question, sources,
                 language=language, notes=notes, word_target=request.word_target,
-                journal=journal)
+                style=style)
             commentary = (
                 "На основе разбора выше напиши краткий комментарий: что исправить "
                 "в первую очередь и почему. Ссылайся на источники [n]."
@@ -238,7 +239,7 @@ class ProjectService:
 
         return build_prompt(
             request.section, request.question, sources, language=language,
-            notes=notes, word_target=request.word_target, journal=journal,
+            notes=notes, word_target=request.word_target, style=style,
         )
 
     def _data_summaries(self, project: Project, db: Session,

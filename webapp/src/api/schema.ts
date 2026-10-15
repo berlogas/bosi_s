@@ -1284,7 +1284,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/journals": {
+    "/api/journal-styles": {
         parameters: {
             query?: never;
             header?: never;
@@ -1292,13 +1292,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Journals
-         * @description Справочник требований журналов.
+         * List Journal Styles
+         * @description Справочник групп журналов и их шаблонов промптов.
          *
-         *     Не зависит от сессии: справочник общий, и список нужен до создания
-         *     проекта. Требования подставляются в промпт генерации разделов.
+         *     Не зависит от сессии: справочник общий, и стиль нужен до создания
+         *     проекта. Сами шаблоны приходят с диска (`app/prompts/journal_styles`),
+         *     поэтому новая группа появляется без правки кода.
          */
-        get: operations["list_journals_api_journals_get"];
+        get: operations["list_journal_styles_api_journal_styles_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1945,20 +1946,30 @@ export interface components {
             busy: boolean;
         };
         /**
-         * JournalOut
-         * @description Журнал из справочника требований — для селектора в интерфейсе.
+         * JournalStyleOut
+         * @description Группа журналов с общим способом изложения — для селектора в UI.
          */
-        JournalOut: {
+        JournalStyleOut: {
             /** Key */
             key: string;
             /** Title */
             title: string;
-            /** Article Type */
-            article_type: string;
-            /** Limits */
-            limits: string;
-            /** Source */
-            source: string;
+            /** Summary */
+            summary: string;
+            /** Journals */
+            journals: string[];
+            /** Templates */
+            templates: components["schemas"]["JournalTemplateOut"][];
+        };
+        /**
+         * JournalTemplateOut
+         * @description Шаблон промпта группы: под какие разделы он подходит.
+         */
+        JournalTemplateOut: {
+            /** Label */
+            label: string;
+            /** Sections */
+            sections: string[];
         };
         /** LoginRequest */
         LoginRequest: {
@@ -5095,7 +5106,7 @@ export interface operations {
             };
         };
     };
-    list_journals_api_journals_get: {
+    list_journal_styles_api_journal_styles_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5110,7 +5121,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JournalOut"][];
+                    "application/json": components["schemas"]["JournalStyleOut"][];
                 };
             };
         };

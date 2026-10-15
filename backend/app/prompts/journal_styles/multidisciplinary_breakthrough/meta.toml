@@ -1,0 +1,10 @@
+key = "multidisciplinary_breakthrough"
+title = "Мультидисциплинарный прорыв"
+summary = "Nature, Science, Cell, PNAS: широкая аудитория, активный залог, воронка от общего к частному."
+journals = ["Nature", "Science", "Cell", "PNAS", "Nature Communications"]
+default_template = "abstract_introduction"
+
+[[templates]]
+file = "abstract_introduction.md"
+label = "Abstract и Introduction"
+sections = ["abstract", "introduction", "резюме", "введение", "аннотация"]

@@ -81,27 +81,30 @@ function renderApp(path = '/s/s-1/projects') {
   )
 }
 
-const JOURNALS = [
+const JOURNAL_STYLES = [
   {
-    key: 'nature',
-    title: 'Nature',
-    article_type: 'Article',
-    limits: 'abstract до 200 слов, основной текст до 2500 слов, до 50 источников',
-    source: 'https://www.nature.com/nature/for-authors/formatting-guide',
+    key: 'multidisciplinary_breakthrough',
+    title: 'Мультидисциплинарный прорыв',
+    summary: 'Nature, Science, Cell, PNAS: широкая аудитория, активный залог.',
+    journals: ['Nature', 'Science', 'Cell', 'PNAS'],
+    templates: [{ label: 'Abstract и Introduction', sections: ['abstract', 'introduction'] }],
   },
   {
-    key: 'science',
-    title: 'Science',
-    article_type: 'Research Article',
-    limits: 'abstract до 125 слов, основной текст до 2500 слов',
-    source: 'https://www.science.org/content/page/instructions-authors-new-research-articles',
+    key: 'sound_science',
+    title: 'Здоровая наука',
+    summary: 'PLOS ONE, Scientific Reports: воспроизводимость и сухое описание.',
+    journals: ['PLOS ONE', 'Scientific Reports'],
+    templates: [
+      { label: 'Materials and Methods', sections: ['methods'] },
+      { label: 'Results (описательные)', sections: ['results'] },
+    ],
   },
 ]
 
 function mockProjectsApi(routes: Record<string, unknown> = {}) {
   return mockApi({
     'GET /api/health': HEALTH,
-    'GET /api/journals': JOURNALS,
+    'GET /api/journal-styles': JOURNAL_STYLES,
     'GET /api/sessions/s-1': DETAIL,
     'GET /api/sessions': [SESSION],
     'GET /api/tasks': { tasks: [], active: 0 },
@@ -238,9 +241,12 @@ describe('вкладка Проекты', () => {
     await screen.findByText('Проектов нет — создайте первый.')
 
     await userEvent.type(screen.getByLabelText('Название'), 'Новый проект')
-    await userEvent.click(screen.getByRole('combobox', { name: 'Целевой журнал' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Стиль журнала' }))
     await userEvent.click(
-      await screen.findByRole('option', { name: /Nature/, hidden: true }),
+      await screen.findByRole('option', {
+        name: 'Мультидисциплинарный прорыв',
+        hidden: true,
+      }),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
 
@@ -251,7 +257,7 @@ describe('вкладка Проекты', () => {
       expect(call).toBeDefined()
       expect(JSON.parse(String(call?.init.body))).toEqual({
         title: 'Новый проект',
-        target_journal: 'Nature',
+        target_journal: 'multidisciplinary_breakthrough',
       })
     })
   })
@@ -436,20 +442,36 @@ async function openKindList(): Promise<HTMLElement> {
     })
   })
 
-  it('журнал из справочника показывает свои требования', async () => {
+  it('стиль группы показывает, какой промпт пойдёт в генерацию', async () => {
+    mockProjectsApi({
+      'GET /api/sessions/s-1/projects': [
+        { ...PROJECT, target_journal: 'multidisciplinary_breakthrough' },
+      ],
+    })
+    renderApp()
+
+    expect(
+      await screen.findByText(/Стиль «Мультидисциплинарный прорыв»/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Журналы группы: Nature, Science, Cell, PNAS/))
+      .toBeInTheDocument()
+  })
+
+  it('стиль ищется и по названию журнала внутри группы', async () => {
+    // Пользователь вводил журнал, а не ключ группы: блок стиля обязан найтись.
     mockProjectsApi({
       'GET /api/sessions/s-1/projects': [{ ...PROJECT, target_journal: 'Nature' }],
     })
     renderApp()
 
-    expect(await screen.findByText(/Требования «Nature»/)).toBeInTheDocument()
-    // «2500 слов» встречается и в списке выбора, и в блоке требований
-    expect(screen.getByText(/Лимиты: .*2500 слов/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Стиль «Мультидисциплинарный прорыв»/),
+    ).toBeInTheDocument()
   })
 
-  it('журнала нет в справочнике — честное предупреждение', async () => {
+  it('группы нет в справочнике — честное предупреждение', async () => {
     // В проекте «Marine Biology», которого в справочнике нет: выбор не должен
-    // молча выглядеть как применённые требования.
+    // молча выглядеть как применённый стиль.
     mockProjectsApi()
     renderApp()
 
@@ -472,7 +494,7 @@ async function openKindList(): Promise<HTMLElement> {
     renderApp()
     await screen.findByText('Проектов нет — создайте первый.')
     await userEvent.type(screen.getByLabelText('Название'), 'Свой журнал')
-    await userEvent.click(screen.getByRole('combobox', { name: 'Целевой журнал' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Стиль журнала' }))
     await userEvent.click(
       await screen.findByRole('option', {
         name: 'Другой журнал — вписать вручную',

@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.services.journals import JournalProfile, style_block
+from app.services.journal_styles import CONTEXT_MARKER
 from app.services.types import AnswerResult
 
 log = logging.getLogger("boasi.services.generation")
@@ -123,30 +123,72 @@ def _sources_block(sources: Sequence[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def context_block(question: str, sources: Sequence[dict[str, Any]],
+                  notes: str | None = None) -> str:
+    """Материал, на который шаблон стиля ссылается как на «notes»/«data».
+
+    Собирается одинаково для всех стилей: источники нумерованы явно, и
+    именно эти номера шаблон потом требует в ссылках.
+    """
+    parts = []
+    if question:
+        parts.append(f"ЗАДАЧА РАЗДЕЛА:\n{question}")
+    if notes:
+        parts.append(f"УКАЗАНИЯ АВТОРА:\n{notes}")
+    parts.append(f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}")
+    return "\n\n".join(parts)
+
+
+def apply_style(style: str, context: str) -> str:
+    """Подставить контекст в шаблон стиля.
+
+    Заглушка может быть удалена автором шаблона — тогда контекст дописывается
+    в конец, и шаблон всё равно получает данные, а не остаётся без них.
+    """
+    if CONTEXT_MARKER in style:
+        return style.replace(CONTEXT_MARKER, context)
+    return f"{style}\n\n{context}"
+
+
 def build_prompt(section: str, question: str, sources: Sequence[dict[str, Any]],
                  *, language: str = "ru", notes: str | None = None,
                  word_target: int | None = None,
-                 journal: JournalProfile | None = None) -> str:
-    """Промпт генерации. Правила цитирования — жёсткие и явные."""
+                 style: str | None = None) -> str:
+    """Промпт генерации. Правила цитирования — жёсткие и явные.
+
+    `style` — текст шаблона группы журналов (`journal_styles.style_prompt`).
+    Он идёт первым: роль, аудитория и структура задаются им, а не нашими
+    правилами, а наши правила цитирования дописываются после — они жёстче
+    любого стиля и не должны теряться на общем фоне.
+    """
     lang = "русском" if language == "ru" else "английском"
+    context = context_block(question, sources, notes)
     instructions = [
         f"Напиши раздел «{section}» научной статьи на языке {lang}.",
         "ЖЁСТКИЕ ПРАВИЛА:",
         "1. Каждое утверждение о фактах, числах или выводах других работ должно "
-        "содержать ссылку вида [1], [2,3] на источник из списка ниже.",
+        "содержать ссылку вида [1], [2,3] на источник из блока ИСТОЧНИКИ.",
         "2. Не выдумывай источники: допустимы только номера из списка.",
         "3. Если факта нет в источниках — не пиши его, либо скажи, что данных нет.",
         "4. Не ссылайся на источник, который не использовал.",
-        "5. Пиши по-русски, научным стилем, без воды.",
+        f"5. Пиши на языке: {lang}, научным стилем, без воды. Инструкции выше "
+        "могут быть на английском — язык ответа всё равно этот.",
         f"6. Объём: примерно {word_target or 500} слов.",
     ]
+    if style:
+        # Указания автора уже в блоке контекста — второй раз их повторять
+        # незачем, а два блока с одной и той же инструкцией модель читает как
+        # два разных требования.
+        rules = "\n".join(instructions)
+        return (
+            f"{apply_style(style, context)}\n\n"
+            f"ЖЁСТКИЕ ПРАВИЛА ЦИТИРОВАНИЯ (важнее стиля выше):\n{rules}\n\n"
+            f"РАЗДЕЛ «{section}»:\n"
+        )
+
     if notes:
         instructions.append(f"7. Указания авторов к разделу: {notes}")
-    head = "\n".join(instructions)
-    journal_rules = style_block(journal)
-    if journal_rules:
-        head += f"\n\n{journal_rules}\nУЧТИ эти требования в стиле и структуре."
-    return head + (
+    return "\n".join(instructions) + (
         f"\n\nВопрос/задача: {question}\n\n"
         f"ИСТОЧНИКИ ({len(sources)}):\n{_sources_block(sources)}\n\n"
         f"РАЗДЕЛ «{section}»:\n"

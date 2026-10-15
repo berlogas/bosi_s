@@ -45,7 +45,7 @@ import {
   useExportProject,
   useGenerate,
   usePatchProject,
-  useJournals,
+  useJournalStyles,
   useProjectDocuments,
   useProjectProgress,
   useProjects,
@@ -80,7 +80,7 @@ interface ProjectsTabProps {
 
 export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const projects = useProjects(sessionId)
-  const journals = useJournals()
+  const styles = useJournalStyles()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [journal, setJournal] = useState('')
@@ -97,9 +97,9 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
 
   const OTHER_JOURNAL = '__other__'
   const journalChoices = [
-    ...(journals.data ?? []).map((item) => ({
-      value: item.title,
-      label: item.limits ? `${item.title} — ${item.limits}` : item.title,
+    ...(styles.data ?? []).map((item) => ({
+      value: item.key,
+      label: item.title,
     })),
     { value: OTHER_JOURNAL, label: 'Другой журнал — вписать вручную' },
   ]
@@ -158,8 +158,9 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           style={{ flex: 2 }}
         />
         <Select
-          label="Целевой журнал"
-          placeholder="Выберите журнал"
+          label="Стиль журнала"
+          description="Группа журналов: Nature, Science, Cell, PNAS и подобные"
+          placeholder="Выберите стиль"
           data={journalChoices}
           value={journal || null}
           onChange={(value) => {
@@ -341,10 +342,10 @@ function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
       </Text>
       <List size="sm" spacing={2} mt={4}>
         <List.Item>
-          Создайте проект и выберите целевой журнал — план разделов создастся
+          Создайте проект и выберите стиль журнала — план разделов создастся
           сам: Введение, Методы исследования, Результаты, Обсуждение, Заключение.
-          Требования выбранного журнала (лимиты, структура, ссылки) подставляются
-          в генерацию разделов — их видно под полем «Статус».
+          Промпт выбранной группы (роль, аудитория, структура раздела) подставляется
+          в генерацию — его видно под полем «Статус».
         </List.Item>
         <List.Item>
           Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}
@@ -402,9 +403,13 @@ function ProjectEditor({
   projectOptions,
 }: ProjectEditorProps) {
   const progress = useProjectProgress(sessionId, project.id)
-  const journals = useJournals()
-  const profile = (journals.data ?? []).find(
-    (item) => item.title.toLowerCase() === (project.target_journal ?? '').toLowerCase(),
+  const styles = useJournalStyles()
+  // Стиль ищется и по ключу группы, и по названию журнала внутри неё:
+  // в поле осталось то, что вводил пользователь.
+  const raw = (project.target_journal ?? '').trim().toLowerCase()
+  const profile = (styles.data ?? []).find(
+    (item) => item.key.toLowerCase() === raw
+      || item.journals.some((journal) => journal.toLowerCase() === raw),
   )
 
   return (
@@ -448,29 +453,29 @@ function ProjectEditor({
         </Button>
       </Group>
 
-      {/* Требования журнала видны до генерации: иначе выбор журнала выглядит
+      {/* Промпт стиля виден до генерации: иначе выбор журнала выглядит
           как подпись, а на деле меняет промпт. */}
       {project.target_journal && (
         <Alert color={profile ? 'blue' : 'yellow'} variant="light" p="xs">
           {profile ? (
             <>
               <Text size="sm">
-                Требования «{profile.title}» ({profile.article_type}) подставляются
-                в генерацию разделов
+                Стиль «{profile.title}» подставляется в генерацию разделов
               </Text>
-              {profile.limits && (
+              {profile.summary && (
                 <Text size="xs" c="dimmed">
-                  Лимиты: {profile.limits}
+                  {profile.summary}
                 </Text>
               )}
               <Text size="xs" c="dimmed">
-                Требования взяты с {profile.source}
+                Журналы группы: {profile.journals.join(', ')} · разделы:{' '}
+                {profile.templates.map((item) => item.label).join(', ')}
               </Text>
             </>
           ) : (
             <Text size="sm">
-              Журнала «{project.target_journal}» нет в справочнике: требования не
-              подставляются, стиль задавайте в указаниях автора к разделу.
+              Группы «{project.target_journal}» нет в справочнике: промпт стиля
+              не подставляется, тон задавайте в указаниях автора к разделу.
             </Text>
           )}
         </Alert>

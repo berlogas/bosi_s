@@ -41,8 +41,10 @@ type HealthResponse = components['schemas']['HealthResponse']
 type SuggestionsResponse = components['schemas']['SuggestionsResponse']
 /** Схема openapi: ExportFormat = markdown | docx | zip. */
 export type ExportFormat = components['schemas']['ExportFormat']
-/** Справочник журналов: требования, которые уходят в промпт генерации. */
-export type JournalOut = components['schemas']['JournalOut']
+/** Группа журналов с общим способом изложения: ключ стиля для проекта. */
+export type JournalStyleOut = components['schemas']['JournalStyleOut']
+/** Шаблон промпта группы: под какие разделы он подходит. */
+export type JournalTemplateOut = components['schemas']['JournalTemplateOut']
 /** Схема openapi: scope сброса состояния. */
 type ResetScope = components['schemas']['ResetRequest']['scope']
 type ResetPlan = components['schemas']['ResetPlanOut']
@@ -583,9 +585,9 @@ class ApiClient {
     return this.request(`/api/sessions/${sessionId}/projects`)
   }
 
-  /** Справочник требований журналов: выбор в проекте влияет на промпт. */
-  journals(): Promise<JournalOut[]> {
-    return this.request('/api/journals')
+  /** Группы журналов: выбор стиля задаёт промпт генерации. */
+  journalStyles(): Promise<JournalStyleOut[]> {
+    return this.request('/api/journal-styles')
   }
 
   createProject(

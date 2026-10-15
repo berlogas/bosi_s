@@ -638,24 +638,25 @@ async def test_data_comparison_without_data_documents(client, researcher,
     assert body["citations_ok"] is True
 
 
-async def test_journals_list_is_available_without_session(client,
-                                                          researcher) -> None:
-    """Справочник общий: выбор журнала нужен до создания проекта."""
-    response = await client.get("/api/journals", headers=researcher)
+async def test_journal_styles_list_is_available_without_session(client,
+                                                                researcher) -> None:
+    """Справочник общий: стиль журнала нужен до создания проекта."""
+    response = await client.get("/api/journal-styles", headers=researcher)
 
     assert response.status_code == 200, response.text
     body = response.json()
-    titles = [item["title"] for item in body]
-    assert "Nature" in titles
-    nature = next(item for item in body if item["title"] == "Nature")
-    assert "2500 слов" in nature["limits"]
-    assert nature["key"] == "nature"
+    keys = [item["key"] for item in body]
+    assert "multidisciplinary_breakthrough" in keys
+    assert "sound_science" in keys
+    nature = next(i for i in body if i["key"] == "multidisciplinary_breakthrough")
+    assert "Nature" in nature["journals"]
+    assert nature["templates"][0]["label"]
 
 
-async def test_journal_requirements_reach_the_prompt(client, researcher,
-                                                     session_id, docs,
-                                                     monkeypatch) -> None:
-    """Выбранный журнал меняет промпт: иначе выбор остаётся подписью."""
+async def test_journal_style_reaches_the_prompt(client, researcher,
+                                                session_id, docs,
+                                                monkeypatch) -> None:
+    """Выбранный стиль меняет промпт: иначе выбор остаётся подписью."""
     project = await client.post(
         f"/api/sessions/{session_id}/projects",
         json={"title": "Для Nature", "target_journal": "Nature"},
@@ -677,4 +678,12 @@ async def test_journal_requirements_reach_the_prompt(client, researcher,
         headers=researcher)
 
     assert response.status_code == 200, response.text
-    assert "ТРЕБОВАНИЯ ЖУРНАЛА NATURE" in captured["prompt"]
+    prompt = captured["prompt"]
+    assert "Act as a senior scientific editor at Nature" in prompt
+    # Контекст подставлен в шаблон: в промпте есть блок источников, а мест,
+    # куда редактор вписал бы данные руками, нет.
+    assert "ИСТОЧНИКИ (" in prompt
+    assert "[ВСТАВЬТЕ" not in prompt
+    assert "{{CONTEXT}}" not in prompt
+    # Наши правила цитирования идут после стиля и не потерялись.
+    assert prompt.index("Act as a senior scientific editor") <         prompt.index("ЖЁСТКИЕ ПРАВИЛА")

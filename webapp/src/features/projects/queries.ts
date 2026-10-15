@@ -11,7 +11,7 @@ import { client } from '../../api/client'
 import type { ExportFormat, GenerateRequest } from '../../api/types'
 
 export const projectKeys = {
-  journals: () => ['journals'] as const,
+  journalStyles: () => ['journal-styles'] as const,
   list: (sessionId: string) => ['projects', sessionId] as const,
   sections: (sessionId: string, projectId: string) =>
     ['project-sections', sessionId, projectId] as const,
@@ -22,15 +22,15 @@ export const projectKeys = {
 }
 
 /**
- * Справочник требований журналов.
+ * Группы журналов и их шаблоны промптов.
  *
- * Не зависит от сессии: список общий и нужен уже при создании проекта.
- * Кэш долгий — справочник меняется только правкой бэкенда.
+ * Не зависит от сессии: справочник общий и нужен уже при создании проекта.
+ * Кэш долгий — группы добавляют файлами на диске, а не правкой каждого клиента.
  */
-export function useJournals() {
+export function useJournalStyles() {
   return useQuery({
-    queryKey: projectKeys.journals(),
-    queryFn: () => client.journals(),
+    queryKey: projectKeys.journalStyles(),
+    queryFn: () => client.journalStyles(),
     staleTime: 30 * 60 * 1000,
   })
 }

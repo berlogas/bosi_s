@@ -2,6 +2,12 @@ key = "multidisciplinary_breakthrough"
 title = "Мультидисциплинарный прорыв"
 summary = "Nature, Science, Cell, PNAS: широкая аудитория, активный залог, воронка от общего к частному."
 journals = ["Nature", "Science", "Cell", "PNAS", "Nature Communications"]
+description = """
+Читатель: междисциплинарные учёные — физики, биологи, химики. Узкий жаргон
+не нужен, ключевые термины объясняются просто.
+Тон: увлекательный, краткий, активный залог, объективно, но с акцентом на
+концептуальный прорыв. Слова «революционный» и «прорывной» не использовать.
+"""
 default_template = "abstract_introduction"
 
 [[templates]]

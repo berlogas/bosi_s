@@ -2,6 +2,12 @@ key = "review_articles"
 title = "Обзорные статьи"
 summary = "Nature Reviews, Trends, Chemical Reviews: синтез литературы по темам, а не пересказ статей по одной."
 journals = ["Nature Reviews", "Trends in Analytical Chemistry", "Chemical Reviews", "Annual Review", "Nature Reviews Methods Primers"]
+description = """
+Тон: авторитетный, аналитический, с опорой на будущее.
+Литература группируется по темам, методам и конкурирующим гипотезам, а не
+пересказывается по одной статье; в финале — «Future Directions» с текущими
+узкими местами.
+"""
 default_template = "synthesis"
 
 [[templates]]

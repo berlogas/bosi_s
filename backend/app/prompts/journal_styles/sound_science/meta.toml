@@ -2,6 +2,11 @@ key = "sound_science"
 title = "Здоровая наука"
 summary = "PLOS ONE, Scientific Reports, IEEE Access: воспроизводимость, сухое описание, без попытки продать новизну."
 journals = ["PLOS ONE", "Scientific Reports", "IEEE Access", "PLOS ONE", "Heliyon", "Sensors"]
+description = """
+Тон: сухой, описательный, максимально подробный, пассивный залог
+допустим и предпочтителен. Продавать новизну и значимость работы не нужно —
+акцент на воспроизводимости и строгости методики.
+"""
 default_template = "methods"
 
 [[templates]]

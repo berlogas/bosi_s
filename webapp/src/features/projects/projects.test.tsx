@@ -87,6 +87,8 @@ const JOURNAL_STYLES = [
     title: 'Мультидисциплинарный прорыв',
     summary: 'Nature, Science, Cell, PNAS: широкая аудитория, активный залог.',
     journals: ['Nature', 'Science', 'Cell', 'PNAS'],
+    description: 'Читатель: междисциплинарные учёные.\nТон: увлекательный, краткий.',
+    description_lines: ['Читатель: междисциплинарные учёные.', 'Тон: увлекательный, краткий.'],
     highlights: [
       'TARGET AUDIENCE: Multidisciplinary scientists. Avoid narrow jargon.',
       'TONE: Engaging, concise, active voice.',
@@ -98,6 +100,8 @@ const JOURNAL_STYLES = [
     title: 'Здоровая наука',
     summary: 'PLOS ONE, Scientific Reports: воспроизводимость и сухое описание.',
     journals: ['PLOS ONE', 'Scientific Reports'],
+    description: 'Тон: сухой, описательный, максимально подробный.',
+    description_lines: ['Тон: сухой, описательный, максимально подробный.'],
     highlights: ['TONE: Dry, descriptive, highly detailed.'],
     templates: [
       { label: 'Materials and Methods', sections: ['methods'] },

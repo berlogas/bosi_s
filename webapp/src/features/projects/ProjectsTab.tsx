@@ -96,9 +96,10 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
     label: item.title,
   }))
 
-  // Описание выбранного стиля — словами самого промпта (TONE, TARGET
-  // AUDIENCE). Исследователь должен видеть, что уйдёт в модель, прямо при
-  // выборе: иначе «стиль» остаётся подписью в списке.
+  // Описание выбранного стиля: читатель и тон. Исследователь должен видеть,
+  // что уйдёт в модель, прямо при выборе — иначе «стиль» остаётся подписью
+  // в списке. Русский текст берётся из meta.toml, английские TONE и
+  // TARGET AUDIENCE из промпта — запасной вариант.
   const chosenStyle = (styles.data ?? []).find((item) => item.key === journal)
 
   const list = useMemo(() => projects.data ?? [], [projects.data])
@@ -179,7 +180,10 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           <Text size="sm">
             Стиль «{chosenStyle.title}»: {chosenStyle.summary}
           </Text>
-          {chosenStyle.highlights.map((line) => (
+          {(chosenStyle.description_lines.length > 0
+            ? chosenStyle.description_lines
+            : chosenStyle.highlights
+          ).map((line) => (
             <Text key={line} size="xs" c="dimmed">
               {line}
             </Text>

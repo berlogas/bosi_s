@@ -1958,6 +1958,10 @@ export interface components {
             summary: string;
             /** Journals */
             journals: string[];
+            /** Description */
+            description: string;
+            /** Description Lines */
+            description_lines: string[];
             /** Highlights */
             highlights: string[];
             /** Templates */

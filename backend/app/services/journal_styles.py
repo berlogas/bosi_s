@@ -82,6 +82,10 @@ class JournalStyle:
     key: str
     title: str
     summary: str
+    # Русское описание группы для интерфейса. Живёт в `meta.toml` рядом с
+    # шаблоном, а не извлекается из него: промпт английский, и показывать
+    # его читателю как есть значит требовать от него английский.
+    description: str
     journals: tuple[str, ...]
     default_template: str
     templates: tuple[StyleTemplate, ...] = field(default_factory=tuple)
@@ -111,6 +115,10 @@ class JournalStyle:
             return []
         return [f"{match.group(1).upper()}: {match.group(2)}"
                 for match in _HIGHLIGHT_RE.finditer(template.prompt)]
+
+    def description_lines(self) -> list[str]:
+        """Строки описания для интерфейса: русский текст из meta.toml."""
+        return [line for line in self.description.splitlines() if line.strip()]
 
 
 # --------------------------------------------------------------------------- загрузка
@@ -149,6 +157,7 @@ def _build_style(meta: dict[str, Any], directory: Path) -> JournalStyle | None:
     key = str(meta.get("key") or directory.name).strip()
     title = str(meta.get("title") or key).strip()
     summary = str(meta.get("summary") or "").strip()
+    description = str(meta.get("description") or "").strip()
     journals = tuple(str(name).strip() for name in meta.get("journals", [])
                      if str(name).strip())
     default = str(meta.get("default_template") or "").strip()
@@ -175,7 +184,8 @@ def _build_style(meta: dict[str, Any], directory: Path) -> JournalStyle | None:
             path=path))
     if not templates:
         return None
-    return JournalStyle(key=key, title=title, summary=summary, journals=journals,
+    return JournalStyle(key=key, title=title, summary=summary,
+                        description=description, journals=journals,
                         default_template=default, templates=tuple(templates))
 
 
@@ -222,6 +232,8 @@ def style_options() -> list[dict[str, Any]]:
             "summary": style.summary,
             "journals": list(style.journals),
             "highlights": style.highlights(),
+            "description": style.description,
+            "description_lines": style.description_lines(),
             "templates": [
                 {"label": template.label, "sections": list(template.sections)}
                 for template in style.templates

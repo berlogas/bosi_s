@@ -96,6 +96,30 @@ def test_подстановка_работает_даже_без_заглушк�
         "До\nК\nПосле"
 
 
+def test_у_каждой_группы_есть_русское_описание() -> None:
+    """Интерфейс читает по-русски: описание лежит в meta.toml."""
+    for style in js.styles():
+        lines = style.description_lines()
+        assert lines, f"{style.key}: нет описания для интерфейса"
+        assert any(line.startswith(("Тон:", "Читатель:")) for line in lines),             style.key
+
+
+def test_описание_и_хайлайты_не_одно_и_то_же() -> None:
+    """Английские TONE из промпта и русский текст — разные вещи.
+
+    Показывать в интерфейсе английник значит требовать от читателя английский;
+    отказываться от него нельзя, потому что это единственный способ убедиться,
+    что описание соответствует промпту.
+    """
+    nature = js.find_style("Nature")
+
+    # Строки переноса не содержат двоеточия — сравниваем по смыслу, а не
+    # построчно, иначе проверка ломалась бы от ширины колонки в meta.toml.
+    assert nature.description_lines() != nature.highlights()
+    assert any("Тон:" in line for line in nature.description_lines())
+    assert any(line.startswith("TARGET AUDIENCE:") for line in nature.highlights())
+
+
 def test_описание_стиля_берётся_из_промпта() -> None:
     """Что покажет интерфейс — должно совпадать с текстом промпта.
 

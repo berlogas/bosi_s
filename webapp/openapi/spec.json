@@ -5857,6 +5857,17 @@
             "type": "array",
             "title": "Journals"
           },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "description_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Description Lines"
+          },
           "highlights": {
             "items": {
               "type": "string"
@@ -5878,6 +5889,8 @@
           "title",
           "summary",
           "journals",
+          "description",
+          "description_lines",
           "highlights",
           "templates"
         ],

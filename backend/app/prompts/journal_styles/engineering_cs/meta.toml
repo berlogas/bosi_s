@@ -2,6 +2,12 @@ key = "engineering_cs"
 title = "Инженерия и Computer Science"
 summary = "IEEE Transactions, NeurIPS, ACM: плотный технический текст, алгоритмы, метрики, сравнение с SOTA."
 journals = ["IEEE Transactions", "NeurIPS", "ICML", "ICLR", "ACM Transactions", "IEEE Access"]
+description = """
+Тон: плотный, технический, прямой, ориентированный на постановку проблемы и
+решение.
+Точность обязательна: алгоритмы, сложность (Big-O) и метрики бенчмарков,
+ссылки — заглушками [CITATION], а не выдуманными.
+"""
 default_template = "introduction"
 
 [[templates]]

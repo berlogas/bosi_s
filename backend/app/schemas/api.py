@@ -359,8 +359,12 @@ class JournalStyleOut(BaseModel):
     title: str
     summary: str
     journals: list[str]
-    # Строки «TONE: ...», «TARGET AUDIENCE: ...» из самого промпта: интерфейс
-    # показывает исследователю, что именно получит модель.
+    # Русское описание стиля из `meta.toml` — то, что читает интерфейс.
+    description: str
+    description_lines: list[str]
+    # Строки «TONE: ...», «TARGET AUDIENCE: ...» из самого промпта: английник,
+    # на котором модель работает. Показывается как запасной вариант, если
+    # русского описания в группе не написано.
     highlights: list[str]
     templates: list[JournalTemplateOut]
 

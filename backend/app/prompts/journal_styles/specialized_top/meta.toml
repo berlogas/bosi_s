@@ -2,6 +2,12 @@ key = "specialized_top"
 title = "Специализированный топ"
 summary = "Nature Medicine, JACS, PRL, Lancet: экспертная аудитория, механизмы, точная терминология."
 journals = ["Nature Medicine", "JACS", "Physical Review Letters", "PRL", "Lancet", "Nature Physics", "JBC"]
+description = """
+Читатель: специалисты именно в этой области, профессиональная терминология
+без объяснения базовых вещей.
+Тон: строгий, аналитический, точный. Акцент на механизме, статистической
+значимости и причинно-следственных связях.
+"""
 default_template = "results"
 
 [[templates]]

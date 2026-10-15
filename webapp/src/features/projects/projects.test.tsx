@@ -447,38 +447,6 @@ async function openKindList(): Promise<HTMLElement> {
     })
   })
 
-  it('журнал вне справочника вводится вручную', async () => {
-    const { calls } = mockProjectsApi({
-      'GET /api/sessions/s-1/projects': [],
-      'POST /api/sessions/s-1/projects': { ...PROJECT, id: 'p-new' },
-      'GET /api/sessions/s-1/projects/p-new/sections': [],
-      'GET /api/sessions/s-1/projects/p-new/documents': [],
-      'GET /api/sessions/s-1/projects/p-new/progress': {
-        project_id: 'p-new', sections: 0, written: 0, words: 0, percent: 0,
-      },
-    })
-
-    renderApp()
-    await screen.findByText('Проектов нет — создайте первый.')
-    await userEvent.type(screen.getByLabelText('Название'), 'Свой журнал')
-    await userEvent.click(screen.getByRole('combobox', { name: 'Стиль журнала' }))
-    await userEvent.click(
-      await screen.findByRole('option', {
-        name: 'Другой журнал — вписать вручную',
-        hidden: true,
-      }),
-    )
-    await userEvent.type(screen.getByLabelText('Название журнала'), 'ICES JCR')
-    await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
-
-    await waitFor(() => {
-      const call = calls.find(
-        (c) => c.url.endsWith('/projects') && c.init.method === 'POST',
-      )
-      expect(JSON.parse(String(call?.init.body)).target_journal).toBe('ICES JCR')
-    })
-  })
-
   it('статус проекта сохраняется PATCH-ом', async () => {
     const { calls } = mockProjectsApi({
       'PATCH /api/sessions/s-1/projects/p-1': { ...PROJECT, status: 'drafting' },

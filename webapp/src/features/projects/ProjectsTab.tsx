@@ -84,10 +84,6 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [journal, setJournal] = useState('')
-  // Журнала может не быть в справочнике: тогда название вводится руками,
-  // требования подставятся те, что есть, а остальное — через указания
-  // автора в разделе.
-  const [ownJournal, setOwnJournal] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const create = useCreateProject(sessionId)
   const patch = usePatchProject(sessionId)
@@ -95,14 +91,10 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const [statusValue, setStatusValue] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const OTHER_JOURNAL = '__other__'
-  const journalChoices = [
-    ...(styles.data ?? []).map((item) => ({
-      value: item.key,
-      label: item.title,
-    })),
-    { value: OTHER_JOURNAL, label: 'Другой журнал — вписать вручную' },
-  ]
+  const journalChoices = (styles.data ?? []).map((item) => ({
+    value: item.key,
+    label: item.title,
+  }))
 
   // Описание выбранного стиля — словами самого промпта (TONE, TARGET
   // AUDIENCE). Исследователь должен видеть, что уйдёт в модель, прямо при
@@ -168,30 +160,12 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           placeholder="Выберите стиль"
           data={journalChoices}
           value={journal || null}
-          onChange={(value) => {
-            if (value === OTHER_JOURNAL) {
-              setOwnJournal(true)
-              setJournal('')
-              return
-            }
-            setOwnJournal(false)
-            setJournal(value ?? '')
-          }}
+          onChange={(value) => setJournal(value ?? '')}
           disabled={readOnly}
           searchable
           allowDeselect={false}
           style={{ flex: 2 }}
         />
-        {ownJournal && (
-          <TextInput
-            label="Название журнала"
-            placeholder="Например, Journal of Marine Biology"
-            value={journal}
-            onChange={(event) => setJournal(event.currentTarget.value)}
-            disabled={readOnly}
-            style={{ flex: 2 }}
-          />
-        )}
         <Button
           onClick={handleCreate}
           disabled={readOnly || !title.trim()}
@@ -366,7 +340,7 @@ function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
           Создайте проект и выберите стиль журнала — план разделов создастся
           сам: Введение, Методы исследования, Результаты, Обсуждение, Заключение.
           Промпт выбранной группы (роль, аудитория, структура раздела) подставляется
-          в генерацию — его видно под полем «Статус».
+          в генерацию — его текст показан сразу под выбором стиля.
         </List.Item>
         <List.Item>
           Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}

@@ -424,15 +424,6 @@ function ProjectEditor({
   projectOptions,
 }: ProjectEditorProps) {
   const progress = useProjectProgress(sessionId, project.id)
-  const styles = useJournalStyles()
-  // Стиль ищется и по ключу группы, и по названию журнала внутри неё:
-  // в поле осталось то, что вводил пользователь.
-  const raw = (project.target_journal ?? '').trim().toLowerCase()
-  const profile = (styles.data ?? []).find(
-    (item) => item.key.toLowerCase() === raw
-      || item.journals.some((journal) => journal.toLowerCase() === raw),
-  )
-
   return (
     <Stack gap="sm">
       <Group align="flex-end" gap="sm">
@@ -473,39 +464,6 @@ function ProjectEditor({
           Удалить
         </Button>
       </Group>
-
-      {/* Промпт стиля виден до генерации: иначе выбор журнала выглядит
-          как подпись, а на деле меняет промпт. */}
-      {project.target_journal && (
-        <Alert color={profile ? 'blue' : 'yellow'} variant="light" p="xs">
-          {profile ? (
-            <>
-              <Text size="sm">
-                Стиль «{profile.title}» подставляется в генерацию разделов
-              </Text>
-              {profile.summary && (
-                <Text size="xs" c="dimmed">
-                  {profile.summary}
-                </Text>
-              )}
-              {profile.highlights.map((line) => (
-                <Text key={line} size="xs" c="dimmed">
-                  {line}
-                </Text>
-              ))}
-              <Text size="xs" c="dimmed">
-                Журналы группы: {profile.journals.join(', ')} · разделы:{' '}
-                {profile.templates.map((item) => item.label).join(', ')}
-              </Text>
-            </>
-          ) : (
-            <Text size="sm">
-              Группы «{project.target_journal}» нет в справочнике: промпт стиля
-              не подставляется, тон задавайте в указаниях автора к разделу.
-            </Text>
-          )}
-        </Alert>
-      )}
 
       {progress.data && (
         <div>

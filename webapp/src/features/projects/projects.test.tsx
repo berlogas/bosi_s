@@ -447,67 +447,6 @@ async function openKindList(): Promise<HTMLElement> {
     })
   })
 
-  it('стиль группы показывает, какой промпт пойдёт в генерацию', async () => {
-    mockProjectsApi({
-      'GET /api/sessions/s-1/projects': [
-        { ...PROJECT, target_journal: 'multidisciplinary_breakthrough' },
-      ],
-    })
-    renderApp()
-
-    expect(
-      await screen.findByText(/Стиль «Мультидисциплинарный прорыв»/),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/Журналы группы: Nature, Science, Cell, PNAS/))
-      .toBeInTheDocument()
-    // Описание стиля — словами промпта, а не выдуманной подписью.
-    expect(screen.getByText(/TONE: Engaging, concise, active voice/))
-      .toBeInTheDocument()
-  })
-
-  it('при выборе стиля показан текст промпта: тон и читатель', async () => {
-    mockProjectsApi({ 'GET /api/sessions/s-1/projects': [] })
-    renderApp()
-    await screen.findByText('Проектов нет — создайте первый.')
-    await userEvent.type(screen.getByLabelText('Название'), 'Новый проект')
-    await userEvent.click(screen.getByRole('combobox', { name: 'Стиль журнала' }))
-    await userEvent.click(
-      await screen.findByRole('option', {
-        name: 'Здоровая наука',
-        hidden: true,
-      }),
-    )
-
-    expect(
-      await screen.findByText(/TONE: Dry, descriptive, highly detailed/),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/Журналы группы: PLOS ONE, Scientific Reports/))
-      .toBeInTheDocument()
-  })
-
-  it('стиль ищется и по названию журнала внутри группы', async () => {
-    // Пользователь вводил журнал, а не ключ группы: блок стиля обязан найтись.
-    mockProjectsApi({
-      'GET /api/sessions/s-1/projects': [{ ...PROJECT, target_journal: 'Nature' }],
-    })
-    renderApp()
-
-    expect(
-      await screen.findByText(/Стиль «Мультидисциплинарный прорыв»/),
-    ).toBeInTheDocument()
-  })
-
-  it('группы нет в справочнике — честное предупреждение', async () => {
-    // В проекте «Marine Biology», которого в справочнике нет: выбор не должен
-    // молча выглядеть как применённый стиль.
-    mockProjectsApi()
-    renderApp()
-
-    expect(
-      await screen.findByText(/нет в справочнике/),
-    ).toBeInTheDocument()
-  })
-
   it('журнал вне справочника вводится вручную', async () => {
     const { calls } = mockProjectsApi({
       'GET /api/sessions/s-1/projects': [],

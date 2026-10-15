@@ -39,6 +39,7 @@ from app.services.generation import (
     GenerationResult,
     build_citation_map,
     build_prompt,
+    citations_required,
     normalize_sections,
     progress,
     validate_citations,
@@ -156,7 +157,11 @@ class ProjectService:
         prompt = self._build_prompt(project, request, sources, db)
         text, seconds = await self._complete(prompt, session.id)
 
-        check = validate_citations(text, len(sources))
+        # Методы и собственные результаты ссылкой не обязаны: там описывается
+        # работа авторов, а не факты о других публикациях.
+        check = validate_citations(
+            text, len(sources),
+            require_any=citations_required(request.section or ""))
         citation_map = build_citation_map(text, sources)
 
         self._question = request.question
@@ -190,6 +195,7 @@ class ProjectService:
         # — от обычного раздела до обсуждения. Шаблон подбирается под раздел:
         # у группы журналов их несколько, и для «Methods» нужен свой.
         style = style_prompt(project.target_journal, request.section)
+        require_citations = citations_required(request.section or "")
 
         if request.kind is GenerationKind.literature_review:
             return analyses.literature_review_prompt(
@@ -230,7 +236,7 @@ class ProjectService:
             base = build_prompt(
                 request.section or "Обзор черновика", request.question, sources,
                 language=language, notes=notes, word_target=request.word_target,
-                style=style)
+                style=style, require_citations=require_citations)
             commentary = (
                 "На основе разбора выше напиши краткий комментарий: что исправить "
                 "в первую очередь и почему. Ссылайся на источники [n]."
@@ -240,6 +246,7 @@ class ProjectService:
         return build_prompt(
             request.section, request.question, sources, language=language,
             notes=notes, word_target=request.word_target, style=style,
+            require_citations=require_citations,
         )
 
     def _data_summaries(self, project: Project, db: Session,

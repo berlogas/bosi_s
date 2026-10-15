@@ -11,7 +11,11 @@ import os
 from pathlib import Path
 
 from app.services import journal_styles as js
-from app.services.generation import apply_style, build_prompt
+from app.services.generation import (
+    apply_style,
+    build_prompt,
+    citations_required,
+)
 from app.services.journal_styles import CONTEXT_MARKER
 
 SOURCES = [{"index": 1, "title": "Doc A", "text": "текст",
@@ -86,6 +90,42 @@ def test_правила_цитирования_идут_после_стиля() 
 
     assert prompt.index("Act as a senior scientific editor") < \
         prompt.index("ЖЁСТКИЕ ПРАВИЛА ЦИТИРОВАНИЯ")
+
+
+def test_правила_запрещают_выдуманные_числа() -> None:
+    """Замер показал: модель дописывала p-value и метрики, которых нет.
+
+    Поэтому запрет на цифры и статистику — в наших правилах, а не только в
+    шаблоне: шаблон группа один, а правило общее для всех разделов.
+    """
+    prompt = build_prompt("Results", "тема", SOURCES)
+
+    assert "Никаких чисел, которых нет в блоке ИСТОЧНИКИ" in prompt
+    assert "[MISSING INFO]" in prompt
+    assert "p, r, CI" in prompt
+
+
+def test_методы_не_требуют_ссылки_но_остальные_требуют() -> None:
+    """Своя работа ссылкой не подкрепляется: требовать её — значит выдумывать."""
+    assert not citations_required("Methods")
+    assert not citations_required("Materials and Methods")
+    assert not citations_required("Методы исследования")
+    for section in ("Introduction", "Results", "Discussion", "Conclusions"):
+        assert citations_required(section), section
+
+
+def test_в_методах_правило_про_ссылки_мягче() -> None:
+    methods = build_prompt("Methods", "тема", SOURCES, require_citations=False)
+    introduction = build_prompt("Introduction", "тема", SOURCES)
+
+    assert "Собственные данные и ход работы автора" in methods
+    assert "Каждое утверждение о фактах" in introduction
+
+
+def test_у_стилей_которые_провоцируют_выдумки_есть_запрет() -> None:
+    """SOTA и статистическая значимость провоцируют правдоподобную выдумку."""
+    assert "fabrication" in js.style_prompt("NeurIPS", "Introduction")
+    assert "fabrication" in js.style_prompt("Nature Medicine", "Results")
 
 
 def test_подстановка_работает_даже_без_заглушки() -> None:

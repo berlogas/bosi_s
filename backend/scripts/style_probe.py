@@ -66,14 +66,17 @@ async def probe(project_id: str, section: str, question: str,
             prompt = gen.build_prompt(
                 section, question, sources,
                 language=registry.app.answer_language,
-                word_target=words, style=text_style or None)
+                word_target=words, style=text_style or None,
+                require_citations=gen.citations_required(section))
             started = time.perf_counter()
             text = await registry.session_service(session.id).complete(
                 prompt, name="section")
             elapsed = time.perf_counter() - started
             # Проверка цитат обязательна: стиль, забывший про ссылки,
             # даст красивый текст без источников — это провал, а не успех.
-            check = gen.validate_citations(text, len(sources))
+            check = gen.validate_citations(
+                text, len(sources),
+                require_any=gen.citations_required(section))
             words = len(text.split())
             cited = len(gen.CITE_RE.findall(text))
             bad = len(check.dangling)

@@ -6,7 +6,8 @@ REQUIREMENTS FOR RELATED WORK:
 1. Categorize existing methods into 2-3 distinct paradigms.
 2. Critically analyze why these paradigms fall short of our proposed solution.
 
-STRICT CONSTRAINT: Maintain strict technical accuracy regarding algorithms, complexity (Big-O), and benchmark metrics. Use [CITATION] placeholders. Any complexity class, metric value, or baseline number not present in the notes must be marked [MISSING INFO] rather than estimated.
+STRICT CONSTRAINT: Maintain strict technical accuracy regarding algorithms, complexity (Big-O), and benchmark metrics. Cite only the numbered sources given in the material; never write a [CITATION] placeholder and never name a year or an author. Any complexity class, metric value, or baseline number not present in the notes must be marked [MISSING INFO] rather than estimated.
+Do not invent the method itself. If the notes do not describe an algorithm, architecture, dataset, or benchmark, do not name one: state [MISSING INFO] and describe only what the material supports. Relative gains such as 'improves RMSE by 15%' require the absolute values on both sides in the notes; otherwise write [MISSING INFO]. Claiming a comparison that the notes do not contain is a fabrication, not a template.
 
 RESEARCH NOTES & SOTA COMPARISON:
 The material for this section — task, author notes and sources — is provided below.

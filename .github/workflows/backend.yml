@@ -63,7 +63,23 @@ jobs:
           with open('../webapp/openapi/spec.json.check', 'w', encoding='utf-8', newline='\n') as f:
               json.dump(app.openapi(), f, ensure_ascii=False, indent=2)
           PY
-          diff -u ../webapp/openapi/spec.json ../webapp/openapi/spec.json.check
+          if diff -u ../webapp/openapi/spec.json ../webapp/openapi/spec.json.check > /tmp/spec.diff; then
+            echo 'Спецификация совпадает с кодом'
+          else
+            {
+              echo '## OpenAPI разошёлся с кодом'
+              echo 'Перегенерировать:'
+              echo '```bash'
+              echo 'cd backend && python -c "import json; from app.main import app; json.dump(app.openapi(), open(\"../webapp/openapi/spec.json\", \"w\", encoding=\"utf-8\", newline=\"\\n\"), ensure_ascii=False, indent=2)"'
+              echo '```'
+              echo 'Первые строки расхождения:'
+              echo '```diff'
+              head -40 /tmp/spec.diff
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/spec.diff | head -40
+            exit 1
+          fi
           rm -f ../webapp/openapi/spec.json.check
 
       - name: Артефакты pytest при падении

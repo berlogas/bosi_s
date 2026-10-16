@@ -37,7 +37,17 @@ jobs:
       # PaperQA тянет из интернета при первом импорте, поэтому конфиг
       # закрепляем ровно как в репозитории, иначе расходятся настройки.
       - name: Тесты (pytest)
-        run: python -m pytest -q
+        run: |
+          python -m pytest -q --tb=short 2>&1 | tee /tmp/pytest.log
+          # причина падения должна читаться на странице прогона, а не в
+          # длинном логе: выжимка уходит в сводку job'а
+          {
+            echo '## pytest'
+            echo '```'
+            grep -E '^(FAILED|ERROR)' /tmp/pytest.log | head -20 || echo 'падений нет'
+            tail -5 /tmp/pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Линт (ruff)
         run: python -m ruff check app tests

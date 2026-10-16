@@ -48,8 +48,8 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Администратору: пользователи, глобальная база, сброс состояния, аудит, регламент |
 | [docs/LAUNCH.md](docs/LAUNCH.md) | **Как запустить**: скрипты, порты, типичные ошибки |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Развёртывание, бэкап, сброс состояния, диагностика, hardening |
-| [docs/SPICE_REPORT.md](docs/SPICE_REPORT.md) | Предварительное исследование PaperQA2 |
-| `docs/PHASE*_REPORT.md` | Отчёты по фазам: что сделано, какие грабли встретились |
+| [docs/SPICE_REPORT.md](docs/SPICE_REPORT.md) | Исследование PaperQA2: производительность железа, грабли API |
+| [docs/PHASE10_REPORT.md](docs/PHASE10_REPORT.md) | Почему в ответах появились правила фактов и проверка `grounding.py` |
 
 ## Что внутри
 
@@ -69,7 +69,7 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 
 ```bash
 cd backend
-../.venv/Scripts/python.exe -m pytest -q        # 580 тестов
+../.venv/Scripts/python.exe -m pytest -q        # 632 теста
 ../.venv/Scripts/python.exe -m ruff check app tests
 
 cd webapp

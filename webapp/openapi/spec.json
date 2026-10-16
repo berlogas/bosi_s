@@ -2130,6 +2130,7 @@
           "session-documents"
         ],
         "summary": "List Session Documents",
+        "description": "Документы сессии.\n\nЧерез `document_from_row`, а не ORM напрямую: в DTO поле называется\n`chunk_count`, а в модели — `chunks_count`, и FastAPI молча ставил бы\nноль, показывая «0 чанков» у проиндексированных документов.",
         "operationId": "list_session_documents_api_sessions__session_id__documents_get",
         "security": [
           {
@@ -6749,6 +6750,22 @@
             "type": "string",
             "title": "User Id"
           },
+          "owner_username": {
+            "type": "string",
+            "title": "Owner Username",
+            "default": ""
+          },
+          "owner_full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Full Name"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -6892,6 +6909,22 @@
           "user_id": {
             "type": "string",
             "title": "User Id"
+          },
+          "owner_username": {
+            "type": "string",
+            "title": "Owner Username",
+            "default": ""
+          },
+          "owner_full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Full Name"
           },
           "title": {
             "type": "string",

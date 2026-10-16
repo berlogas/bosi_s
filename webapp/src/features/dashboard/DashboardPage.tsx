@@ -20,12 +20,60 @@ import {
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import type { SessionOut } from '../../api/types'
+
 import { TaskPanel } from '../../components/TaskPanel'
 import { displayName } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { QuickChat } from './QuickChat'
 import { SessionCard } from './SessionCard'
 import { useActiveTasks, useCancelTask, useCreateSession, useSessions } from './queries'
+
+interface OwnerGroup {
+  ownerId: string
+  label: string
+  sessions: SessionOut[]
+}
+
+/** Имя владельца для заголовка группы: ФИО при наличии, иначе логин. */
+export function ownerLabel(username: string, fullName?: string | null): string {
+  return fullName?.trim() ? `${fullName} (${username})` : username
+}
+
+/**
+ * Раскладывает сессии по владельцам. Свои сессии текущего пользователя —
+ * первыми, остальные группы по алфавиту логина, внутри группы сессии уже
+ * приходят отсортированными по последней активности.
+ */
+export function groupByOwner(
+  sessions: SessionOut[],
+  currentUserId?: string,
+): OwnerGroup[] {
+  const groups = new Map<string, OwnerGroup>()
+  for (const session of sessions) {
+    const key = session.owner_username || session.user_id
+    let group = groups.get(key)
+    if (!group) {
+      group = {
+        ownerId: session.user_id,
+        label: ownerLabel(
+          session.owner_username || session.user_id,
+          session.owner_full_name,
+        ),
+        sessions: [],
+      }
+      groups.set(key, group)
+    }
+    group.sessions.push(session)
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (currentUserId) {
+      if (a.ownerId === currentUserId) return -1
+      if (b.ownerId === currentUserId) return 1
+    }
+    return a.label.localeCompare(b.label, 'ru')
+  })
+}
 
 function NewSession() {
   const navigate = useNavigate()
@@ -105,6 +153,45 @@ function ActiveTasks() {
   )
 }
 
+/**
+ * Группировка карточек по владельцу — для администратора.
+ *
+ * Исследователю группы не нужны: у него сессии только свои, и заголовок
+ * с его же именем ничего не добавляет. Администратор видит общий список,
+ * где вперемешку чужие сессии, поэтому сначала идут его собственные
+ * (иначе «свои» карточки теряются в общем списке), остальные — по имени.
+ */
+function SessionGroups({ sessions, isAdmin }: {
+  sessions: SessionOut[]
+  isAdmin: boolean
+}) {
+  const currentUser = useAuth((state) => state.user)
+  const groups = groupByOwner(sessions, currentUser?.id)
+  return (
+    <Stack gap="md">
+      {groups.map((group) => (
+        <Stack key={group.ownerId} gap="xs">
+          <Text size="sm" fw={600}>
+            {group.label} ({group.sessions.length})
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+            {group.sessions.map((session) => (
+              <SessionCard key={session.id} session={session} />
+            ))}
+          </SimpleGrid>
+        </Stack>
+      ))}
+      {groups.length === 0 && (
+        <Alert color="blue">
+          {isAdmin
+            ? 'Сессий нет — создайте первую.'
+            : 'Активных сессий нет — создайте первую.'}
+        </Alert>
+      )}
+    </Stack>
+  )
+}
+
 export function DashboardPage() {
   const user = useAuth((state) => state.user)
   const sessions = useSessions()
@@ -123,6 +210,7 @@ export function DashboardPage() {
   const active = all.filter((session) => session.status === 'active')
   const paused = all.filter((session) => session.status === 'paused')
   const archived = all.filter((session) => session.status === 'archived')
+  const isAdmin = user?.role === 'admin'
 
   return (
     <Stack gap="md">
@@ -141,28 +229,20 @@ export function DashboardPage() {
 
       <NewSession />
 
-      <Title order={5}>Мои сессии ({active.length})</Title>
+      <Title order={5}>
+        {isAdmin ? 'Сессии всех пользователей' : 'Мои сессии'} ({active.length})
+      </Title>
       {sessions.isPending ? (
         <Loader size="sm" />
-      ) : active.length === 0 ? (
-        <Alert color="blue">Активных сессий нет — создайте первую.</Alert>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-          {active.map((session) => (
-            <SessionCard key={session.id} session={session} />
-          ))}
-        </SimpleGrid>
+        <SessionGroups sessions={active} isAdmin={isAdmin} />
       )}
 
       {paused.length > 0 && (
         <Card withBorder>
           <Stack gap="sm">
             <Title order={5}>На паузе ({paused.length})</Title>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-              {paused.map((session) => (
-                <SessionCard key={session.id} session={session} />
-              ))}
-            </SimpleGrid>
+            <SessionGroups sessions={paused} isAdmin={isAdmin} />
           </Stack>
         </Card>
       )}
@@ -171,11 +251,7 @@ export function DashboardPage() {
         <Card withBorder>
           <Stack gap="sm">
             <Title order={5}>Архив ({archived.length}) — только чтение</Title>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-              {archived.map((session) => (
-                <SessionCard key={session.id} session={session} />
-              ))}
-            </SimpleGrid>
+            <SessionGroups sessions={archived} isAdmin={isAdmin} />
           </Stack>
         </Card>
       )}

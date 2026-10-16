@@ -98,6 +98,32 @@ async def test_admin_sees_all_sessions(client, admin, researcher, session_id) ->
     assert session_id in {s["id"] for s in response.json()}
 
 
+async def test_session_list_carries_owner(client, admin, researcher, session_id) -> None:
+    """Админ раскладывает чужие сессии по владельцам — нужен логин в DTO."""
+    response = await client.get("/api/sessions", headers=admin)
+    body = next(s for s in response.json() if s["id"] == session_id)
+    assert body["owner_username"] == "ivanov"
+    assert body["user_id"]
+
+
+async def test_session_list_carries_owner_full_name(client, admin, researcher,
+                                                    session_id, researcher_user,
+                                                    db) -> None:
+    researcher_user.full_name = "Иванов Иван"
+    db.commit()  # иначе клиент открывает другую сессию и не увидит ФИО
+
+    response = await client.get("/api/sessions", headers=admin)
+    body = next(s for s in response.json() if s["id"] == session_id)
+    assert body["owner_full_name"] == "Иванов Иван"
+
+
+async def test_own_session_list_also_has_owner(client, researcher, session_id) -> None:
+    """Поле заполняется и для исследователя — карточка не должна падать."""
+    response = await client.get("/api/sessions", headers=researcher)
+    body = next(s for s in response.json() if s["id"] == session_id)
+    assert body["owner_username"] == "ivanov"
+
+
 async def test_cannot_read_foreign_session(client, researcher, db_engine) -> None:
     """Сессия Иванова недоступна Петрову: 404, а не 403 (не раскрываем факт)."""
     from sqlalchemy.orm import sessionmaker

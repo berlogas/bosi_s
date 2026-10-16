@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
-import { json, loginAs, mockApi, resetAuth } from '../../test/helpers'
+import { json, loginAs, mockApi, resetAuth, TEST_ADMIN } from '../../test/helpers'
 
 const SESSION = {
   id: 's-1',
@@ -130,6 +130,152 @@ describe('дашборд: список сессий', () => {
     expect(
       await screen.findByText('Активных сессий нет — создайте первую.'),
     ).toBeInTheDocument()
+  })
+
+  it('исследователю группы владельцев не показываются', async () => {
+    loginAs()
+    mockApi({
+      'GET /api/sessions': [SESSION],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+    })
+
+    renderApp()
+    expect(await screen.findByText('Баренцево море')).toBeInTheDocument()
+    expect(screen.queryByText(/^Иванов Иван \(ivanov\)/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Сессии всех пользователей/)).not.toBeInTheDocument()
+  })
+})
+
+describe('дашборд администратора: группировка по владельцу', () => {
+  const OWN_SESSIONS = [
+    {
+      ...SESSION,
+      user_id: 'u-admin',
+      owner_username: 'admin',
+      owner_full_name: 'Админов Админ',
+    },
+  ]
+  const FOREIGN = [
+    {
+      ...SESSION,
+      id: 's-9',
+      title: 'Сессия Иванова',
+      owner_username: 'ivanov',
+      owner_full_name: 'Иванов Иван',
+    },
+    {
+      ...SESSION,
+      id: 's-10',
+      title: 'Сессия Петрова',
+      owner_username: 'petrov',
+      owner_full_name: null,
+    },
+    {
+      ...SESSION,
+      id: 's-11',
+      title: 'Вторая сессия Иванова',
+      owner_username: 'ivanov',
+      owner_full_name: 'Иванов Иван',
+    },
+  ]
+
+  function adminMocks(sessions: unknown[]) {
+    return {
+      'GET /api/sessions': sessions,
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+    }
+  }
+
+  it('раскладывает чужие сессии по владельцам, свои — первыми', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminMocks([...FOREIGN, ...OWN_SESSIONS]))
+
+    renderApp()
+
+    expect(await screen.findByText('Сессии всех пользователей (4)')).toBeInTheDocument()
+    // ФИО с логином, без ФИО — только логин, свои группы первыми
+    const headers = screen
+      .getAllByText(/^.*\(\d\)$/)
+      .map((node) => node.textContent)
+      .filter((text) => text !== 'Сессии всех пользователей (4)')
+    expect(headers).toEqual([
+      'Админов Админ (admin) (1)',
+      'Иванов Иван (ivanov) (2)',
+      'petrov (1)',
+    ])
+
+    const cards = screen.getAllByTestId('session-card')
+    expect(cards).toHaveLength(4)
+    // обе сессии Иванова в одной группе
+    const ivanovGroup = screen.getByText('Иванов Иван (ivanov) (2)').parentElement as HTMLElement
+    expect(within(ivanovGroup).getByText('Сессия Иванова')).toBeInTheDocument()
+    expect(within(ivanovGroup).getByText('Вторая сессия Иванова')).toBeInTheDocument()
+    expect(within(ivanovGroup).queryByText('Сессия Петрова')).not.toBeInTheDocument()
+  })
+
+  it('на паузе и в архиве тоже сгруппированы', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminMocks([
+      ...FOREIGN.slice(0, 1),
+      { ...FOREIGN[1], status: 'paused' },
+      { ...FOREIGN[2], status: 'archived', archived_at: '2026-10-01T09:00:00+00:00' },
+    ]))
+
+    renderApp()
+
+    expect(await screen.findByText('На паузе (1)')).toBeInTheDocument()
+    expect(screen.getByText('Архив (1) — только чтение')).toBeInTheDocument()
+    expect(screen.getAllByText('petrov (1)')).toHaveLength(1)
+  })
+
+  it('админу пустой список не выглядит как «нет своих сессий»', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminMocks([]))
+
+    renderApp()
+    expect(await screen.findByText('Сессий нет — создайте первую.')).toBeInTheDocument()
+  })
+})
+
+describe('дашборд: кнопка «Продолжить» открывает рабочую страницу', () => {
+  it('клик по «Продолжить» показывает страницу сессии с вкладками', async () => {
+    loginAs()
+    const detail = {
+      ...SESSION,
+      days_left: 90,
+      writable: true,
+      summary: {
+        documents: 0,
+        documents_by_category: {},
+        storage_bytes: 0,
+        storage_limit_bytes: 524_288_000,
+        documents_limit: 50,
+        projects: 0,
+        projects_limit: 5,
+        messages: 0,
+        links: 0,
+        read_only: false,
+      },
+    }
+    mockApi({
+      'GET /api/sessions': [SESSION],
+      'GET /api/sessions/s-1': detail,
+      'GET /api/sessions/s-1/messages': { messages: [], total: 0 },
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'PUT /api/sessions/s-1/state': detail,
+    })
+
+    renderApp()
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Продолжить' }),
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Баренцево море' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Чат' })).toBeInTheDocument()
   })
 })
 

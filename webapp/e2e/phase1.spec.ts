@@ -161,8 +161,8 @@ test('приёмка: вход → создать сессию → архив в
   await login(page)
   await expect(page.getByRole('heading', { name: /boasi_s/ })).toBeVisible()
 
-  // --- пустой дашборд: подсказка «Активных сессий нет» ---
-  await expect(page.getByText('Активных сессий нет — создайте первую.')).toBeVisible()
+  // --- пустой дашборд: подсказка. Вход админом, а список у него общий ---
+  await expect(page.getByText('Сессий нет — создайте первую.')).toBeVisible()
 
   // --- создание сессии ---
   await page.getByLabel('Название').fill('Новая')

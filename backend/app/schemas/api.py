@@ -6,9 +6,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
-from app.db.models import Role, SearchMode, SessionStatus
+from app.db.models import ResearchSession, Role, SearchMode, SessionStatus
 
 
 class ORMModel(BaseModel):
@@ -102,6 +102,8 @@ class AuditLogOut(ORMModel):
 class SessionOut(ORMModel):
     id: str
     user_id: str
+    owner_username: str = ""
+    owner_full_name: str | None = None
     title: str
     status: SessionStatus
     active_project_id: str | None = None
@@ -115,6 +117,22 @@ class SessionOut(ORMModel):
     expires_at: datetime
     archived_at: datetime | None = None
     purged_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_owner(cls, data: Any) -> Any:
+        """Владелец берётся из связи `session.user`.
+
+        Исследователю он не нужен (его собственные сессии), но администратор
+        получает общий список, и без подписи карточки неотличимы друг от друга.
+        Связь подгружается в списке сессий (selectinload), поэтому здесь только
+        чтение уже загруженного объекта — без дополнительных запросов.
+        """
+        if isinstance(data, ResearchSession):
+            owner = data.user
+            data.owner_username = owner.username
+            data.owner_full_name = owner.full_name
+        return data
 
 
 class SessionCreate(BaseModel):

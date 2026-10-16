@@ -28,6 +28,11 @@ function ttlLabel(days: number): string {
   return `осталось ${days} дней`
 }
 
+/**
+ * Подпись владельца в карточке не выводится: администратору карточки
+ * разложены по группам владельцев (см. `SessionGroups`), а исследователю
+ * слово «владелец» и так лишнее — это его собственная сессия.
+ */
 export function SessionCard({ session }: { session: SessionOut }) {
   const navigate = useNavigate()
   const [confirmOpened, setConfirmOpened] = useState(false)
@@ -56,6 +61,7 @@ export function SessionCard({ session }: { session: SessionOut }) {
             {icon} {sessionStatusLabel(session.status)} · {label} ·{' '}
             {shortWhen(session.last_action_at)}
           </Text>
+          
           {session.resume_note && (
             <Text size="xs" c="dimmed">
               Заметка: {session.resume_note}

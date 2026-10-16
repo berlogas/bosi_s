@@ -742,7 +742,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Session Documents */
+        /**
+         * List Session Documents
+         * @description Документы сессии.
+         *
+         *     Через `document_from_row`, а не ORM напрямую: в DTO поле называется
+         *     `chunk_count`, а в модели — `chunks_count`, и FastAPI молча ставил бы
+         *     ноль, показывая «0 чанков» у проиндексированных документов.
+         */
         get: operations["list_session_documents_api_sessions__session_id__documents_get"];
         put?: never;
         post?: never;
@@ -2334,6 +2341,13 @@ export interface components {
             id: string;
             /** User Id */
             user_id: string;
+            /**
+             * Owner Username
+             * @default
+             */
+            owner_username: string;
+            /** Owner Full Name */
+            owner_full_name?: string | null;
             /** Title */
             title: string;
             status: components["schemas"]["SessionStatus"];
@@ -2382,6 +2396,13 @@ export interface components {
             id: string;
             /** User Id */
             user_id: string;
+            /**
+             * Owner Username
+             * @default
+             */
+            owner_username: string;
+            /** Owner Full Name */
+            owner_full_name?: string | null;
             /** Title */
             title: string;
             status: components["schemas"]["SessionStatus"];

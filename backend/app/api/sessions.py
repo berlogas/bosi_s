@@ -19,7 +19,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.serializers import session_detail, session_resume
 from app.core.leases import leases
@@ -80,6 +80,7 @@ def list_sessions(user: User = Depends(get_current_user),
     if user.role is Role.admin:
         return list(db.scalars(
             select(ResearchSession)
+            .options(selectinload(ResearchSession.user))
             .where(ResearchSession.purged_at.is_(None))
             .order_by(ResearchSession.last_activity_at.desc())))
     return list_user_sessions(db, user.id)

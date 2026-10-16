@@ -83,18 +83,25 @@ jobs:
           def schemas(spec):
               return spec.get('components', {}).get('schemas', {})
 
+          report = [f'эндпоинтов: было {len(paths(committed))}, стало {len(paths(actual))}']
+          gone = set(paths(committed)) - set(paths(actual))
+          new = set(paths(actual)) - set(paths(committed))
+          report.append(f'пропали: {sorted(gone) or "нет"}')
+          report.append(f'новые: {sorted(new) or "нет"}')
+          old_s, new_s = schemas(committed), schemas(actual)
+          diff = [k for k in sorted(set(old_s) | set(new_s)) if old_s.get(k) != new_s.get(k)]
+          report.append(f'различаются схемы ({len(diff)}): {diff or "нет"}')
+          for key in diff[:3]:
+              report.append(f'в файле {key}: ' + json.dumps(old_s.get(key), ensure_ascii=False)[:500])
+              report.append(f'из кода {key}: ' + json.dumps(new_s.get(key), ensure_ascii=False)[:500])
+
           with open(os.environ.get('GITHUB_STEP_SUMMARY', '/dev/null'), 'a', encoding='utf-8') as out:
-              out.write('## OpenAPI разошёлся с кодом\n\n')
-              out.write(f'эндпоинтов: было {len(paths(committed))}, стало {len(paths(actual))}\n\n')
-              gone = set(paths(committed)) - set(paths(actual))
-              new = set(paths(actual)) - set(paths(committed))
-              if gone or new:
-                  out.write(f'пропали эндпоинты: {sorted(gone) or "нет"}\n\n')
-                  out.write(f'новые эндпоинты: {sorted(new) or "нет"}\n\n')
-              old_s, new_s = schemas(committed), schemas(actual)
-              diff = [k for k in sorted(set(old_s) | set(new_s)) if old_s.get(k) != new_s.get(k)]
-              out.write(f'различаются схемы ({len(diff)}): {diff or "нет"}\n')
-          print('Спецификация разошлась с кодом, подробности в сводке прогона')
+              out.write('## OpenAPI разошёлся с кодом\n\n```\n' + '\n'.join(report) + '\n```\n')
+
+          # Аннотации читаются через Checks API без прав администратора, в
+          # отличие от логов и артефактов, поэтому дублируем расхождение туда.
+          for line in report:
+              print(f'::error title=OpenAPI разошёлся::{line}')
           sys.exit(1)
           PY
 

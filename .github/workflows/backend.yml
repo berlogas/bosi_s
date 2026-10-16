@@ -28,13 +28,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.lock
 
-      # Ставим requirements.lock, а не requirements.txt: во втором почти всё
-      # с «>=», поэтому CI подтягивал бы более свежие версии, чем на машине
-      # разработчика, — и сверка OpenAPI падала бы на ровно этой разнице.
       - name: Установка зависимостей
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.lock
+          pip install -r requirements.txt
           pip install ruff
 
       # PaperQA тянет из интернета при первом импорте, поэтому конфиг
@@ -60,30 +57,42 @@ jobs:
       # всплыло бы только на сборке.
       - name: OpenAPI не разошёлся с кодом
         run: |
+          # Сравниваем РАЗОБРАННЫЕ JSON, а не файлы: одинаковый контракт может
+          # сериализоваться по-разному (порядок ключей, переводы строк,
+          # чуть свежая версия FastAPI). Байтовое сравнение давало ложные
+          # падения, а расхождение схем — настоящую ошибку — ловит.
           python - <<'PY'
           import json
+          import os
+          import sys
           from app.main import app
-          with open('../webapp/openapi/spec.json.check', 'w', encoding='utf-8', newline='\n') as f:
-              json.dump(app.openapi(), f, ensure_ascii=False, indent=2)
+
+          committed = json.load(open('../webapp/openapi/spec.json', encoding='utf-8'))
+          actual = app.openapi()
+
+          if committed == actual:
+              print('Спецификация совпадает с кодом')
+              sys.exit(0)
+
+          def paths(spec):
+              return {p: v for p, v in spec.get('paths', {}).items()}
+          def schemas(spec):
+              return spec.get('components', {}).get('schemas', {})
+
+          with open(os.environ.get('GITHUB_STEP_SUMMARY', '/dev/null'), 'a', encoding='utf-8') as out:
+              out.write('## OpenAPI разошёлся с кодом\n\n')
+              out.write(f'эндпоинтов: было {len(paths(committed))}, стало {len(paths(actual))}\n\n')
+              gone = set(paths(committed)) - set(paths(actual))
+              new = set(paths(actual)) - set(paths(committed))
+              if gone or new:
+                  out.write(f'пропали эндпоинты: {sorted(gone) or "нет"}\n\n')
+                  out.write(f'новые эндпоинты: {sorted(new) or "нет"}\n\n')
+              old_s, new_s = schemas(committed), schemas(actual)
+              diff = [k for k in sorted(set(old_s) | set(new_s)) if old_s.get(k) != new_s.get(k)]
+              out.write(f'различаются схемы ({len(diff)}): {diff or "нет"}\n')
+          print('Спецификация разошлась с кодом, подробности в сводке прогона')
+          sys.exit(1)
           PY
-          if diff -u ../webapp/openapi/spec.json ../webapp/openapi/spec.json.check > /tmp/spec.diff; then
-            echo 'Спецификация совпадает с кодом'
-          else
-            {
-              echo '## OpenAPI разошёлся с кодом'
-              echo 'Перегенерировать:'
-              echo '```bash'
-              echo 'cd backend && python -c "import json; from app.main import app; json.dump(app.openapi(), open(\"../webapp/openapi/spec.json\", \"w\", encoding=\"utf-8\", newline=\"\\n\"), ensure_ascii=False, indent=2)"'
-              echo '```'
-              echo 'Первые строки расхождения:'
-              echo '```diff'
-              head -40 /tmp/spec.diff
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            cat /tmp/spec.diff | head -40
-            exit 1
-          fi
-          rm -f ../webapp/openapi/spec.json.check
 
       - name: Артефакты pytest при падении
         if: failure()

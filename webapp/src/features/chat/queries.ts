@@ -5,6 +5,7 @@
  * очистка переписки, поллинг задачи и «точка возврата» (save_state).
  */
 
+import type { QueryClient } from '@tanstack/react-query'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
@@ -108,22 +109,38 @@ export function useClearMessages(sessionId: string) {
   })
 }
 
+/**
+ * Ответ `PUT /state` (SessionOut) вливаем в кэш detail — но только если
+ * detail уже загружен.
+ *
+ * SessionOut не содержит `summary`, `days_left`, `writable`, поэтому запись
+ * в пустой кэш подменяла бы detail объектом без них: `SessionPage` падал бы на
+ * `session.summary.documents`, React размонтировал дерево, и страница оставалась
+ * пустой до F5 (F5 перезапрашивает detail целиком и всё работает). Гонка
+ * PUT-раньше-GET и делала баг «иногда».
+ */
+export function applySaveState(
+  queryClient: QueryClient,
+  sessionId: string,
+  session: Record<string, unknown>,
+): void {
+  const cached = queryClient.getQueryData(queryKeys.sessionDetail(sessionId))
+  if (!cached || typeof cached !== 'object') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessionDetail(sessionId) })
+    return
+  }
+  queryClient.setQueryData<Record<string, unknown>>(
+    queryKeys.sessionDetail(sessionId),
+    (old) => ({ ...(old as Record<string, unknown>), ...session }),
+  )
+}
+
 /** «Точка возврата»: смена вкладки / заметка (PUT /state, force). */
 export function useSaveState(sessionId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: Parameters<typeof client.saveState>[1]) =>
       client.saveState(sessionId, payload),
-    onSuccess: (session) => {
-      // Ответ PUT /state — SessionOut (снапшот и заметка уже на сервере):
-      // вливаем в detail, иначе «точка возврата» показывала бы старое.
-      void queryClient.setQueryData(
-        queryKeys.sessionDetail(sessionId),
-        (old: unknown): unknown =>
-          old && typeof old === 'object'
-            ? { ...(old as Record<string, unknown>), ...session }
-            : session,
-      )
-    },
+    onSuccess: (session) => applySaveState(queryClient, sessionId, session),
   })
 }

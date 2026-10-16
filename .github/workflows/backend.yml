@@ -5,7 +5,9 @@ name: backend
 
 on:
   push:
-    branches: [master, main, 'backend/**']
+    # Фильтра по веткам нет намеренно: с ограничением по именам веток CI
+    # молчал на ветке разработки (react-migration) и прогонялся раз в
+    # полгода на master.
     paths: ['backend/**', '.github/workflows/backend.yml']
   pull_request:
     paths: ['backend/**', '.github/workflows/backend.yml']

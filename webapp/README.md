@@ -1,8 +1,8 @@
 # webapp — интерфейс boasi_s на React (TypeScript)
 
-SPA-интерфейс boasi_s на React (TypeScript). Заменил Streamlit-клиент
-(`frontend/` удалён в Фазе 5). План перехода —
-`docs/REACT_MIGRATION_PLAN.md`. Бэкенд не меняется: тот же шина `/api/*`.
+SPA-интерфейс boasi_s на React (TypeScript). Заменил Streamlit-клиент,
+`frontend/` удалён. Бэкенд не менялся: та же шина `/api/*`, контракт типов
+генерируется из `openapi/spec.json` командой `npm run codegen`.
 
 ## Структура
 

@@ -28,7 +28,7 @@
 | 5 | Сессии: жизненный цикл | ✅ `docs/PHASE5_REPORT.md` |
 | 6 | RAG Fusion | ✅ `docs/PHASE6_REPORT.md` |
 | 7 | Проекты статей и генерация | ✅ `docs/PHASE7_REPORT.md` |
-| 8 | Frontend Streamlit → React | ✅ `docs/PHASE8_REPORT.md` (Streamlit), `docs/REACT_MIGRATION_PLAN.md` (React) |
+| 8 | Frontend Streamlit → React | ✅ `docs/PHASE8_REPORT.md`; Streamlit-клиент удалён, интерфейс — `webapp/` |
 | 9 | Docker, эксплуатация, hardening | ✅ `docs/PHASE9_REPORT.md` |
 | 10 | Приёмка по сценарию | ⬜ не начата |
 
@@ -75,7 +75,7 @@ backend/app/
 webapp/src/           api, features (auth, sessions, documents, projects, chat, admin), components
 webapp/e2e/           сценарии Playwright (phase1..phase4)
 scripts/              start.sh/.bat, backup.sh, restore.sh, pull_models.sh
-docs/                 отчёты по фазам + OPERATIONS/ADMIN_GUIDE/USER_GUIDE + REACT_MIGRATION_PLAN
+docs/                 отчёты по фазам + OPERATIONS/ADMIN_GUIDE/USER_GUIDE + чек-лист приёмки интерфейса
 ```
 
 ## 4. Ключевые решения
@@ -95,6 +95,16 @@ TTL сессии продлевает только реальная активн
 аренда в `app/core/leases.py` (в памяти) → воркер продлевает TTL только по живым
 арендам. Побочный эффект в пользу приватности: после рестарта аренды пусты,
 «мёртвые» сессии не воскресают.
+
+### 4.1a Живой прогресс: поллинг, а не SSE
+
+При переезде на React планировалось заменить опрос задач на SSE-канал. Не
+реализовано: панель задач обновляется через `refetchInterval` раз в 2 с и
+гасит опрос, как только активных задач не остаётся
+(`webapp/src/features/dashboard/queries.ts`). Для локальной установки это
+приемлемо, но лишний запрос на каждый опрос; если захочется
+настоящего живого прогресса, начинать надо с SSE на бэкенде и подписки вместо
+поллинга.
 
 ### 4.2 Один вызов генерации на объединённый контекст
 

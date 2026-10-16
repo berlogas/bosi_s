@@ -208,7 +208,7 @@ Streamlit удалён вместе с каталогом `frontend/` — еди
 
 ```bash
 cd backend
-../.venv/Scripts/python.exe -m pytest -q      # 580 тестов, ~12 минут
+../.venv/Scripts/python.exe -m pytest -q      # 632 теста, ~3 минуты
 ../.venv/Scripts/python.exe -m ruff check app tests
 ../.venv/Scripts/python.exe -m alembic upgrade head
 
@@ -221,8 +221,25 @@ npm run codegen:check   # соответствие типов API схеме Ope
 Тесты не ходят в сеть: LLM подменяется заглушкой (`StubLLMModel`), эмбеддинги
 локальные. Интеграционные тесты с живым Ollama: `pytest -m integration`.
 
-Полный прогон занимает ~12 минут — не запускайте его на каждый чих, точечный
+Полный прогон занимает ~3 минуты — не запускайте его на каждый чих, точечный
 запуск быстрее: `pytest tests/test_rag_fusion.py -q`.
+
+Артефакты тестов (БД тестовый разборк, куски pytest и кфш) пишут в `.test_data/` в
+корне репозитория — путь перемена `BOASI_TEST_DATA`, чтобы не полагать в
+чужом месте. Каталог можно смешать целиком, он в `.gitignore`.
+
+### CI
+
+Два пайплайна, оба срабатывают при пуше в бранш:
+
+| Файл | Что проверяет |
+| --- | --- |
+| `.github/workflows/backend.yml` | pytest (632), ruff, сверка `webapp/openapi/spec.json` с кодом |
+| `.github/workflows/webapp.yml` | tsc, eslint, prettier, vitest, Playwright, сборка |
+
+Шаг сверки OpenAPI — проверка того, что контракт типов фронта (строка `schema.ts`) не
+расходит с кодом backend: оба должны совпасть, иначе фронт встаёт старое вступить с
+цепару и ломает ошибку.
 
 ## 7. Настройки, которые меняют поведение
 

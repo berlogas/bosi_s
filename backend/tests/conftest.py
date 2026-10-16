@@ -8,7 +8,14 @@ from pathlib import Path
 
 import pytest
 
-TEST_DATA_DIR = Path(os.environ.get("BOASI_TEST_DATA", "N:/Development/boasi_s/.test_data"))
+# Каталог артефактов тестов. Путь по умолчанию считается от репозитория, а не
+# зашит строкой: абсолютный путь одной машины на другой превращался в
+# относительный (на Linux «N:/Development/...» — это подкаталог внутри
+# репозитория), и тесты молча писали мусор в рабочее дерево.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TEST_DATA_DIR = Path(
+    os.environ.get("BOASI_TEST_DATA", REPO_ROOT / ".test_data")
+).resolve()
 
 
 @pytest.fixture(scope="session", autouse=True)

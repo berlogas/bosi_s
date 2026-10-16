@@ -48,7 +48,12 @@ def scenario(db_engine, service_app, chunk_store, stub_llm, monkeypatch):
         db.commit()
         user_id = user.id
 
-    service_app.data_dir = service_app.data_dir.parent / "scenario"
+    # Артефакты сценария — в общий каталог тестов, а не в корень репозитория:
+    # раньше здесь появлялась папка `scenario/` рядом с Makefile.
+    from tests.conftest import TEST_DATA_DIR
+
+    scenario_dir = TEST_DATA_DIR / "phase5_scenario"
+    service_app.data_dir = scenario_dir
     service_app.ensure_dirs()
 
     # reaper чистит чанки через глобальный реестр — он должен видеть то же хранилище

@@ -1,0 +1,65 @@
+name: backend
+
+# Отдельный пайплайн для бэкенда. До этого CI покрывал только webapp/, и
+# 632 теста FastAPI/PaperQA не запускались ни при одном пуше.
+
+on:
+  push:
+    branches: [master, main, 'backend/**']
+    paths: ['backend/**', '.github/workflows/backend.yml']
+  pull_request:
+    paths: ['backend/**', '.github/workflows/backend.yml']
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+
+      - name: Установка зависимостей
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      # PaperQA тянет из интернета при первом импорте, поэтому конфиг
+      # закрепляем ровно как в репозитории, иначе расходятся настройки.
+      - name: Тесты (pytest)
+        run: python -m pytest -q
+
+      - name: Линт (ruff)
+        run: python -m ruff check app tests
+
+      # Ловит ситуацию «поправили модель или эндпоинт, а openapi не
+      # перегенерировали»: типы фронта собираются из этого же файла, и расхождение
+      # всплыло бы только на сборке.
+      - name: OpenAPI не разошёлся с кодом
+        run: |
+          python - <<'PY'
+          import json
+          from app.main import app
+          with open('../webapp/openapi/spec.json.check', 'w', encoding='utf-8', newline='\n') as f:
+              json.dump(app.openapi(), f, ensure_ascii=False, indent=2)
+          PY
+          diff -u ../webapp/openapi/spec.json ../webapp/openapi/spec.json.check
+          rm -f ../webapp/openapi/spec.json.check
+
+      - name: Артефакты pytest при падении
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: |
+            backend/.pytest_cache
+            .test_data
+          retention-days: 7

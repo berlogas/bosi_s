@@ -62,7 +62,8 @@ make health          # http://127.0.0.1:8000/api/health
 Ожидается `status: ok`, `database: ok`, `ollama.reachable: true`.
 Если `ollama.reachable: false` — модель не скачана: `make pull-models`.
 
-URL: <http://127.0.0.1> (порт 80).
+Интерфейс: <http://127.0.0.1:5173> (порт задаётся переменной `WEBAPP_PORT`, по умолчанию 5173).
+API: <http://127.0.0.1:8000/api/docs>.
 
 > `.env` с `SECRET_KEY` нужно сохранить в секретном хранилище: при его
 > потере все выданные токены перестанут проверяться и потребуется новый вход

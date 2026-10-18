@@ -1,7 +1,8 @@
 """Чат: RAG-fusion по сессии и быстрый запрос по глобальной базе (Фаза 6).
 
-  POST /api/chat/query         — ответ с источниками 📚 (глобальная) / 📁 (сессия)
-  POST /api/chat/quick-query   — только глобальная база, без создания сессии
+  POST /api/chat/query          — синхронный ответ с источниками 📚 (скрипты, тесты)
+  POST /api/chat/query-async    — фоновый вопрос по сессии: task_id + опрос
+  POST /api/chat/quick-query   — быстрый вопрос по глобальной базе, тоже фоном
   GET  /api/chat/suggest-queries — уточняющие вопросы
 
 Маршруты `/api/chat/messages`, `/quick-history`, `/quick-message` живут в
@@ -27,7 +28,6 @@ from app.schemas.api import (
     ChatQueryRequest,
     ChatQueryResponse,
     QuickQueryRequest,
-    QuickQueryResponse,
     SuggestionsResponse,
 )
 from app.services.rag_service import RagFusionService
@@ -137,36 +137,65 @@ async def chat_query_async(payload: ChatQueryRequest, request: Request,
     return {"task_id": task.id}
 
 
-@router.post("/quick-query", response_model=QuickQueryResponse)
+@router.post("/quick-query")
 async def quick_query(payload: QuickQueryRequest, request: Request,
                       user: User = Depends(get_current_user),
-                      db: Session = Depends(get_db)) -> QuickQueryResponse:
-    """Быстрый вопрос по глобальной базе — без создания сессии."""
-    fusion = RagFusionService()
-    result = await fusion.answer(
-        db, query=payload.query, session_id=None,
-        mode=SearchMode.global_only, k=payload.k or 10,
-        max_sources=payload.max_sources or 5, use_cache=not payload.no_cache)
+                      db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Быстрый вопрос по глобальной базе — фоновой задачей, без сессии.
 
-    if not result.from_cache:
-        messages_repo.save_exchange(
-            db, user=user, question=payload.query,
-            answer=result.answer.formatted_answer, session_id=None,
-            mode=SearchMode.global_only, sources=result.sources,
-            cost=result.answer.cost, duration_seconds=result.answer.seconds,
-            token_counts=result.answer.token_counts,
-            checks=result.checks)
-        messages_repo.trim_quick_history(db, user.id)
+    Отдаёт task_id, UI опрашивает `/api/tasks/{id}`. Ответ лежит в
+    `Task.result`: answer, sources, references, query, from_cache, stats,
+    base_empty — и дописывается в историю быстрых запросов.
+    """
+    from app.services.tasks import Task, tasks
 
-    audit(db, action="chat.quick_query", actor=user, target_type="collection",
-          target_id="global", ip=_ip(request), sources=len(result.sources),
-          from_cache=result.from_cache, seconds=result.answer.seconds)
+    # Маршрут был синхронным, и на CPU-инференсе это выглядело как зависание:
+    # ответ считается минуты, а UI показывал только спиннер — без этапов, без
+    # отмены и без возможности уйти со вкладки и вернуться. Теперь путь тот
+    # же, что у вопроса по сессии (`POST /query-async`).
+    async def body(task: Task) -> dict[str, Any]:
+        # Этапы приходят колбэком on_stage: без них строка прогресса замирает
+        # на 20%, пока LLM считает ответ.
+        task.set_stage(20, "поиск по глобальной базе")
+        fusion = RagFusionService()
+        result = await fusion.answer(
+            db, query=payload.query, session_id=None,
+            mode=SearchMode.global_only, k=payload.k or 10,
+            max_sources=payload.max_sources or 5,
+            use_cache=not payload.no_cache, on_stage=task.set_stage)
 
-    return QuickQueryResponse(
-        answer=result.answer.formatted_answer, sources=result.sources,
-        references=result.references, query=payload.query,
-        from_cache=result.from_cache, stats=result.stats,
-        base_empty=result.answer.base_empty)
+        if not result.from_cache:
+            task.set_stage(95, "сохранение в историю")
+            messages_repo.save_exchange(
+                db, user=user, question=payload.query,
+                answer=result.answer.formatted_answer, session_id=None,
+                mode=SearchMode.global_only, sources=result.sources,
+                cost=result.answer.cost, duration_seconds=result.answer.seconds,
+                token_counts=result.answer.token_counts,
+                checks=result.checks)
+            messages_repo.trim_quick_history(db, user.id)
+
+        audit(db, action="chat.quick_query", actor=user, target_type="collection",
+              target_id="global", ip=_ip(request), sources=len(result.sources),
+              from_cache=result.from_cache, seconds=result.answer.seconds)
+
+        return {
+            "answer": result.answer.formatted_answer,
+            "sources": result.sources,
+            "references": result.references,
+            "query": payload.query,
+            "from_cache": result.from_cache,
+            "stats": result.stats,
+            "base_empty": result.answer.base_empty,
+        }
+
+    task = tasks.submit(body, kind="chat",
+                        title=f"Быстрый вопрос: {payload.query[:50]}",
+                        user_id=user.id)
+    audit(db, action="chat.quick_query_async", actor=user,
+          target_type="collection", target_id="global", ip=_ip(request),
+          task=task.id)
+    return {"task_id": task.id}
 
 
 @router.get("/suggest-queries", response_model=SuggestionsResponse)

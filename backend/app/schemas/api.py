@@ -317,18 +317,6 @@ class QuickQueryRequest(BaseModel):
     no_cache: bool = False
 
 
-class QuickQueryResponse(BaseModel):
-    answer: str
-    sources: list[dict[str, Any]] = Field(default_factory=list)
-    references: list[str] = Field(default_factory=list)
-    query: str
-    from_cache: bool = False
-    stats: dict[str, Any] = Field(default_factory=dict)
-    # Ответ получен без опоры на базу (база пуста или ничего не нашлось).
-    # Фронтенд покажет пояснение, чтобы «пустой» ответ был понятен.
-    base_empty: bool = False
-
-
 class SuggestionsResponse(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
     query: str = ""

@@ -14,7 +14,6 @@ export type SessionStatus = components['schemas']['SessionStatus']
 export type User = components['schemas']['UserOut']
 export type AuditLogEntry = components['schemas']['AuditLogOut']
 export type CreateUserRequest = components['schemas']['CreateUserRequest']
-export type QuickQueryResponse = components['schemas']['QuickQueryResponse']
 export type MessageOut = components['schemas']['MessageOut']
 export type MessagePage = components['schemas']['MessagePage']
 export type SearchMode = components['schemas']['SearchMode']
@@ -24,6 +23,23 @@ export type ChatQueryResponse = Omit<
   components['schemas']['ChatQueryResponse'],
   'sources'
 > & { sources?: AnswerSource[] }
+
+/**
+ * Полезная нагрузка завершённой фоновой задачи быстрого вопроса
+ * (`Task.result`): маршрут `/api/chat/quick-query` отдаёт только task_id,
+ * поэтому в openapi-схеме её нет — описываем по телу задачи в
+ * `backend/app/api/chat.py::quick_query`.
+ */
+export type QuickQueryResult = {
+  answer: string
+  sources: AnswerSource[]
+  references: string[]
+  query: string
+  from_cache: boolean
+  stats: Record<string, unknown>
+  /** Ответ получен без опоры на базу (база пуста или ничего не нашлось). */
+  base_empty: boolean
+}
 
 export type TaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 

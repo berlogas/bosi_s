@@ -209,7 +209,8 @@ describe('дашборд администратора: группировка п
     const cards = screen.getAllByTestId('session-card')
     expect(cards).toHaveLength(4)
     // обе сессии Иванова в одной группе
-    const ivanovGroup = screen.getByText('Иванов Иван (ivanov) (2)').parentElement as HTMLElement
+    const ivanovGroup = screen.getByText('Иванов Иван (ivanov) (2)')
+      .parentElement as HTMLElement
     expect(within(ivanovGroup).getByText('Сессия Иванова')).toBeInTheDocument()
     expect(within(ivanovGroup).getByText('Вторая сессия Иванова')).toBeInTheDocument()
     expect(within(ivanovGroup).queryByText('Сессия Петрова')).not.toBeInTheDocument()
@@ -217,11 +218,13 @@ describe('дашборд администратора: группировка п
 
   it('на паузе и в архиве тоже сгруппированы', async () => {
     loginAs(TEST_ADMIN)
-    mockApi(adminMocks([
-      ...FOREIGN.slice(0, 1),
-      { ...FOREIGN[1], status: 'paused' },
-      { ...FOREIGN[2], status: 'archived', archived_at: '2026-10-01T09:00:00+00:00' },
-    ]))
+    mockApi(
+      adminMocks([
+        ...FOREIGN.slice(0, 1),
+        { ...FOREIGN[1], status: 'paused' },
+        { ...FOREIGN[2], status: 'archived', archived_at: '2026-10-01T09:00:00+00:00' },
+      ]),
+    )
 
     renderApp()
 
@@ -270,11 +273,11 @@ describe('дашборд: кнопка «Продолжить» открывае
 
     renderApp()
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Продолжить' }),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Продолжить' }))
 
-    expect(await screen.findByRole('heading', { name: 'Баренцево море' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Баренцево море' }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Чат' })).toBeInTheDocument()
   })
 })
@@ -417,31 +420,100 @@ describe('дашборд: активные задачи', () => {
 })
 
 describe('дашборд: быстрый чат', () => {
-  it('вопрос → ответ с источниками и подсказками', async () => {
+  /** Задача быстрого вопроса: kind=chat, сессии нет — работа по глобальной базе. */
+  const quickTask = (patch: Record<string, unknown> = {}) => ({
+    id: 'q-1',
+    kind: 'chat',
+    title: 'Быстрый вопрос: что такое GF/F',
+    status: 'running',
+    progress: 55,
+    step: 'генерация ответа (LLM)',
+    error: null,
+    cancel_requested: false,
+    user_id: 'u-1',
+    session_id: null,
+    project_id: null,
+    created_at: '2026-10-07T09:00:00+00:00',
+    started_at: '2026-10-07T09:00:01+00:00',
+    finished_at: null,
+    seconds: 42.5,
+    stage_seconds: 3.2,
+    result: null,
+    ...patch,
+  })
+
+  const ANSWER = {
+    answer: 'Ответ по GF/F [1]',
+    sources: [
+      {
+        index: 1,
+        marker: '📚',
+        source_scope: 'global',
+        dockey: 'k1',
+        docname: 'biomass',
+        title: 'Данные GF/F',
+        category: 'global_knowledge',
+        score: 0.87,
+        relevance: 0.87,
+      },
+    ],
+    references: ['📚 [1] Данные GF/F (глобальная база)'],
+    query: 'что такое GF/F',
+    from_cache: false,
+    base_empty: false,
+  }
+
+  /** Пустая история, пока задача не дописала обмен. */
+  const quickHistory = (messages: unknown[] = []) => ({
+    messages,
+    total: messages.length,
+  })
+
+  it('вопрос → панель этапов с отменой → ответ с источниками и подсказками', async () => {
     loginAs()
-    mockApi({
+    // первый опрос задачи — «считаем», второй — «готово»: так видно и панель
+    // этапов, и ответ из Task.result
+    let polls = 0
+    const { calls } = mockApi({
       'GET /api/sessions': [],
       'GET /api/health': HEALTH,
       'GET /api/tasks': { tasks: [], active: 0 },
-      'POST /api/chat/quick-query': {
-        answer: 'Ответ по GF/F [1]',
-        sources: [
-          {
-            index: 1,
-            marker: '📚',
-            source_scope: 'global',
-            dockey: 'k1',
-            docname: 'biomass',
-            title: 'Данные GF/F',
-            category: 'global_knowledge',
-            score: 0.87,
-            relevance: 0.87,
-          },
-        ],
-        references: ['📚 [1] Данные GF/F (глобальная база)'],
-        query: 'что такое GF/F',
-        from_cache: false,
-        base_empty: false,
+      'GET /api/chat/quick-history': () => {
+        // история пополняется только после завершения задачи
+        if (polls < 2) return json(quickHistory())
+        return json(
+          quickHistory([
+            {
+              id: 'm-1',
+              session_id: null,
+              role: 'user',
+              content: 'что такое GF/F',
+              sources: [],
+              checks: {},
+              duration_seconds: null,
+              created_at: '2026-10-07T09:00:00+00:00',
+            },
+            {
+              id: 'm-2',
+              session_id: null,
+              role: 'assistant',
+              content: ANSWER.answer,
+              sources: ANSWER.sources,
+              checks: { citations: { ok: true } },
+              duration_seconds: 42.5,
+              created_at: '2026-10-07T09:00:42+00:00',
+            },
+          ]),
+        )
+      },
+      // маршрут отвечает мгновенно: считает фон, а не этот запрос
+      'POST /api/chat/quick-query': { task_id: 'q-1' },
+      'GET /api/tasks/q-1': () => {
+        polls += 1
+        if (polls === 1) return json(quickTask())
+        return json(
+          quickTask({ status: 'done', progress: 100, step: null, result: ANSWER }),
+        )
       },
       'GET /api/chat/suggest-queries': {
         suggestions: ['как считать биомассу', 'источники данных GF/F'],
@@ -457,7 +529,23 @@ describe('дашборд: быстрый чат', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Спросить' }))
 
-    expect(await screen.findByText(/Ответ по GF\/F/)).toBeInTheDocument()
+    // вопрос ушёл фоном: вместо спиннера — этапы с процентами и отменой
+    expect(await screen.findByText(/55%/)).toBeInTheDocument()
+    expect(screen.getByText(/генерация ответа/)).toBeInTheDocument()
+    expect(screen.getByText(/всего 42с/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Отменить' })).toBeInTheDocument()
+    expect(calls.some((call) => call.url.includes('/api/tasks/q-1'))).toBe(true)
+
+    // ответ из Task.result, затем перечитывание истории — без дублей.
+    // Смена статуса приходит со следующим опросом задачи (2 с), поэтому
+    // ждём с запасом, как в тестах чата сессии.
+    await waitFor(
+      () => expect(screen.getByText(/Ответ по GF\/F/)).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    await waitFor(() => expect(screen.getAllByText('что такое GF/F')).toHaveLength(1))
+    expect(screen.queryByRole('button', { name: 'Отменить' })).toBeNull()
+
     // В UI показывается релевантность («релевантность 87%»), а не взвешенный
     // score ранжирования: у глобального источника score = relevance × 0.4,
     // и эти числа не совпадают.
@@ -466,16 +554,87 @@ describe('дашборд: быстрый чат', () => {
     expect(screen.queryByText(/score /)).not.toBeInTheDocument()
 
     // подсказки уточнений (до 4)
-    expect(await screen.findByText('Можно уточнить:')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Можно уточнить:', {}, { timeout: 5000 }),
+    ).toBeInTheDocument()
     expect(screen.getByText('— как считать биомассу')).toBeInTheDocument()
-  })
+  }, 15_000)
 
-  it('ошибка чата показывается в пузыре, а не роняет страницу', async () => {
+  it('отмена задачи убирает ожидание и говорит, что вопрос отменён', async () => {
+    loginAs()
+    let cancelled = false
+    const { calls } = mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'GET /api/chat/quick-history': quickHistory(),
+      'POST /api/chat/quick-query': { task_id: 'q-1' },
+      'GET /api/tasks/q-1': () =>
+        json(
+          quickTask(
+            cancelled ? { status: 'cancelled', step: 'отменено пользователем' } : {},
+          ),
+        ),
+      'POST /api/tasks/q-1/cancel': () => {
+        cancelled = true
+        return json({ cancelled: true, task: quickTask({ cancel_requested: true }) })
+      },
+    })
+
+    renderApp()
+
+    await userEvent.type(
+      await screen.findByLabelText('Быстрый вопрос'),
+      'тяжёлый вопрос',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Спросить' }))
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Отменить' }))
+
+    expect(calls.some((call) => call.url.includes('/api/tasks/q-1/cancel'))).toBe(true)
+    // отмена приходит со следующим опросом задачи
+    await waitFor(
+      () => expect(screen.getByText('Вопрос отменён')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    expect(screen.queryByRole('button', { name: 'Отменить' })).toBeNull()
+    // ввод снова живой — можно спросить заново
+    expect(screen.getByLabelText('Быстрый вопрос')).not.toBeDisabled()
+  }, 15_000)
+
+  it('ошибка задачи показывает вопрос с ошибкой, а не молчание', async () => {
     loginAs()
     mockApi({
       'GET /api/sessions': [],
       'GET /api/health': HEALTH,
       'GET /api/tasks': { tasks: [], active: 0 },
+      'GET /api/chat/quick-history': quickHistory(),
+      'POST /api/chat/quick-query': { task_id: 'q-1' },
+      'GET /api/tasks/q-1': quickTask({
+        status: 'error',
+        error: 'RuntimeError: Ollama недоступен',
+      }),
+    })
+
+    renderApp()
+
+    await userEvent.type(await screen.findByLabelText('Быстрый вопрос'), 'привет')
+    await userEvent.click(screen.getByRole('button', { name: 'Спросить' }))
+
+    expect(
+      await screen.findByText(/Ollama недоступен/, {}, { timeout: 5000 }),
+    ).toBeInTheDocument()
+    // ввод не заблокирован — можно повторить
+    expect(screen.getByLabelText('Быстрый вопрос')).not.toBeDisabled()
+  })
+
+  it('ошибка отправки видна сразу, до всякой задачи', async () => {
+    loginAs()
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'GET /api/chat/quick-history': quickHistory(),
       'POST /api/chat/quick-query': json(
         { error: 'upstream_unavailable', detail: 'Ollama недоступен', meta: {} },
         503,
@@ -489,8 +648,47 @@ describe('дашборд: быстрый чат', () => {
 
     const alert = await screen.findByText('Ollama недоступен')
     expect(alert).toBeInTheDocument()
-    // ввод не заблокирован — можно повторить
     expect(screen.getByLabelText('Быстрый вопрос')).not.toBeDisabled()
+  })
+
+  it('переписка поднимается с сервера: перезагрузка страницы её не стирает', async () => {
+    loginAs()
+    const { calls } = mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'GET /api/chat/quick-history': quickHistory([
+        {
+          id: 'm-9',
+          session_id: null,
+          role: 'user',
+          content: 'прошлый вопрос',
+          sources: [],
+          checks: {},
+          duration_seconds: null,
+          created_at: '2026-10-06T09:00:00+00:00',
+        },
+        {
+          id: 'm-10',
+          session_id: null,
+          role: 'assistant',
+          content: 'прошлый ответ [1]',
+          sources: ANSWER.sources,
+          checks: {},
+          duration_seconds: 12.5,
+          created_at: '2026-10-06T09:00:12+00:00',
+        },
+      ]),
+    })
+
+    renderApp()
+
+    expect(await screen.findByText('прошлый вопрос')).toBeInTheDocument()
+    // метка цитаты [1] рисуется отдельной кнопкой, поэтому ищем по началу фразы
+    expect(screen.getByText(/прошлый ответ/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Данные GF\/F/).length).toBeGreaterThan(0)
+    // без нового вопроса сеть не дёргается
+    expect(findPost(calls, '/api/chat/quick-query')).toBeUndefined()
   })
 
   it('Enter отправляет вопрос, Shift+Enter — новая строка', async () => {
@@ -499,14 +697,20 @@ describe('дашборд: быстрый чат', () => {
       'GET /api/sessions': [],
       'GET /api/health': HEALTH,
       'GET /api/tasks': { tasks: [], active: 0 },
-      'POST /api/chat/quick-query': {
-        answer: 'Ок',
-        sources: [],
-        references: [],
-        query: 'вопрос',
-        from_cache: false,
-        base_empty: false,
-      },
+      'GET /api/chat/quick-history': quickHistory(),
+      'POST /api/chat/quick-query': { task_id: 'q-1' },
+      'GET /api/tasks/q-1': quickTask({
+        status: 'done',
+        progress: 100,
+        step: null,
+        result: {
+          ...ANSWER,
+          answer: 'Ок',
+          sources: [],
+          references: [],
+          base_empty: true,
+        },
+      }),
     })
 
     renderApp()
@@ -519,9 +723,11 @@ describe('дашборд: быстрый чат', () => {
 
     // Enter — отправка (паритет st.chat_input)
     await userEvent.type(area, '{Enter}')
-    expect(await screen.findByText('Ок')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Ок')).toBeInTheDocument(), {
+      timeout: 5000,
+    })
     expect(findPost(calls, '/api/chat/quick-query')).toBeDefined()
-  })
+  }, 15_000)
 })
 
 describe('вход после Фазы 0', () => {

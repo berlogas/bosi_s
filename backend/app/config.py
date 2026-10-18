@@ -85,8 +85,18 @@ class Settings(BaseSettings):
     llm_api_base: str | None = None
     llm_api_key: str | None = None
     llm_model: str = "ollama/qwen2.5:3b"  # в бою — более мощная модель, меняется здесь
-    llm_timeout_seconds: int = 3600  # большой таймаут обязателен на медленном inference
+    # Таймаут одного вызова LLM. Режимы разные: облачный endpoint
+    # (LLM_API_BASE задан) — 120–300 с, там зависание означает обрыв, а не
+    # медленную генерацию; локальная Ollama на CPU — до 3600 с, там ответ
+    # и правда считается минутами. Замер 2026-10-18: при 3600 с и облаке
+    # зависший запрос молчал 7–15 минут вместо понятной ошибки.
+    llm_timeout_seconds: int = 3600
     llm_max_retries: int = 2
+    # Болтовня («привет», «спасибо») идёт мимо поиска по базе: замер
+    # 2026-10-18 показал ~43 с и ответ со ссылками на чужой документ.
+    # Выключается одной настройкой, если захочется строго гонять всё через
+    # paperqa (тогда приветствие вернёт отказ «I cannot answer»).
+    trivial_query_fast_path: bool = True
     summary_llm_model: str | None = None  # None -> llm_model
     embedding_model: str = "st-multi-qa-MiniLM-L6-cos-v1"
     evidence_k: int = 10

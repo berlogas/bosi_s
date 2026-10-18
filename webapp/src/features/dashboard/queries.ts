@@ -13,6 +13,7 @@ export const queryKeys = {
   sessions: ['sessions'] as const,
   sessionDetail: (id: string) => ['session', id] as const,
   activeTasks: ['tasks', 'active'] as const,
+  quickHistory: ['chat', 'quick-history'] as const,
   health: ['health'] as const,
 }
 
@@ -51,6 +52,23 @@ export function useActiveTasks() {
       return tasks.some((task) => isActiveTask(task.status)) ? 2000 : false
     },
     refetchIntervalInBackground: false,
+  })
+}
+
+/**
+ * История быстрых вопросов.
+ *
+ * Раньше переписка жила в состоянии компонента и умирала вместе с вкладкой:
+ * ответ, посчитанный на backend, приходилось ждать заново. Теперь она в БД
+ * (`/api/chat/quick-history`), и дашборд поднимает её при открытии.
+ */
+export function useQuickHistory(limit = 20) {
+  return useQuery({
+    queryKey: [...queryKeys.quickHistory, limit],
+    queryFn: () => client.quickHistory(limit),
+    // история меняется только после завершённого вопроса, а он сам инвалидирует
+    // ключ — фонового перечитывания не нужно
+    staleTime: 30_000,
   })
 }
 

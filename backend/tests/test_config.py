@@ -48,7 +48,15 @@ def test_limits_match_spec() -> None:
     assert s.max_projects_per_session == 5
     assert s.offline_mode is True
     assert s.multimodal is False
-    assert s.llm_timeout_seconds >= 1800  # иначе lmi ретраит по 60 с
+    # PLAN.md §4: timeout=3600 нужен профилю «Ollama на CPU», иначе lmi
+    # ретраит по 60 с. Для облачного endpoint это не так: там зависание
+    # означает обрыв, а не медленную генерацию, и 3600 превращали молчание
+    # на четверть часа (замер 2026-10-18). Поэтому нижняя граница зависит от
+    # профиля, а не задана числом навсегда.
+    if s.resolved_llm_api_base:
+        assert s.llm_timeout_seconds >= 120, "cloud: меньше 120 с рвёт живые ответы"
+    else:
+        assert s.llm_timeout_seconds >= 1800  # иначе lmi ретраит по 60 с
 
 
 def test_public_summary_hides_secrets() -> None:

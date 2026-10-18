@@ -10,6 +10,8 @@ LLM подменён заглушкой, эмбеддинги локальные
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from app.db.models import SearchMode
@@ -112,6 +114,29 @@ async def _query(client, researcher, session_id, **payload) -> dict:
     return response.json()
 
 
+async def _quick(client, researcher, **payload) -> dict:
+    """Быстрый вопрос: отдать его фоном и дождаться результата задачи.
+
+    Маршрут отвечает мгновенно task_id'ом — сам ответ лежит в Task.result,
+    поэтому тест опрашивает /api/tasks/{id}, как это делает UI.
+    """
+    response = await client.post("/api/chat/quick-query", headers=researcher,
+                                 json={"query": "Что такое CTD?", "k": 10, **payload})
+    assert response.status_code == 200, response.text
+    task_id = response.json()["task_id"]
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 10.0
+    while True:
+        status = await client.get(f"/api/tasks/{task_id}", headers=researcher)
+        body = status.json()
+        if body["status"] in ("done", "error", "cancelled"):
+            assert body["status"] == "done", body.get("error")
+            return body["result"]
+        assert loop.time() < deadline, "фоновая задача зависла"
+        await asyncio.sleep(0.01)
+
+
 # --------------------------------------------------------------------------- hybrid
 async def test_hybrid_returns_both_scopes(client, researcher, session_id,
                                           seeded) -> None:
@@ -191,13 +216,144 @@ async def test_repeated_question_uses_cache(client, researcher, session_id,
 
 async def test_cache_is_used_for_repeated_quick_query(client, researcher,
                                                       seeded) -> None:
-    first = await client.post("/api/chat/quick-query", headers=researcher,
-                              json={"query": "Что такое CTD?", "no_cache": True})
-    second = await client.post("/api/chat/quick-query", headers=researcher,
-                               json={"query": "Что такое CTD?"})
+    first = await _quick(client, researcher, no_cache=True)
+    second = await _quick(client, researcher)
 
-    assert first.json()["from_cache"] is False
-    assert second.json()["from_cache"] is True
+    assert first["from_cache"] is False
+    assert second["from_cache"] is True
+    assert second["answer"] == first["answer"]
+
+
+async def test_quick_query_returns_task_with_progress(client, researcher) -> None:
+    """Вопрос уходит фоном: маршрут отвечает task_id'ом, а не минутами тишины."""
+    response = await client.post("/api/chat/quick-query", headers=researcher,
+                                 json={"query": "Что такое CTD?"})
+
+    assert response.status_code == 200
+    assert set(response.json()) == {"task_id"}
+
+    task = (await client.get(f"/api/tasks/{response.json()['task_id']}",
+                             headers=researcher)).json()
+    assert task["kind"] == "chat"
+    assert task["title"].startswith("Быстрый вопрос:")
+    # ответ считает фоновая задача: у задачи есть автор, иначе её не увидит
+    # ни админ в списке задач, ни пользователь в своей переписке
+    assert task["user_id"]
+
+
+async def test_quick_query_task_is_visible_only_to_its_author(client, researcher,
+                                                               db) -> None:
+    """Чужой быстрый вопрос не отдаётся постороннему (паритет сессионного чата)."""
+    from app.core.security import hash_password
+    from app.db.models import Role
+    from app.db.repositories.users import create_user
+
+    create_user(db, username="petrov", password="researcher-pass-123",
+                role=Role.researcher,
+                hashed_password=hash_password("researcher-pass-123"))
+    other = await login_headers(client, "petrov", "researcher-pass-123")
+
+    response = await client.post("/api/chat/quick-query", headers=researcher,
+                                 json={"query": "Что такое CTD?"})
+    task_id = response.json()["task_id"]
+
+    assert (await client.get(f"/api/tasks/{task_id}", headers=other)).status_code == 404
+    assert (await client.get(f"/api/tasks/{task_id}",
+                             headers=researcher)).status_code == 200
+
+
+async def test_quick_query_saves_exchange_to_history(client, researcher,
+                                                      seeded) -> None:
+    """Ответ доезжает до истории: перезагрузка страницы его не теряет."""
+    await _quick(client, researcher, no_cache=True)
+
+    history = await client.get("/api/chat/quick-history", headers=researcher)
+    body = history.json()
+
+    assert body["total"] == 2
+    assert body["messages"][0]["role"] == "user"
+    assert body["messages"][1]["sources"]
+
+
+# --------------------------------------------------------------------------- болтовня
+# Замер 2026-10-18: «привет» стоил ~43 с (12 параллельных LLM-сводок плюс
+# автоматический повтор поиска без сводок) и давал ответ СО ССЫЛКОЙ на
+# нерелевантный документ — прямое нарушение GROUNDING RULES промпта paperqa.
+# Болтовня теперь идёт мимо поиска по базе.
+
+
+async def test_trivial_query_skips_search_and_returns_no_citations(
+        client, researcher, seeded, monkeypatch) -> None:
+    """«привет» не ищет по базе и не притворяется, что нашёл источник."""
+    import app.services.rag_service as rs
+
+    calls: list[str] = []
+
+    async def boom(*args, **kwargs):
+        calls.append("evidence")
+        raise AssertionError("поиск по базе для болтовни запускаться не должен")
+
+    monkeypatch.setattr(rs.RagFusionService, "_evidence", boom)
+
+    body = await _quick(client, researcher, query="привет")
+
+    assert calls == [], "болтовня не должна доходить до поиска"
+    assert body["sources"] == []
+    assert body["references"] == []
+    assert body["stats"].get("trivial") is True
+    # ответ без источников честно помечен: интерфейс покажет пояснение
+    assert body["base_empty"] is True
+    assert body["answer"].strip(), "нужен хотя бы разговорный ответ"
+
+
+async def test_real_question_still_searches(client, researcher, seeded) -> None:
+    """Содержательный вопрос по-прежнему идёт в базу и приносит источники."""
+    body = await _quick(client, researcher, query="Что такое CTD-зонд?", no_cache=True)
+
+    assert body["sources"], "по содержательному вопросу должны быть источники"
+    assert body["stats"].get("trivial") is None
+
+
+async def test_trivial_fast_path_can_be_switched_off(client, researcher, seeded,
+                                               monkeypatch) -> None:
+    """Настройка TRIVIAL_QUERY_FAST_PATH=false возвращает строгий путь paperqa."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "trivial_query_fast_path", False,
+                        raising=False)
+
+    body = await _quick(client, researcher, query="привет", no_cache=True)
+
+    # строгий путь: модель получает контекст и отвечает по нему (заглушка),
+    # поэтому в ответе либо источники, либо явный отказ
+    assert body["stats"].get("trivial") is None
+    assert body["answer"].strip()
+
+
+@pytest.mark.parametrize("query", ["привет", "Привет!", "  привет  ", "СПАСИБО",
+                                   "добрый день", "ok", "Hello!"])
+def test_is_trivial_query_accepts_smalltalk(query: str) -> None:
+    from app.services.rag_service import is_trivial_query
+
+    assert is_trivial_query(query) is True
+
+
+@pytest.mark.parametrize("query", [
+    "привет, что такое CTD?",   # болтовня + вопрос по теме
+    "GF/F?",                     # короткий, но содержательный термин
+    "хлорофилл",
+    "что такое CTD-зонд",
+    "сравни методы GF/F и CTD",
+    "метод GF/F",
+    "нет данных",               # слова из словаря в другой форме — не болтовня
+    "",                          # пустой запрос
+    "   ",
+])
+def test_is_trivial_query_rejects_research_questions(query: str) -> None:
+    from app.services.rag_service import is_trivial_query
+
+    assert is_trivial_query(query) is False
 
 
 # --------------------------------------------------------------------------- история
@@ -261,11 +417,8 @@ async def test_archived_session_blocks_query(client, researcher, session_id,
 
 
 async def test_quick_query_needs_no_session(client, researcher, seeded) -> None:
-    response = await client.post("/api/chat/quick-query", headers=researcher,
-                                 json={"query": "Что такое CTD-зонд?"})
+    body = await _quick(client, researcher, query="Что такое CTD-зонд?")
 
-    body = response.json()
-    assert response.status_code == 200
     assert {s["source_scope"] for s in body["sources"]} <= {"global"}
     assert body["references"]
 

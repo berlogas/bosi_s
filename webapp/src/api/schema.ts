@@ -939,7 +939,11 @@ export interface paths {
         put?: never;
         /**
          * Quick Query
-         * @description Быстрый вопрос по глобальной базе — без создания сессии.
+         * @description Быстрый вопрос по глобальной базе — фоновой задачей, без сессии.
+         *
+         *     Отдаёт task_id, UI опрашивает `/api/tasks/{id}`. Ответ лежит в
+         *     `Task.result`: answer, sources, references, query, from_cache, stats,
+         *     base_empty — и дописывается в историю быстрых запросов.
          */
         post: operations["quick_query_api_chat_quick_query_post"];
         delete?: never;
@@ -2214,33 +2218,6 @@ export interface components {
              * @default false
              */
             no_cache: boolean;
-        };
-        /** QuickQueryResponse */
-        QuickQueryResponse: {
-            /** Answer */
-            answer: string;
-            /** Sources */
-            sources?: {
-                [key: string]: unknown;
-            }[];
-            /** References */
-            references?: string[];
-            /** Query */
-            query: string;
-            /**
-             * From Cache
-             * @default false
-             */
-            from_cache: boolean;
-            /** Stats */
-            stats?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Base Empty
-             * @default false
-             */
-            base_empty: boolean;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -4393,7 +4370,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuickQueryResponse"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

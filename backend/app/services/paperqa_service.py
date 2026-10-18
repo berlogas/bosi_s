@@ -708,6 +708,18 @@ class PaperQA2Service:
         return [line.strip("-* ") for line in references.splitlines() if line.strip()]
 
     # ------------------------------------------------------------------ LLM-промпты
+    @property
+    def chat_llm(self) -> Any:
+        """Модель для коротких вызовов вне поиска.
+
+        Та же подмена, что в `complete()`: заглушка из тестов или модель
+        из настроек. Отдельный `get_llm()` в rag_service отличался — в тестах
+        он уходил в сеть (замер: 5,9 с на вызов), хотя сервис уже был заглушен.
+        """
+        if self._llm_model is not None:
+            return self._llm_model
+        return self.pqa_settings.get_llm()
+
     async def complete(self, prompt: str, *, name: str = "completion") -> str:
         """Один вызов LLM с произвольным промптом.
 
@@ -715,6 +727,7 @@ class PaperQA2Service:
         (`_llm_model`) либо модель из настроек. Поэтому генератор разделов
         (Фаза 7) и чат (Фаза 6) говорят с одной и той же моделью.
         """
+
         llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
         # Именно Message, а не dict: LLM внутри зовёт model_dump() и на dict
         # падает с AttributeError (как в rag_service).

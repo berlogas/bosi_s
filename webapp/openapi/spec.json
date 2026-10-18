@@ -2740,7 +2740,7 @@
           "chat"
         ],
         "summary": "Quick Query",
-        "description": "Быстрый вопрос по глобальной базе — без создания сессии.",
+        "description": "Быстрый вопрос по глобальной базе — фоновой задачей, без сессии.\n\nОтдаёт task_id, UI опрашивает `/api/tasks/{id}`. Ответ лежит в\n`Task.result`: answer, sources, references, query, from_cache, stats,\nbase_empty — и дописывается в историю быстрых запросов.",
         "operationId": "quick_query_api_chat_quick_query_post",
         "requestBody": {
           "content": {
@@ -2758,7 +2758,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/QuickQueryResponse"
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Quick Query Api Chat Quick Query Post"
                 }
               }
             }
@@ -6483,54 +6485,6 @@
           "query"
         ],
         "title": "QuickQueryRequest"
-      },
-      "QuickQueryResponse": {
-        "properties": {
-          "answer": {
-            "type": "string",
-            "title": "Answer"
-          },
-          "sources": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Sources"
-          },
-          "references": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "References"
-          },
-          "query": {
-            "type": "string",
-            "title": "Query"
-          },
-          "from_cache": {
-            "type": "boolean",
-            "title": "From Cache",
-            "default": false
-          },
-          "stats": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Stats"
-          },
-          "base_empty": {
-            "type": "boolean",
-            "title": "Base Empty",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "answer",
-          "query"
-        ],
-        "title": "QuickQueryResponse"
       },
       "RefreshRequest": {
         "properties": {

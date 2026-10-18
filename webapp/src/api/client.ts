@@ -26,7 +26,6 @@ import type {
   ProjectOut,
   ProjectProgress,
   ProjectSection,
-  QuickQueryResponse,
   SearchMode,
   SessionDetail,
   SessionOut,
@@ -433,11 +432,11 @@ class ApiClient {
   }
 
   // ------------------------------------------------------------------ чат
-  /** Быстрый вопрос по глобальной базе — долгий (LLM), щадящий таймаут. */
+  /** Быстрый вопрос по глобальной базе: отдаёт task_id, ответ считает фон. */
   quickQuery(
     query: string,
     options: { k?: number; noCache?: boolean } = {},
-  ): Promise<QuickQueryResponse> {
+  ): Promise<{ task_id: string }> {
     return this.request('/api/chat/quick-query', {
       method: 'POST',
       json: {
@@ -446,9 +445,16 @@ class ApiClient {
         max_sources: 5,
         no_cache: options.noCache ?? false,
       },
-      // LLM отвечает минуты; в api.py у quick_query timeout=3600
-      timeoutMs: 600_000,
+      // Запрос отвечает сразу: считает LLM в фоне, прогресс и отмена — через
+      // /api/tasks/{id}. Долгий таймаут здесь означал бы «всё зависло» вместо
+      // «считаем уже десять минут».
+      timeoutMs: 30_000,
     })
+  }
+
+  /** История быстрых вопросов пользователя: переживает перезагрузку вкладки. */
+  quickHistory(limit = 20): Promise<MessagePage> {
+    return this.request('/api/chat/quick-history', { query: { limit } })
   }
 
   async suggestQueries(query: string): Promise<string[]> {
@@ -491,7 +497,9 @@ class ApiClient {
     return this.request('/api/chat/query', {
       method: 'POST',
       json: { session_id: sessionId, query, mode, k: 10, max_sources: 5 },
-      timeoutMs: 600_000, // в api.py у chat timeout=3600
+      // Считает LLM в этом же запросе; отменять такой вопрос нельзя —
+      // для интерактивного сценария есть chatQueryAsync с задачей и отменой.
+      timeoutMs: 600_000,
     })
   }
 

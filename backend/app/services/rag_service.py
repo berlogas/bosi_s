@@ -172,6 +172,49 @@ def _evidence_k(k: int) -> int:
     return max(k, 12) if k >= 5 else max(k * 2, 10)
 
 
+# --------------------------------------------------------------- болтовня
+# Здравствуйте, спасибо и подобное: запрос, по которому в базе искать нечего.
+# Гонять такие фразы в RAG дорого и бессмысленно: замер 2026-10-18 показал,
+# что «привет» стоит ~43 с (12 параллельных сводок плюс автоматический повтор
+# поиска без сводок), и примерно половина этого уходит впустую.
+#
+# Хуже того, поиск по базе на болтовню возвращает мусор, и модель пишет на него
+# ответ С ССЫЛКАМИ. Это прямое нарушение GROUNDING RULES из промпта paperqa
+# («нет подходящего контекста — ответ отказывается отвечать»), причём
+# заметное пользователю: на «привет» он получал рассуждение о «взгляде с
+# информационной точки зрения» со ссылкой на чужой документ. Для приветствия
+# отказ неуместен, поэтому здесь нужен разговорный ответ.
+#
+# Список закрытый, проверка строгая: срабатывает ТОЛЬКО когда запрос целиком
+# совпал с одной из фраз. «привет» — болтовня, «привет, что такое CTD?» —
+# нормальный вопрос. Никаких эвристик по длине или знакам препинания: они дали
+# бы ложные срабатывания на коротких, но содержательных запросах («GF/F?»,
+# «хлорофилл»), а цена ошибки — потерянный ответ по теме.
+TRIVIAL_QUERIES = frozenset({
+    "привет", "приветик", "приветики", "здравствуй", "здравствуйте",
+    "добрый день", "доброе утро", "добрый вечер", "доброго дня",
+    "доброй ночи", "хай", "спасибо", "спасибочки", "благодарю",
+    "пожалуйста", "простите", "извините", "пока", "до свидания",
+    "прощай", "да", "нет", "ага", "угу", "ок", "окей", "хорошо",
+    "ясно", "понятно", "принято", "тест", "тестик", "йо", "хеллоу",
+    "hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "yes", "no",
+})
+
+
+def is_trivial_query(query: str) -> bool:
+    """Болтовня ли это — запрос, для которого поиск по базе не нужен.
+
+    Проверка намеренно примитивная: сравнение строки целиком по закрытому
+    списку. Словарь состоит из слов, поэтому термин с такой же формой
+    («нет») в него не попадает.
+    """
+    normalized = re.sub(r"[^\w\s]", " ", (query or "").lower(), flags=re.UNICODE)
+    normalized = " ".join(normalized.split())
+    if not normalized or len(normalized.split()) > 3:
+        return False
+    return normalized in TRIVIAL_QUERIES
+
+
 @dataclass
 class FusionResult:
     """Ответ fusion вместе с источниками и признаком кэша."""
@@ -273,7 +316,7 @@ class RagFusionService:
         (`c.score > 0` в docs.py), запрос при этом тратит время впустую
         (замер 2026-10-12: 83 с и 0 кандидатов). Поэтому при пустом результате
         делаем один повтор без сводок — тогда релевантность считается по
-        эмбеддингам (см. _restore_relevance). Медленно, но не «н��т данных».
+        эмбеддингам (см. _restore_relevance). Медленно, но не «нет данных».
         """
         candidates = await self._evidence_once(query, session_id, mode, k, catalog,
                                                 skip_summary=None)
@@ -392,6 +435,14 @@ class RagFusionService:
         def _stage(percent: int, label: str) -> None:
             if on_stage is not None:
                 on_stage(percent, label)
+
+        # Болтовня («привет», «спасибо») в базе искать нечего: уходим сразу,
+        # не грузя ни индекс, ни кэш. Иначе поиск возвращает мусор, и модель
+        # пишет на него ответ со ссылками (замер 2026-10-18: ~43 с и ответ
+        # «взгляд с информационной точки зрения» со ссылкой на чужой документ).
+        if self._app.trivial_query_fast_path and is_trivial_query(query):
+            _stage(55, "разговорный ответ (запрос без темы)")
+            return await self._answer_trivial(query, mode=mode, on_stage=on_stage)
 
         catalog, stamp = self.load_catalog(db, session_id, self._config_stamp)
 
@@ -575,6 +626,58 @@ class RagFusionService:
         return result
 
     # ------------------------------------------------- ответ без опоры на базу
+    async def _answer_trivial(
+        self, query: str, *, mode: SearchMode, on_stage: Any = None,
+    ) -> FusionResult:
+        """Ответ на болтовню: один короткий вызов LLM, без поиска и ссылок.
+
+        Отдельный промпт, а не переиспользование `_answer_without_base`: там
+        текст честно говорит «база пуста», а здесь база полна — просто вопрос
+        не по теме. Врать пользователю о состоянии балы не нужно.
+        """
+        t0 = time.perf_counter()
+        if on_stage is not None:
+            on_stage(55, "генерация ответа (LLM)")
+        text = ""
+        try:
+            # Модель из сервиса: в тестах это заглушка, а не сеть
+            llm = self.registry.global_service().chat_llm
+            result = await llm.call_single(
+                messages=[Message(content=self._trivial_prompt(query))],
+                name="trivial")
+            text = (getattr(result, "text", "") or "").strip()
+        except Exception as exc:
+            log.warning("fusion: разговорный ответ не удался: %s", exc)
+
+        if not text:
+            text = ("Здравствуйте! Спросите что-нибудь по базе знаний — "
+                    "и я отвечу со ссылками на источники.")
+        answer = AnswerResult(
+            question=query, answer=text, formatted_answer=text,
+            citations=[], context=[], evidence=[], has_successful_answer=True,
+            mode=mode.value, seconds=round(time.perf_counter() - t0),
+            base_empty=True,
+        )
+        return FusionResult(
+            answer=answer, sources=[], references=[], mode=mode,
+            question=query,
+            stats={"candidates": 0, "selected": 0, "trivial": True,
+                   "citations": {"ok": True, "base_empty": True}},
+        )
+
+    @staticmethod
+    def _trivial_prompt(query: str) -> str:
+        """Промпт для болтовни: коротко, по-русски, без ссылок и выдумки."""
+        return (
+            "Пользователь написал в поисковой системе по научной литературе "
+            f"ровно это: {query!r}. Это не вопрос по теме, а приветствие, "
+            "благодарность или прощальная реплика."
+            "\n\n"
+            + "Ответь по-русски, дружелюбно и ОЧЕНЬ кратко (1-2 предложения). "
+            "Ничего не цитируй и не выдумывай: предложи спросить про базу "
+            "знаний или уточнить тему."
+        )
+
     async def _answer_without_base(
         self,
         db: Session,

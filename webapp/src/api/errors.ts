@@ -108,10 +108,7 @@ export function explainError(
   // Тело — список/строка: repr, как str(body) в Python.
   // Важно: массив в JS — typeof 'object', но это не dict → ветка _repr_.
   if (Array.isArray(body) || typeof body !== 'object' || body === null) {
-    const text = (typeof body === 'string' ? body : JSON.stringify(body)).slice(
-      0,
-      300,
-    )
+    const text = (typeof body === 'string' ? body : JSON.stringify(body)).slice(0, 300)
     const detail = text ? translateErrorText(text, status) : null
     return { message: detail || fallback, detail, meta: null }
   }

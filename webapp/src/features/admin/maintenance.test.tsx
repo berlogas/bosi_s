@@ -14,7 +14,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders, createQueryClient } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
-import { json, loginAs, mockApi, resetAuth, TEST_ADMIN, TEST_USER } from '../../test/helpers'
+import {
+  json,
+  loginAs,
+  mockApi,
+  resetAuth,
+  TEST_ADMIN,
+  TEST_USER,
+} from '../../test/helpers'
 
 const HEALTH = {
   status: 'ok',
@@ -111,7 +118,9 @@ describe('раздел «Обслуживание»', () => {
     mockApi(routes())
     await openServiceTab()
 
-    expect(await screen.findByRole('button', { name: 'Создать копию…' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: 'Создать копию…' }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Сбросить…' })).toBeInTheDocument()
     expect(screen.getByText('Сброс состояния')).toBeInTheDocument()
   })
@@ -186,9 +195,7 @@ describe('раздел «Обслуживание»', () => {
 
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ keep: undefined })
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('восстановление предлагает только скрипт', async () => {
@@ -227,15 +234,15 @@ describe('раздел «Обслуживание»', () => {
 
   it('предупреждает, когда базы данных нет', async () => {
     loginAs(TEST_ADMIN)
-    mockApi(routes({ 'GET /api/admin/backup': { backups: [], plan: { ...PLAN, db_exists: false } } }))
+    mockApi(
+      routes({
+        'GET /api/admin/backup': { backups: [], plan: { ...PLAN, db_exists: false } },
+      }),
+    )
     await openServiceTab()
 
-    expect(
-      screen.getByRole('button', { name: 'Создать копию…' }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: 'Создать копию…' }),
-    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Создать копию…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Создать копию…' })).toBeDisabled()
   })
 
   it('показывает ошибку создания копии', async () => {
@@ -322,7 +329,10 @@ describe('раздел «Обслуживание»', () => {
     await openServiceTab()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Сбросить…' }))
-    await userEvent.type(await screen.findByTestId('reset-confirm-input'), 'СБРОС ДАННЫХ')
+    await userEvent.type(
+      await screen.findByTestId('reset-confirm-input'),
+      'СБРОС ДАННЫХ',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Выполнить сброс' }))
 
     await waitFor(() => expect(calls).toHaveLength(1))

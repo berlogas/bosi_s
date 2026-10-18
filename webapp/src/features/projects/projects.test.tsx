@@ -88,12 +88,17 @@ const JOURNAL_STYLES = [
     summary: 'Nature, Science, Cell, PNAS: широкая аудитория, активный залог.',
     journals: ['Nature', 'Science', 'Cell', 'PNAS'],
     description: 'Читатель: междисциплинарные учёные.\nТон: увлекательный, краткий.',
-    description_lines: ['Читатель: междисциплинарные учёные.', 'Тон: увлекательный, краткий.'],
+    description_lines: [
+      'Читатель: междисциплинарные учёные.',
+      'Тон: увлекательный, краткий.',
+    ],
     highlights: [
       'TARGET AUDIENCE: Multidisciplinary scientists. Avoid narrow jargon.',
       'TONE: Engaging, concise, active voice.',
     ],
-    templates: [{ label: 'Abstract и Introduction', sections: ['abstract', 'introduction'] }],
+    templates: [
+      { label: 'Abstract и Introduction', sections: ['abstract', 'introduction'] },
+    ],
   },
   {
     key: 'sound_science',
@@ -354,38 +359,38 @@ describe('вкладка Проекты', () => {
     await userEvent.click(
       within(sectionCard as HTMLElement).getByRole('button', { name: 'Источники' }),
     )
-    expect(
-      within(sectionCard as HTMLElement).getByText(/Отчёт/),
-    ).toBeInTheDocument()
+    expect(within(sectionCard as HTMLElement).getByText(/Отчёт/)).toBeInTheDocument()
   })
 
-/**
- * Открывает список видов и возвращает его узел.
- *
- * Mantine держит варианты в портале, а не рядом с полем, и в jsdom
- * помечает их скрытыми — ищем по связи aria-labelledby, а не по индексу
- * combobox: на странице их шесть, и по порядку открывается не то поле.
- */
-async function openKindList(): Promise<HTMLElement> {
-  await screen.findByLabelText('Текст раздела: Введение (Introduction)')
-  const kindInput = screen
-    .getAllByRole('combobox')
-    .find((box) =>
-      document.querySelector(`label[for="${box.id}"]`)?.textContent?.startsWith('Вид'),
-    )
-  if (!kindInput) throw new Error('поле «Вид» не найдено')
-  await userEvent.click(kindInput)
-  return waitFor(() => {
-    const label = document.querySelector(`label[for="${kindInput.id}"]`)
-    const found =
-      document.querySelector(`[role="listbox"][aria-labelledby="${kindInput.id}"]`) ??
-      (label
-        ? document.querySelector(`[role="listbox"][aria-labelledby="${label.id}"]`)
-        : null)
-    if (!found) throw new Error('список видов не открылся')
-    return found as HTMLElement
-  })
-}
+  /**
+   * Открывает список видов и возвращает его узел.
+   *
+   * Mantine держит варианты в портале, а не рядом с полем, и в jsdom
+   * помечает их скрытыми — ищем по связи aria-labelledby, а не по индексу
+   * combobox: на странице их шесть, и по порядку открывается не то поле.
+   */
+  async function openKindList(): Promise<HTMLElement> {
+    await screen.findByLabelText('Текст раздела: Введение (Introduction)')
+    const kindInput = screen
+      .getAllByRole('combobox')
+      .find((box) =>
+        document
+          .querySelector(`label[for="${box.id}"]`)
+          ?.textContent?.startsWith('Вид'),
+      )
+    if (!kindInput) throw new Error('поле «Вид» не найдено')
+    await userEvent.click(kindInput)
+    return waitFor(() => {
+      const label = document.querySelector(`label[for="${kindInput.id}"]`)
+      const found =
+        document.querySelector(`[role="listbox"][aria-labelledby="${kindInput.id}"]`) ??
+        (label
+          ? document.querySelector(`[role="listbox"][aria-labelledby="${label.id}"]`)
+          : null)
+      if (!found) throw new Error('список видов не открылся')
+      return found as HTMLElement
+    })
+  }
 
   it('в списке видов есть discussion — он есть в GenerationKind', async () => {
     mockProjectsApi()
@@ -407,17 +412,19 @@ async function openKindList(): Promise<HTMLElement> {
   it('выбранный вид уходит в запрос техническим значением, а не подписью', async () => {
     const { calls } = mockProjectsApi({
       'POST /api/sessions/s-1/projects/p-1/generate': {
-        body: {
-          section: '',
-          content_md: 'Текст.',
-          word_count: 1,
-          citations_ok: true,
-          sources: [],
-          warnings: [],
-          references: [],
-          kind: 'discussion',
-          from_cache: false,
-        },
+        // форма ответа — как у соседнего теста: поля GenerateResultOut лежат
+        // на верхнем уровне. Обёртка `body:` отдавала компоненту объект без
+        // content_md, и рендер падал уже после завершения теста (vitest
+        // показывал это как unhandled error, а не как падение проверки)
+        section: '',
+        content_md: 'Текст.',
+        word_count: 1,
+        citations_ok: true,
+        sources: [],
+        warnings: [],
+        references: [],
+        kind: 'discussion',
+        from_cache: false,
       },
     })
 
@@ -432,7 +439,9 @@ async function openKindList(): Promise<HTMLElement> {
     const kindField = screen
       .getAllByRole('combobox')
       .find((box) =>
-        document.querySelector(`label[for="${box.id}"]`)?.textContent?.startsWith('Вид'),
+        document
+          .querySelector(`label[for="${box.id}"]`)
+          ?.textContent?.startsWith('Вид'),
       )
     expect(kindField).toHaveValue('Обсуждение результатов (discussion)')
     await userEvent.type(
@@ -462,7 +471,10 @@ async function openKindList(): Promise<HTMLElement> {
     // jsdom: listbox Mantine остаётся display:none — ищем option с hidden
     await userEvent.click(screen.getByLabelText('Статус', { selector: 'input' }))
     await userEvent.click(
-      await screen.findByRole('option', { name: 'Написание текста (drafting)', hidden: true }),
+      await screen.findByRole('option', {
+        name: 'Написание текста (drafting)',
+        hidden: true,
+      }),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Обновить' }))
 
@@ -480,9 +492,7 @@ async function openKindList(): Promise<HTMLElement> {
 
     renderApp()
 
-    expect(
-      await screen.findByText(/Отчёт — роль: Данные \(data\)/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/Отчёт — роль: Данные \(data\)/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Отвязать' }))
     await waitFor(() =>
       expect(

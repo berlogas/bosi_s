@@ -52,9 +52,9 @@ describe('точка возврата: ответ PUT /state не подменя
       resume_note: 'не забыть',
     })
 
-    const cached = client.getQueryData<typeof SESSION_DETAIL & { resume_note?: string }>(
-      queryKeys.sessionDetail('s-1'),
-    )
+    const cached = client.getQueryData<
+      typeof SESSION_DETAIL & { resume_note?: string }
+    >(queryKeys.sessionDetail('s-1'))
     expect(cached?.summary).toEqual({ documents: 2, documents_limit: 50 })
     expect(cached?.days_left).toBe(84)
     expect(cached?.state_snapshot).toEqual({ tab: 'projects' })

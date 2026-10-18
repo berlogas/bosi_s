@@ -104,47 +104,47 @@ export function MarkdownText({
 }) {
   return (
     <div style={COMPACT}>
-    <ReactMarkdown
-      rehypePlugins={[rehypeSanitize]}
-      remarkPlugins={[remarkCitations]}
-      components={{
-        // Абзацы ответа не должны разъезжаться пустыми интервалами: в тексте
-        // ответа их обычно два-три, и вертикальные отступы съедали треть
-        // экрана. Верхний отступ оставляем у первого и у заголовков секций,
-        // чтобы структура «ответ → ссылки» всё ещё читалась.
-        p({ children }: { children?: ReactNode }) {
-          return <p style={{ margin: 0, padding: 0 }}>{children}</p>
-        },
-        // Список источников — тоже источник вертикального места: у списка по
-        // умолчанию свой margin сверху и снизу плюс отступ маркеров.
-        ol({ children }: { children?: ReactNode }) {
-          return <ol style={COMPACT_LIST}>{children}</ol>
-        },
-        ul({ children }: { children?: ReactNode }) {
-          return <ul style={COMPACT_LIST}>{children}</ul>
-        },
-        a({ href, children }: { href?: string; children?: ReactNode }) {
-          const match = href?.match(/^#src-(\d+)$/)
-          if (match && onCitation) {
-            const index = Number(match[1])
-            return (
-              <a
-                href={href}
-                onClick={(event) => {
-                  event.preventDefault()
-                  onCitation(index)
-                }}
-              >
-                {children}
-              </a>
-            )
-          }
-          return <a href={href}>{children}</a>
-        },
-      }}
-    >
-      {mdSafeReferences(text)}
-    </ReactMarkdown>
+      <ReactMarkdown
+        rehypePlugins={[rehypeSanitize]}
+        remarkPlugins={[remarkCitations]}
+        components={{
+          // Абзацы ответа не должны разъезжаться пустыми интервалами: в тексте
+          // ответа их обычно два-три, и вертикальные отступы съедали треть
+          // экрана. Верхний отступ оставляем у первого и у заголовков секций,
+          // чтобы структура «ответ → ссылки» всё ещё читалась.
+          p({ children }: { children?: ReactNode }) {
+            return <p style={{ margin: 0, padding: 0 }}>{children}</p>
+          },
+          // Список источников — тоже источник вертикального места: у списка по
+          // умолчанию свой margin сверху и снизу плюс отступ маркеров.
+          ol({ children }: { children?: ReactNode }) {
+            return <ol style={COMPACT_LIST}>{children}</ol>
+          },
+          ul({ children }: { children?: ReactNode }) {
+            return <ul style={COMPACT_LIST}>{children}</ul>
+          },
+          a({ href, children }: { href?: string; children?: ReactNode }) {
+            const match = href?.match(/^#src-(\d+)$/)
+            if (match && onCitation) {
+              const index = Number(match[1])
+              return (
+                <a
+                  href={href}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    onCitation(index)
+                  }}
+                >
+                  {children}
+                </a>
+              )
+            }
+            return <a href={href}>{children}</a>
+          },
+        }}
+      >
+        {mdSafeReferences(text)}
+      </ReactMarkdown>
     </div>
   )
 }

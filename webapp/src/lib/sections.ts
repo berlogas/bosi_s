@@ -28,7 +28,8 @@ const SECTION_TITLES: Record<string, string> = {
  */
 export function sectionTitle(name: string): string {
   const clean = (name ?? '').trim()
-  const titled = clean ? clean[0].toUpperCase() + clean.slice(1) : clean
+  // charAt, а не clean[0]: с noUncheckedIndexedAccess индекс даёт string | undefined
+  const titled = clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : clean
   const known = SECTION_TITLES[clean] ?? SECTION_TITLES[titled]
   if (!known) return clean
   return `${known} (${clean})`

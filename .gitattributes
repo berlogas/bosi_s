@@ -5,5 +5,16 @@
 *.lock text eol=lf
 *.toml text eol=lf
 *.ini text eol=lf
+# Исходники фронтенда тоже строго LF: prettier 3 по умолчанию ждёт LF, а
+# core.autocrlf=true на машине с Windows превращал *.ts/*.tsx в CRLF при
+# выгрузке — и `npm run format:check` падал на каждом файле целиком, включая
+# только что отформатированный вручную.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+# сам список правил тоже в LF, иначе git ругается на него при каждой правке
+.gitattributes text eol=lf
+.env.example text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf

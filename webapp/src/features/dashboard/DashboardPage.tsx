@@ -161,7 +161,10 @@ function ActiveTasks() {
  * где вперемешку чужие сессии, поэтому сначала идут его собственные
  * (иначе «свои» карточки теряются в общем списке), остальные — по имени.
  */
-function SessionGroups({ sessions, isAdmin }: {
+function SessionGroups({
+  sessions,
+  isAdmin,
+}: {
   sessions: SessionOut[]
   isAdmin: boolean
 }) {

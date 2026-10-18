@@ -15,9 +15,9 @@ describe('русские тексты ошибок', () => {
 
   it('не трогает собственные тексты приложения', () => {
     expect(translateErrorText('Сессия не найдена', 404)).toBe('Сессия не найдена')
-    expect(
-      translateErrorText('Папка-приёмник не найдена: /data/inbox', 404),
-    ).toBe('Папка-приёмник не найдена: /data/inbox')
+    expect(translateErrorText('Папка-приёмник не найдена: /data/inbox', 404)).toBe(
+      'Папка-приёмник не найдена: /data/inbox',
+    )
   })
 
   it('plain-текст 404 без JSON показывается по-русски', () => {
@@ -28,11 +28,7 @@ describe('русские тексты ошибок', () => {
   })
 
   it('JSON detail переводится, лимиты сохраняются', () => {
-    const result = explainError(
-      404,
-      { detail: 'Not Found', meta: { limit: 10 } },
-      '',
-    )
+    const result = explainError(404, { detail: 'Not Found', meta: { limit: 10 } }, '')
 
     expect(result.message).toBe('Не найдено (лимит: 10)')
   })

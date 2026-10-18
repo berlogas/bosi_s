@@ -61,7 +61,7 @@ export function SessionCard({ session }: { session: SessionOut }) {
             {icon} {sessionStatusLabel(session.status)} · {label} ·{' '}
             {shortWhen(session.last_action_at)}
           </Text>
-          
+
           {session.resume_note && (
             <Text size="xs" c="dimmed">
               Заметка: {session.resume_note}

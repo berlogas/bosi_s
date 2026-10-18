@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 
 // Проверки делят одну БД: тесты идут строго по очереди, иначе один
 // удаляет сессии, пока второй уже смотрит на дашборд.
@@ -24,7 +24,7 @@ const ADMIN_LOGIN = 'mu_admin'
  * состояния БД: иначе сессии прошлых прогонов ломали бы проверки
  * «в списке только своя» (strict mode violation на повторах текста).
  */
-async function dropSessions(page: import('@playwright/test').Page) {
+async function dropSessions(page: Page) {
   const deleted = await page.evaluate(async () => {
     // access-токен живёт в памяти модуля, поэтому берём refresh из
     // localStorage и меняем его на новую пару
@@ -56,7 +56,7 @@ async function dropSessions(page: import('@playwright/test').Page) {
   return deleted
 }
 
-async function signIn(page: import('@playwright/test').Page, username: string) {
+async function signIn(page: Page, username: string) {
   await page.goto('/login')
   await page.getByLabel('Логин').fill(username)
   await page.getByLabel('Пароль').fill(PASSWORD)
@@ -64,7 +64,7 @@ async function signIn(page: import('@playwright/test').Page, username: string) {
   await expect(page).toHaveURL(/\/$/)
 }
 
-async function newSession(page: import('@playwright/test').Page, title: string) {
+async function newSession(page: Page, title: string) {
   await page.getByLabel('Название').fill(title)
   await page.getByRole('button', { name: 'Создать' }).click()
   await page.waitForURL(/\/s\//)
@@ -144,8 +144,12 @@ test('админ в третьем окне видит обе сессии по 
 
   await signIn(admin, ADMIN_LOGIN)
   await admin.reload()
-  await expect(admin.getByRole('heading', { name: /^Сессии всех пользователей/ })).toBeVisible()
-  await expect(admin.getByRole('heading', { name: /^Сессии всех пользователей/ })).toBeVisible()
+  await expect(
+    admin.getByRole('heading', { name: /^Сессии всех пользователей/ }),
+  ).toBeVisible()
+  await expect(
+    admin.getByRole('heading', { name: /^Сессии всех пользователей/ }),
+  ).toBeVisible()
   await expect(admin.getByText(/^mu_ivan \(\d\)$/)).toBeVisible()
   await expect(admin.getByText(/^mu_petr \(\d\)$/)).toBeVisible()
 

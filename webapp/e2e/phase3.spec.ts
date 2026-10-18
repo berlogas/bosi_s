@@ -350,9 +350,7 @@ test('привязка документа к проекту и отвязка', 
   await page.getByRole('combobox', { name: 'Привязать документ' }).click()
   await page.getByRole('option', { name: 'Отчёт 2025', includeHidden: true }).click()
   await page.getByRole('combobox', { name: 'Роль' }).click()
-  await page
-    .getByRole('option', { name: 'Данные (data)', includeHidden: true })
-    .click()
+  await page.getByRole('option', { name: 'Данные (data)', includeHidden: true }).click()
   await page.getByRole('button', { name: 'Привязать' }).click()
 
   await expect(page.getByText(/Отчёт 2025 — роль: Данные \(data\)/)).toBeVisible({

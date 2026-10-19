@@ -1,8 +1,9 @@
 /**
  * Боковая панель и общий layout — паритет `sidebar()` из Streamlit-версии app.py.
  *
- * Метка сборки обязательна: по ней видно, что браузер подхватил новый код,
- * а не закэшировал старый (та же роль, что UI_BUILD в Streamlit).
+ * Подписей «Навигация» и метки сборки в подвале нет: пунктов и так видно, по
+ * одному взгляду, а «Навигация» над списком ссылок и дата сборки в углу —
+ * шум, который занимает место и ничего не сообщает пользователю.
  */
 
 import {
@@ -28,9 +29,6 @@ import { client } from '../../api/client'
 import { displayName, roleLabel } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { useCurrentSessionPath } from '../sessions/useCurrentSession'
-
-/** Метка сборки интерфейса (аналог UI_BUILD в Streamlit-версии app.py). */
-export const UI_BUILD = '2026-10-07a'
 
 function SystemStatus() {
   const { data, error, isPending } = useQuery({
@@ -103,9 +101,10 @@ export function AppLayout() {
       padding="md"
     >
       <AppShellNavbar p="md" component={ScrollArea}>
-        <Title order={4} mb="xs">
-          📚 boasi_s
-        </Title>
+        <Group gap="xs" mb="xs" justify="space-between">
+          <Title order={4}>📚 boasi_s</Title>
+          {bootPending && <Loader size="xs" />}
+        </Group>
 
         {!user ? (
           <Text size="sm" c="dimmed">
@@ -113,9 +112,6 @@ export function AppLayout() {
           </Text>
         ) : (
           <>
-            <Text size="xs" tt="uppercase" c="dimmed" mb={4}>
-              Навигация
-            </Text>
             <Stack gap={2}>
               {items.map((item) => (
                 <NavLink
@@ -150,14 +146,6 @@ export function AppLayout() {
             <SystemStatus />
           </>
         )}
-
-        <Divider my="md" />
-        <Group gap="xs">
-          <Text size="xs" c="dimmed">
-            сборка {UI_BUILD}
-          </Text>
-          {bootPending && <Loader size="xs" />}
-        </Group>
       </AppShellNavbar>
 
       <AppShell.Main>

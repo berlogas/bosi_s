@@ -102,8 +102,11 @@ describe('вход в приложение', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Здравствуйте, Иванов Иван Иванович!')).toBeInTheDocument()
 
-    // Боковая панель: метка сборки и пользователь
-    expect(screen.getByText(/сборка \d{4}-\d{2}-\d{2}/)).toBeInTheDocument()
+    // Боковая панель: состояние системы и пользователь. Подписей «Навигация»
+    // и метки сборки в подвале больше нет — это шум, а не информация.
+    expect(screen.getByText('Состояние системы')).toBeInTheDocument()
+    expect(screen.queryByText('Навигация')).not.toBeInTheDocument()
+    expect(screen.queryByText(/сборка/)).not.toBeInTheDocument()
     // в сайдбаре — ФИО и русская подпись роли
     expect(screen.getByText(/Иванов Иван Иванович · Исследователь/)).toBeInTheDocument()
 

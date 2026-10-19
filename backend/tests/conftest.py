@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+# Настройки тестового окружения заданы в scripts/check_openapi_contract.py:
+# тот же скрипт сверяет контракт OpenAPI и в pytest, и в CI-шаге, где фикстуры
+# нет. Две копии значений разъехались бы, и сверка проверяла бы разное.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from check_openapi_contract import apply_runtime_env
 
 # Каталог артефактов тестов. Путь по умолчанию считается от репозитория, а не
 # зашит строкой: абсолютный путь одной машины на другой превращался в
@@ -22,15 +29,7 @@ TEST_DATA_DIR = Path(
 def _test_settings() -> Iterator[Settings]:
     """Настройки тестов: отдельная БД, детерминированные параметры."""
     TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    os.environ.update(
-        ENVIRONMENT="test",
-        DATA_DIR=str(TEST_DATA_DIR),
-        DATABASE_URL=f"sqlite:///{(TEST_DATA_DIR / 'test.sqlite3').as_posix()}",
-        SECRET_KEY="test-secret-key-0123456789",
-        LLM_MODEL="ollama/qwen2.5:3b",
-        EMBEDDING_MODEL="st-multi-qa-MiniLM-L6-cos-v1",
-        LOG_LEVEL="WARNING",
-    )
+    apply_runtime_env()
     from app.config import get_settings, reset_settings_cache
 
     reset_settings_cache()

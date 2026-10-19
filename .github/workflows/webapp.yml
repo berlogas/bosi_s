@@ -2,7 +2,11 @@ name: webapp
 
 on:
   push:
-    branches: [master, 'webapp/**']
+    # Фильтра по веткам нет намеренно, как в backend.yml: с ограничением по
+    # именам веток фронтовые проверки молча не запускались на ветке
+    # разработки react-migration (в списке было master и webapp/**), то есть
+    # tsc, eslint, prettier, vitest и Playwright на этой ветке не проходили
+    # ни разу, а «красный CI» показывал только backend.
     paths: ['webapp/**', '.github/workflows/webapp.yml']
   pull_request:
     paths: ['webapp/**', '.github/workflows/webapp.yml']

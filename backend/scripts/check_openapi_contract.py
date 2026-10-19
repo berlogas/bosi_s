@@ -42,6 +42,32 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 SPEC_PATH = REPO_ROOT / "webapp" / "openapi" / "spec.json"
+
+
+def apply_runtime_env() -> None:
+    """Выставить настройки, без которых `from app.main import app` не проходит.
+
+    Приложение при импорте создаёт `Settings`, а `validate_runtime()` требует
+    непустой SECRET_KEY. На машине разработчика это спасает `.env`; в CI его
+    нет, и сверка падала не с расхождением, а с трейсбеком импорта (код
+    выхода 2) — три прогона подряд, и причина уходила в лог шага.
+
+    Функция общая на скрипт и фикстуру `tests/conftest.py`: значения тестового
+    окружения заданы в одном месте, иначе сверка в pytest и вне pytest
+    проверяли бы разное. Значения ставятся принудительно — сверка должна быть
+    воспроизводимой и не зависеть от того, что лежит в локальном `.env`.
+    """
+    data_dir = Path(os.environ.get("BOASI_TEST_DATA", REPO_ROOT / ".test_data")).resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.update(
+        ENVIRONMENT="test",
+        DATA_DIR=str(data_dir),
+        DATABASE_URL=f"sqlite:///{(data_dir / 'test.sqlite3').as_posix()}",
+        SECRET_KEY="test-secret-key-0123456789",
+        LLM_MODEL="ollama/qwen2.5:3b",
+        EMBEDDING_MODEL="st-multi-qa-MiniLM-L6-cos-v1",
+        LOG_LEVEL="WARNING",
+    )
 REGENERATE_HINT = (
     "починить: cd webapp && npm run codegen "
     "&& git add openapi/spec.json src/api/schema.ts"
@@ -149,9 +175,16 @@ def load_committed() -> dict[str, Any]:
 
 
 def load_actual() -> dict[str, Any]:
-    """Спецификация из приложения. Импорт внутри функции: настройки тестов
-    (ENVIRONMENT, DATA_DIR, SECRET_KEY) выставляет фикстура conftest, а на
-    импорте модуля их ещё нет."""
+    """Спецификация из приложения.
+
+    Настройки выставляются здесь, а не фикстурой conftest: скрипт зовут и из
+    CI-шага, где pytest нет вообще. Импорт остаётся внутри функции — до
+    `apply_runtime_env()` настройки не заданы.
+    """
+    apply_runtime_env()
+    from app.config import reset_settings_cache
+
+    reset_settings_cache()
     from app.main import app
 
     return app.openapi()
@@ -172,24 +205,33 @@ def write_report(text: str, path: Path | None = None) -> Path | None:
     return target
 
 
-def publish(text: str, *, title: str) -> None:
+def publish(text: str, *, title: str, headline: str | None = None) -> None:
     """Отчёт в stdout и в аннотации GitHub.
 
     Аннотации (`::error`) читаются через Checks API без прав администратора, в
     отличие от логов и артефактов, поэтому дублируем расхождение туда. Символ
     `%` в workflow-команде экранируется, иначе хвост сообщения отбрасывается.
 
-    Длинные строки (фрагменты схем) в аннотации не идут: GitHub показывает
-    не больше десяти аннотаций на шаг и обрезает сообщение, а читать их удобнее
-    в сводке прогона и в файле отчёта. Потому же строк больше, чем на
-    ``MAX_ANNOTATIONS``, в аннотациях заменяются одной ссылкой на отчёт.
+    `headline` — короткое объяснение причины (например, «сверку не удалось
+    выполнить: TypeError: ...»), которое печатается ПЕРВОЙ аннотацией.
+    Трекбек идёт после, и обрезается: GitHub показывает не больше десяти
+    аннотаций на шаг, а в обрезанном виде остаются середина стека, где нет ни
+    типа, ни текста исключения. Именно так выглядел прогон 2026-10-19: девять
+    аннотаций из трейсбека, и ни одна не говорила, что именно сломалось.
+
+    Длинные строки (фрагменты схем) в аннотации не идут: длиннее
+    ``MAX_ANNOTATION_CHARS`` GitHub обрезает, а читать их удобнее в сводке
+    прогона и в файле отчёта.
     """
     print(text)
-    lines = [line for line in text.splitlines() if len(line) <= MAX_ANNOTATION_CHARS]
-    for line in lines[:MAX_ANNOTATIONS]:
+    lines = text.splitlines()
+    if headline:
+        print(f"::error title={title}::{headline.replace('%', '%25')}")
+    short = [line for line in lines if len(line) <= MAX_ANNOTATION_CHARS]
+    for line in short[:MAX_ANNOTATIONS]:
         print(f"::error title={title}::{line.replace('%', '%25')}")
-    if len(lines) > MAX_ANNOTATIONS:
-        rest = len(lines) - MAX_ANNOTATIONS
+    rest = len(short) - MAX_ANNOTATIONS
+    if rest > 0:
         print(
             f"::error title={title}::ещё {rest} строк отчёта — в сводке прогора "
             "и в артефакте pytest-report (.test_data/openapi_diff.md)"
@@ -209,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         report = check()
-    except Exception:  # причина нужна в отчёте: в логе шага её никто не читает
+    except Exception as exc:  # причина нужна в отчёте: в логе шага её никто не читает
         report = "\n".join(
             [
                 "сверку выполнить не удалось:",
@@ -217,8 +259,12 @@ def main(argv: list[str] | None = None) -> int:
                 traceback.format_exc().rstrip(),
             ]
         )
+        headline = (
+            f"сверку выполнить не удалось: {type(exc).__name__}: {exc}"
+        )[:MAX_ANNOTATION_CHARS]
         exit_code = 2
     else:
+        headline = None
         exit_code = 1 if report else 0
 
     if exit_code == 0:
@@ -226,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Спецификация совпадает с кодом")
         return 0
 
-    publish(report, title="Контракт OpenAPI разошёлся с кодом")
+    publish(report, title="Контракт OpenAPI разошёлся с кодом", headline=headline)
     saved = write_report(report, args.report)
     if saved is not None:
         print(f"Отчёт: {saved}")

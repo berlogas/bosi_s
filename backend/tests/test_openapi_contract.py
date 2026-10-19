@@ -15,6 +15,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR / "scripts") not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR / "scripts"))
@@ -24,6 +26,7 @@ from check_openapi_contract import (  # noqa: E402
     diff_report,
     load_actual,
     load_committed,
+    publish,
     write_report,
 )
 
@@ -60,3 +63,22 @@ def test_diff_report_empty_when_specs_equal() -> None:
     spec = {"paths": {"/a": {"get": {"summary": "A"}}}, "components": {"schemas": {"S": {"type": "object"}}}}
 
     assert diff_report(spec, spec) == ""
+
+
+def test_annotations_lead_with_cause(capsys: pytest.CaptureFixture[str]) -> None:
+    """Первая аннотация объясняет причину, а не содержит середину стека.
+
+    GitHub отдаёт не больше десяти аннотаций на шаг и обрезает длинные, поэтому
+    трейсбек в аннотациях обрывался на файлах и строках, и ни одна строка не
+    говорила, что именно сломалось — прогон 2026-10-19. Причина отдельной
+    строкой идёт первой.
+    """
+    publish(
+        "сверку выполнить не удалось:\n\nTraceback (most recent call last):\n  ...\nValueError: ключ не найден",
+        title="Контракт OpenAPI разошёлся с кодом",
+        headline="сверку выполнить не удалось: ValueError: ключ не найден",
+    )
+
+    errors = [line for line in capsys.readouterr().out.splitlines() if line.startswith("::error")]
+    assert errors
+    assert "ValueError: ключ не найден" in errors[0]

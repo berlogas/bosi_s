@@ -268,6 +268,22 @@ test('добавление по пути: форма → POST path → доку�
 
 test('проект-редактор: создание → раздел → сохранение черновика', async ({ page }) => {
   const { requestLog } = await mockApi(page, {
+    // Без мока список стилей пуст, и выпадающий «Стиль журнала» нечего выбирать:
+    // unmocked-запрос возвращает 404, компонент показывает пустой Select.
+    'GET /api/journal-styles': {
+      body: [
+        {
+          key: 'multidisciplinary_breakthrough',
+          title: 'Мультидисциплинарный прорыв',
+          summary: 'Nature, Science, Cell, PNAS: широкая аудитория.',
+          journals: ['Nature', 'Science'],
+          description: 'Читатель: междисциплинарные учёные.',
+          description_lines: ['Читатель: междисциплинарные учёные.'],
+          highlights: ['TARGET AUDIENCE: Multidisciplinary scientists.'],
+          templates: [{ label: 'Обзор', sections: ['Introduction', 'Results'] }],
+        },
+      ],
+    },
     'GET /api/sessions/s-1/projects': {
       body: () =>
         requestLog.some((line) => line.endsWith('/projects') && line.includes('POST'))
@@ -315,7 +331,11 @@ test('проект-редактор: создание → раздел → со�
 
   // создание
   await page.getByLabel('Название').fill('Новая статья')
-  await page.getByLabel('Целевой журнал').fill('ICES')
+  // «Целевой журнал» стал выпадающим списком стилей журнала: значение —
+  // идентификатор группы журналов, а не свободный текст.
+  const journal = page.getByRole('combobox', { name: 'Стиль журнала' })
+  await journal.click()
+  await page.getByRole('option', { name: /Мультидисциплинарный прорыв/ }).click()
   await page.getByRole('button', { name: 'Создать' }).click()
   // после создания эффект сам выбирает новый проект (selectedId → list[0])
   await expect(page.getByRole('combobox', { name: 'Проект' })).toBeVisible({

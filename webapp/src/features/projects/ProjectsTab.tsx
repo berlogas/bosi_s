@@ -368,7 +368,7 @@ function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
       </List>
       {!hasProjects && (
         <Text size="xs" c="dimmed" mt={4}>
-          Начните с первого шага — поля «Название» и «Целевой журнал» ниже.
+          Начните с первого шага — поля «Название» и «Стиль журнала» ниже.
         </Text>
       )}
     </Paper>

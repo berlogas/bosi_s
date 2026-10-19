@@ -48,6 +48,10 @@ jobs:
       - name: E2E (Playwright)
         run: |
           npx playwright install --with-deps chromium
+          # multiuser.spec.ts в CI исключён конфигом (testIgnore): он бьёт по
+          # живому стенду и требует поднятого backend и пользователей
+          # mu_ivan/mu_petr/mu_admin. На машине со стендом гоняется целиком:
+          # npm run test:e2e.
           npm run test:e2e
 
       - name: Сборка

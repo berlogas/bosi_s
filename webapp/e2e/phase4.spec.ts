@@ -200,16 +200,21 @@ test('создание пользователя: валидация пароля
 
   await login(page, { username: 'admin', password: 'password1' })
   await page.goto('/admin')
-  await expect(page.getByText(/ivanov/)).toBeVisible()
+  // Логин лежит в value поля редактирования, а не в тексте ячейки, поэтому
+  // getByText его не находит: ищем по доступному имени поля.
+  await expect(page.getByRole('textbox', { name: 'Логин: ivanov' })).toHaveValue(
+    'ivanov',
+  )
 
   await page.getByRole('button', { name: 'Создать пользователя' }).click()
-  await page.getByLabel(/^Логин/).fill('sidorov')
-  await page.getByLabel(/^Пароль/).fill('short')
+  // /^Логин/ без exact ловит ещё и поле строки ivanov («Логин: ivanov»)
+  await page.getByRole('textbox', { name: 'Логин', exact: true }).fill('sidorov')
+  await page.getByRole('textbox', { name: 'Пароль', exact: true }).fill('short')
 
   const submit = page.getByRole('button', { name: 'Создать', exact: true })
   await expect(submit).toBeDisabled()
 
-  await page.getByLabel(/^Пароль/).fill('longenough1')
+  await page.getByRole('textbox', { name: 'Пароль', exact: true }).fill('longenough1')
   await expect(submit).toBeEnabled()
   await submit.click()
 
@@ -221,7 +226,7 @@ test('создание пользователя: валидация пароля
   ).toBe(true)
 })
 
-test('глобальная база: путь и массовая индексация', async ({ page }) => {
+test('глобальная база: путь, папка-приёмник и переиндексация', async ({ page }) => {
   const { requestLog } = await mockApi(page, {
     'POST /api/admin/documents/path': {
       body: {
@@ -269,7 +274,41 @@ test('глобальная база: путь и массовая индекса
               },
             ],
     },
-    'POST /api/admin/documents/bulk-async': { body: { task_id: 't-b', total: 2 } },
+    // Массовое добавление идёт через папку-приёмник: отдельного поля со
+    // списком путей в интерфейсе больше нет.
+    'GET /api/admin/inbox/status': {
+      body: {
+        inbox_dir: '/data/inbox',
+        exists: true,
+        files: 2,
+        usable_files: 2,
+        unsupported_files: 0,
+        bytes: 4096,
+        busy: false,
+      },
+    },
+    'GET /api/admin/inbox/runs': { body: [] },
+    'POST /api/admin/inbox/scan': {
+      body: {
+        run: {
+          id: 'r-1',
+          trigger: 'manual',
+          status: 'done',
+          inbox_dir: '/data/inbox',
+          scanned: 2,
+          indexed: 2,
+          archived: 2,
+          rejected: 0,
+          replaced: 0,
+          failed: 0,
+          error: null,
+          started_at: '2026-10-07T09:00:00+00:00',
+          finished_at: '2026-10-07T09:00:05+00:00',
+        },
+        inbox_dir: '/data/inbox',
+      },
+    },
+    'POST /api/admin/documents/reindex': { body: { task_id: 't-r' } },
   })
 
   await login(page, { username: 'admin', password: 'password1' })
@@ -284,18 +323,21 @@ test('глобальная база: путь и массовая индекса
   await expect(page.getByText('Добавлено.')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText(/Новый файл/)).toBeVisible({ timeout: 15_000 })
 
-  // массовая индексация: пустой ввод → warning, затем задача
-  await page.getByRole('button', { name: 'Запустить индексацию' }).click()
-  await expect(page.getByText('Укажите хотя бы один путь.')).toBeVisible()
+  // папка-приёмник: файлы видно, кнопка запуска разблокирована
+  await expect(page.getByText(/В папке: 2 \(принимаемых 2\)/)).toBeVisible()
+  const scan = page.getByRole('button', { name: 'Запустить массовое добавление' })
+  await expect(scan).toBeEnabled()
+  await scan.click()
+  await expect(page.getByText(/проиндексировано 2, отклонено 0/)).toBeVisible({
+    timeout: 15_000,
+  })
 
-  await page
-    .getByLabel('Пути через запятую или по одному в строке')
-    .fill('/a.pdf, /b.pdf')
-  await page.getByRole('button', { name: 'Запустить индексацию' }).click()
-  await expect(page.getByText('Задача поставлена: 2 файлов')).toBeVisible()
+  await page.getByRole('button', { name: 'Переиндексировать всё' }).click()
+  await expect(page.getByText('Готово.')).toBeVisible({ timeout: 15_000 })
 
   expect(requestLog.some((line) => line.endsWith('/documents/path'))).toBe(true)
-  expect(requestLog.some((line) => line.endsWith('/documents/bulk-async'))).toBe(true)
+  expect(requestLog.some((line) => line.endsWith('/inbox/scan'))).toBe(true)
+  expect(requestLog.some((line) => line.endsWith('/documents/reindex'))).toBe(true)
 })
 
 test('вкладки Задачи, Сессии и Аудит', async ({ page }) => {
@@ -367,9 +409,16 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
 
   // Сессии: сгруппированы по пользователям (ivanov — из списка users)
   await page.getByRole('tab', { name: 'Сессии' }).click()
-  await expect(page.getByRole('region', { name: /ivanov/ })).toBeVisible()
+  // Имя региона-аккордеона — логин целиком, а панель внутри него называется
+  // «ivanov, 1 сессия»: без exact локатор находит оба и падает strict mode.
+  await expect(page.getByRole('region', { name: 'ivanov', exact: true })).toBeVisible()
   await expect(page.getByText('1 сессия')).toBeVisible()
-  await page.getByRole('button', { name: /ivanov/ }).click()
+  // Панель может быть раскрыта по умолчанию: без проверки клик по кнопке её
+  // закрывает, и следующая проверка падает на отсутствии таблицы.
+  const sessionsToggle = page.getByRole('button', { name: /ivanov/ })
+  if ((await sessionsToggle.getAttribute('aria-expanded')) === 'false') {
+    await sessionsToggle.click()
+  }
   const table = page.getByRole('table')
   await expect(table.getByText('abcdefgh')).toBeVisible()
   await expect(table.getByText('2026-10-07 12:34')).toBeVisible()

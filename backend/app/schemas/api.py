@@ -211,6 +211,29 @@ class DocumentOut(BaseModel):
     created_at: datetime | None = None
 
 
+class GlobalDocumentOut(BaseModel):
+    """Документ глобальной базы для чтения обычным исследователем.
+
+    Отдельная схема вместо `DocumentOut` намеренно: админский ответ несёт
+    `path` (путь на диске), `error` и служебный `content_hash`, которые
+    читателю списка знаний не нужны, а показывать пути файлов на сервере
+    исследователю — незачем. Набор полей — ровно то, что показывает таблица.
+    """
+
+    id: str | None = None
+    dockey: str
+    title: str | None = None
+    filename: str | None = None
+    citation: str | None = None
+    category: str | None = None
+    status: str | None = None
+    size_bytes: int = 0
+    chunk_count: int = 0
+    tags: list[str] = Field(default_factory=list)
+    source: str | None = None
+    created_at: datetime | None = None
+
+
 class DocumentPatch(BaseModel):
     title: str | None = Field(default=None, max_length=512)
     category: str | None = None

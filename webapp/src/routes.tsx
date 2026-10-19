@@ -13,6 +13,7 @@ import { AdminPage } from './features/admin/AdminPage'
 import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { AppLayout } from './features/layout/AppLayout'
+import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { SessionPage } from './features/sessions/SessionPage'
 import {
   ChatRoute,
@@ -50,6 +51,9 @@ export function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        {/* Глобальная база знаний на чтение: доступна и исследователю,
+            который не может её наполнять (наполняет администратор) */}
+        <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/s/:sessionId" element={<SessionPage />}>
           {/* без вкладки — на чат (у Streamlit это был active_tab) */}

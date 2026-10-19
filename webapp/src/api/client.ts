@@ -21,6 +21,7 @@ import type {
   DraftAnalysis,
   GenerateRequest,
   GenerateResult,
+  GlobalDocumentOut,
   MessagePage,
   ProjectDocumentItem,
   ProjectOut,
@@ -771,6 +772,28 @@ class ApiClient {
 
   adminDocuments(): Promise<DocumentOut[]> {
     return this.request('/api/admin/documents')
+  }
+
+  /**
+   * Глобальная база знаний для чтения: доступна любому вошедшему, в том числе
+   * исследователю, который не может её наполнять. Отдельный маршрут вместо
+   * `/api/admin/documents` — там `require_admin`, и список был виден только
+   * администратору.
+   */
+  globalDocuments(
+    options: { q?: string; category?: string } = {},
+  ): Promise<GlobalDocumentOut[]> {
+    return this.request('/api/documents', {
+      query: { q: options.q?.trim() || undefined, category: options.category },
+    })
+  }
+
+  globalDocumentsStats(): Promise<{
+    total: number
+    storage_bytes: number
+    by_category: Record<string, number>
+  }> {
+    return this.request('/api/documents/stats')
   }
 
   adminAddPath(path: string): Promise<DocumentOut> {

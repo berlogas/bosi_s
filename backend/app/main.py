@@ -132,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router)
     app.include_router(users.router)
     app.include_router(documents.router)
+    app.include_router(documents.knowledge_router)
     app.include_router(session_documents.router)
     app.include_router(chat.router)
     app.include_router(history.router)

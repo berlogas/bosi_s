@@ -735,6 +735,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Knowledge Documents
+         * @description Глобальная база для чтения: список и сводка.
+         *
+         *     Запись в базу остаётся за администратором (`/api/admin/documents`), здесь
+         *     только чтение, поэтому аудит не пишется на каждый просмотр: иначе чтение
+         *     списка забивало бы журнал событий. Права проверяет `get_current_user` —
+         *     анонимный пользователь получает 401.
+         *
+         *     `q` — фильтр по названию/имени файла, подстрокой без учёта регистра.
+         *     Сервер разбирает параметр сам: передавать его в SQL нельзя, поле
+         *     подставляется через `like` с экранированием символов `%` и `_`.
+         */
+        get: operations["list_knowledge_documents_api_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Knowledge Stats */
+        get: operations["knowledge_stats_api_documents_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/documents": {
         parameters: {
             query?: never;
@@ -1826,6 +1872,47 @@ export interface components {
             analysis?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * GlobalDocumentOut
+         * @description Документ глобальной базы для чтения обычным исследователем.
+         *
+         *     Отдельная схема вместо `DocumentOut` намеренно: админский ответ несёт
+         *     `path` (путь на диске), `error` и служебный `content_hash`, которые
+         *     читателю списка знаний не нужны, а показывать пути файлов на сервере
+         *     исследователю — незачем. Набор полей — ровно то, что показывает таблица.
+         */
+        GlobalDocumentOut: {
+            /** Id */
+            id?: string | null;
+            /** Dockey */
+            dockey: string;
+            /** Title */
+            title?: string | null;
+            /** Filename */
+            filename?: string | null;
+            /** Citation */
+            citation?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Status */
+            status?: string | null;
+            /**
+             * Size Bytes
+             * @default 0
+             */
+            size_bytes: number;
+            /**
+             * Chunk Count
+             * @default 0
+             */
+            chunk_count: number;
+            /** Tags */
+            tags?: string[];
+            /** Source */
+            source?: string | null;
+            /** Created At */
+            created_at?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3977,6 +4064,60 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    list_knowledge_documents_api_documents_get: {
+        parameters: {
+            query?: {
+                category?: components["schemas"]["DocumentCategory"] | null;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalDocumentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    knowledge_stats_api_documents_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };

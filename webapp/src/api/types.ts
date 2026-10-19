@@ -45,6 +45,8 @@ export type TaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 
 // ------------------------------------------------------------ документы
 export type DocumentOut = components['schemas']['DocumentOut']
+/** Документ глобальной базы в виде для чтения (обычный исследователь). */
+export type GlobalDocumentOut = components['schemas']['GlobalDocumentOut']
 export type DocumentCategory = components['schemas']['DocumentCategory']
 export type DocumentBatchResult = components['schemas']['DocumentBatchResultOut']
 

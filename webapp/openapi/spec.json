@@ -2124,6 +2124,109 @@
         ]
       }
     },
+    "/api/documents": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "List Knowledge Documents",
+        "description": "Глобальная база для чтения: список и сводка.\n\nЗапись в базу остаётся за администратором (`/api/admin/documents`), здесь\nтолько чтение, поэтому аудит не пишется на каждый просмотр: иначе чтение\nсписка забивало бы журнал событий. Права проверяет `get_current_user` —\nанонимный пользователь получает 401.\n\n`q` — фильтр по названию/имени файла, подстрокой без учёта регистра.\nСервер разбирает параметр сам: передавать его в SQL нельзя, поле\nподставляется через `like` с экранированием символов `%` и `_`.",
+        "operationId": "list_knowledge_documents_api_documents_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DocumentCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GlobalDocumentOut"
+                  },
+                  "title": "Response List Knowledge Documents Api Documents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/stats": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Knowledge Stats",
+        "operationId": "knowledge_stats_api_documents_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Knowledge Stats Api Documents Stats Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/sessions/{session_id}/documents": {
       "get": {
         "tags": [
@@ -5509,6 +5612,126 @@
           "word_count"
         ],
         "title": "GenerateResultOut"
+      },
+      "GlobalDocumentOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "dockey": {
+            "type": "string",
+            "title": "Dockey"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "default": 0
+          },
+          "chunk_count": {
+            "type": "integer",
+            "title": "Chunk Count",
+            "default": 0
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dockey"
+        ],
+        "title": "GlobalDocumentOut",
+        "description": "Документ глобальной базы для чтения обычным исследователем.\n\nОтдельная схема вместо `DocumentOut` намеренно: админский ответ несёт\n`path` (путь на диске), `error` и служебный `content_hash`, которые\nчитателю списка знаний не нужны, а показывать пути файлов на сервере\nисследователю — незачем. Набор полей — ровно то, что показывает таблица."
       },
       "HTTPValidationError": {
         "properties": {

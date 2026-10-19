@@ -428,3 +428,56 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
   await expect(page.getByText('session.create')).toBeVisible()
   await expect(page.getByText('✓')).toBeVisible()
 })
+
+test('исследователь видит глобальную базу на чтение', async ({ page }) => {
+  // Главное отличие от соседних сценариев: пункт «База знаний» есть у
+  // не-админа, и страница не содержит ни одной кнопки наполнения.
+  await mockApi(page, {
+    'POST /api/auth/login': {
+      body: {
+        user: RESEARCHER,
+        tokens: {
+          access_token: 'e2e-access',
+          refresh_token: 'e2e-refresh',
+          expires_in: 900,
+          refresh_expires_in: 86400,
+        },
+      },
+    },
+    'GET /api/documents': {
+      body: [
+        {
+          id: 'g-1',
+          dockey: 'glob1',
+          title: 'Хлорофилл и фотосинтез',
+          filename: 'chlorophyll.pdf',
+          citation: 'Ivanov, 2025',
+          category: 'global_knowledge',
+          status: 'ready',
+          size_bytes: 2048,
+          chunk_count: 7,
+          tags: ['биология'],
+          source: 'upload',
+          created_at: '2026-10-07T09:00:00+00:00',
+        },
+      ],
+    },
+    'GET /api/documents/stats': {
+      body: {
+        total: 1,
+        storage_bytes: 2048,
+        by_category: { global_knowledge: 1 },
+      },
+    },
+  })
+
+  await login(page, { username: 'user', password: 'password1' })
+  await expect(page.getByRole('link', { name: 'Администрирование' })).toHaveCount(0)
+
+  await page.getByText('База знаний').click()
+  await expect(page.getByRole('heading', { name: 'База знаний' })).toBeVisible()
+  await expect(page.getByText('Хлорофилл и фотосинтез')).toBeVisible()
+  await expect(page.getByText(/документов: 1/)).toBeVisible()
+  // читателю не показывают управление базой
+  await expect(page.getByRole('button', { name: 'Управлять базой' })).toHaveCount(0)
+})

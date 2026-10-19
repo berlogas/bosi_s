@@ -176,3 +176,98 @@ async def test_global_base_is_managed_by_admin_only(client, admin, researcher,
     for headers in (researcher, petrov["headers"]):
         response = await client.get("/api/admin/documents", headers=headers)
         assert response.status_code == 403, response.status_code
+
+def _seed_global_document(db, owner_id: str, **kwargs) -> None:
+    """Документ в глобальной базе напрямую в БД — индексация тут ни при чём."""
+    from app.db.models import (
+        DocumentCategory,
+        DocumentStatus,
+        DocumentVisibility,
+    )
+    from app.db.repositories import documents as docs_repo
+
+    params = {
+        "dockey": "dockey-1",
+        "docname": "docname-1",
+        "title": "Хлорофилл и фотосинтез",
+        "filename": "chlorophyll.pdf",
+        "size_bytes": 2048,
+        "chunk_count": 7,
+        "category": DocumentCategory.global_knowledge,
+        "visibility": DocumentVisibility.global_,
+        "session_id": None,
+        "owner_user_id": owner_id,
+        "added_by": owner_id,
+        "status": DocumentStatus.ready,
+    }
+    params.update(kwargs)
+    docs_repo.upsert_document(db, **params)
+
+
+async def test_researcher_reads_global_base_list(client, db, admin, researcher,
+                                                 admin_user) -> None:
+    """Исследователь, который не может наполнять базу, должен её видеть.
+
+    Иначе он получает в ответе ссылку на источник, которого никогда не видел
+    в списке, и не может понять, доступен ли нужный документ вообще.
+    """
+    _seed_global_document(db, admin_user.id)
+
+    as_admin = await client.get("/api/admin/documents", headers=admin)
+    assert as_admin.status_code == 200
+    assert len(as_admin.json()) == 1
+
+    # исследователь видит тот же список...
+    response = await client.get("/api/documents", headers=researcher)
+    assert response.status_code == 200
+    listed = response.json()
+    assert len(listed) == 1
+    assert listed[0]["title"] == "Хлорофилл и фотосинтез"
+
+    # ...но ответ не отдаёт служебные поля админского DTO: путь на диске,
+    # текст ошибки и хэш содержимого читателю списка не нужны
+    assert "path" not in listed[0]
+    assert "error" not in listed[0]
+    assert "content_hash" not in listed[0]
+
+
+async def test_global_base_list_needs_authentication(client) -> None:
+    """Анонимный посетитель не видит глобальную базу."""
+    assert (await client.get("/api/documents")).status_code == 401
+
+
+async def test_global_base_list_filters(client, db, admin_user, researcher) -> None:
+    """Поиск по названию, имени файла и меткам; фильтр по категории."""
+    from app.db.models import DocumentCategory
+
+    _seed_global_document(db, admin_user.id, dockey="a", docname="a",
+                          title="Хлорофилл и фотосинтез", filename="a.pdf")
+    _seed_global_document(db, admin_user.id, dockey="b", docname="b",
+                          title="CTD-зонды", filename="b.pdf",
+                          category=DocumentCategory.temp_literature,
+                          tags=["океан"])
+
+    async def titles(**params) -> list[str]:
+        response = await client.get("/api/documents", headers=researcher, params=params)
+        assert response.status_code == 200
+        return sorted(item["title"] for item in response.json())
+
+    assert len(await titles()) == 2
+    assert await titles(q="хлорофилл") == ["Хлорофилл и фотосинтез"]
+    assert await titles(q="CTD") == ["CTD-зонды"]          # регистр не важен
+    assert await titles(q="океан") == ["CTD-зонды"]          # по меткам
+    assert await titles(q="нетакого") == []
+    # категория отсекает второй документ
+    assert await titles(category="global_knowledge") == ["Хлорофилл и фотосинтез"]
+
+
+async def test_global_base_stats(client, db, admin_user, researcher) -> None:
+    """Сводка по базе доступна вместе со списком."""
+    _seed_global_document(db, admin_user.id, dockey="a", docname="a", size_bytes=1000)
+    _seed_global_document(db, admin_user.id, dockey="b", docname="b", size_bytes=500)
+
+    response = await client.get("/api/documents/stats", headers=researcher)
+    assert response.status_code == 200
+    summary = response.json()
+    assert summary["total"] == 2
+    assert summary["storage_bytes"] == 1500

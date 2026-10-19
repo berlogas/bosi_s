@@ -16,10 +16,10 @@ import anyio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.serializers import document_from_ref, document_from_row
+from app.api.serializers import _enum_value, document_from_ref, document_from_row
 from app.core.errors import NotFoundError
 from app.core.safety import validate_global_import
-from app.core.security import require_admin
+from app.core.security import get_current_user, require_admin
 from app.db.models import (
     Document,
     DocumentCategory,
@@ -35,6 +35,7 @@ from app.schemas.api import (
     DocumentOut,
     DocumentPatch,
     FileFailureOut,
+    GlobalDocumentOut,
 )
 from app.services.paperqa_service import PaperQA2Service, get_registry
 from app.services.types import DocStatus
@@ -43,6 +44,13 @@ log = logging.getLogger("boasi.api.documents")
 
 router = APIRouter(prefix="/api/admin/documents", tags=["admin-documents"],
                    dependencies=[Depends(require_admin)])
+
+# Чтение глобальной базы обычным исследователем. Отдельный роутер с префиксом
+# `/api/documents` — рядом с админским, но без `require_admin`: наполнять базу
+# может администратор, а пользователь должен видеть, что в ней есть, иначе
+# поиск по базе выдаёт ссылки на источники, которых он никогда не видел, и он
+# не может понять, доступен ли нужный ему документ вообще.
+knowledge_router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 GLOBAL_CATEGORY = DocumentCategory.global_knowledge
 
@@ -83,6 +91,67 @@ def _register(db: Session, user: User, ref: Any, tags: list[str],
 
 
 # --------------------------------------------------------------------------- чтение
+@knowledge_router.get("", response_model=list[GlobalDocumentOut])
+def list_knowledge_documents(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    category: DocumentCategory | None = None,
+    q: str | None = None,
+) -> list[GlobalDocumentOut]:
+    """Глобальная база для чтения: список и сводка.
+
+    Запись в базу остаётся за администратором (`/api/admin/documents`), здесь
+    только чтение, поэтому аудит не пишется на каждый просмотр: иначе чтение
+    списка забивало бы журнал событий. Права проверяет `get_current_user` —
+    анонимный пользователь получает 401.
+
+    `q` — фильтр по названию/имени файла, подстрокой без учёта регистра.
+    Сервер разбирает параметр сам: передавать его в SQL нельзя, поле
+    подставляется через `like` с экранированием символов `%` и `_`.
+    """
+    rows = docs_repo.list_documents(db, session_id=None, category=category)
+    needle = (q or "").strip().lower()
+    if needle:
+        rows = [row for row in rows if _matches(row, needle)]
+    return [document_knowledge_view(row) for row in rows]
+
+
+@knowledge_router.get("/stats")
+def knowledge_stats(user: User = Depends(get_current_user),
+                    db: Session = Depends(get_db)) -> dict[str, Any]:
+    summary = docs_repo.documents_summary(db, None)
+    # storage_bytes репозиторий считает только для сессии; для глобальной базы
+    # суммируем сами, иначе в сводке всегда ноль байт.
+    summary["storage_bytes"] = sum(row.size_bytes or 0 for row in
+                                   docs_repo.list_documents(db, session_id=None))
+    return summary
+
+
+def _matches(row: Document, needle: str) -> bool:
+    """Поиск по названию, имени файла и меткам — без SQL и без LIKE."""
+    haystack = " ".join(filter(None, [row.title, row.filename,
+                                      row.docname, " ".join(row.tags or [])]))
+    return needle in haystack.lower()
+
+
+def document_knowledge_view(doc: Document) -> GlobalDocumentOut:
+    """ORM `Document` -> DTO для чтения глобальной базы."""
+    return GlobalDocumentOut(
+        id=doc.id,
+        dockey=doc.dockey or "",
+        title=doc.title,
+        filename=doc.filename,
+        citation=doc.citation,
+        category=_enum_value(doc.category),
+        status=_enum_value(doc.status),
+        size_bytes=doc.size_bytes or 0,
+        chunk_count=doc.chunks_count or 0,
+        tags=list(doc.tags or []),
+        source=doc.source,
+        created_at=doc.created_at,
+    )
+
+
 @router.get("", response_model=list[DocumentOut])
 def list_global_documents(db: Session = Depends(get_db),
                           category: DocumentCategory | None = None

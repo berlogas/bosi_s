@@ -247,7 +247,34 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"куда писать отчёт (по умолчанию {default_report_path()})",
     )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help=f"перезаписать эталон {SPEC_PATH} схемой из кода и выйти",
+    )
     args = parser.parse_args(argv)
+
+    if args.write:
+        apply_runtime_env()
+        from app.config import reset_settings_cache
+
+        reset_settings_cache()
+        from app.main import app
+
+        SPEC_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Порядок ключей и переводы строк — как в эталоне: FastAPI отдаёт
+        # openapi/info/paths в своём порядке, и sort_keys переставил бы весь
+        # файл, превращая точечное обновление в diff на семь тысяч строк.
+        # На Windows переводы строк LF явно, иначе git с core.autocrlf
+        # перепишет весь файл при добавлении в индекс.
+        SPEC_PATH.write_bytes(
+            (json.dumps(app.openapi(), ensure_ascii=False, indent=2) + "\n")
+            .replace("\r\n", "\n")
+            .encode("utf-8")
+        )
+        print(f"Спецификация обновлена: {SPEC_PATH}")
+        print("дальше: cd webapp && npm run codegen")
+        return 0
 
     try:
         report = check()

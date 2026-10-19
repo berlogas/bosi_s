@@ -81,6 +81,10 @@ export function AppLayout() {
 
   const items = [
     { to: '/', label: 'Информационная панель', enabled: true },
+    // Глобальная база на чтение — всем вошедшим, включая исследователя:
+    // наполняет её администратор, но видеть состав корпуса нужно каждому,
+    // иначе ссылки в ответах ведут в никуда.
+    { to: '/knowledge', label: 'База знаний', enabled: true },
     // «Текущая сессия» — та, что открыта сейчас (в Streamlit — state.current_session_id())
     {
       to: currentSessionPath ?? '',

@@ -608,3 +608,124 @@ async def test_no_fallback_when_skip_summary_is_configured(
     await service._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
 
     assert calls == [None]
+
+
+# --------------------------------------------------------------------------- кто я
+# Жалоба 2026-10-19: на «ты кто?» чат отвечал «В предоставленных источниках нет
+# информации, чтобы ответить на этот вопрос». Отказ формально честный — вопрос
+# действительно не о базе, — но пользователю это не отвечает ни на что: он
+# спрашивал, с кем говорит. Теперь вопрос о помощнике уходит мимо поиска и
+# модель представляется.
+
+
+async def test_identity_query_skips_search(client, researcher, seeded,
+                                            monkeypatch) -> None:
+    """«Ты кто?» не ищет по базе и не отвечает отказом."""
+    import app.services.rag_service as rs
+
+    calls: list[str] = []
+
+    async def boom(*args, **kwargs):
+        calls.append("evidence")
+        raise AssertionError("поиск по базе для вопроса обо мне запускаться не должен")
+
+    monkeypatch.setattr(rs.RagFusionService, "_evidence", boom)
+
+    body = await _quick(client, researcher, query="ты кто?", no_cache=True)
+
+    assert calls == [], "вопрос о помощнике не должен доходить до базы"
+    assert body["sources"] == []
+    assert body["references"] == []
+    assert body["stats"].get("identity") is True
+    assert body["stats"].get("trivial") is True  # тот же быстрый путь
+    assert body["answer"].strip()
+
+
+async def test_identity_answer_names_assistant_or_explains_itself(
+        client, researcher, seeded) -> None:
+    """Ответ на вопрос о помощнике не должен быть отказом «нет источников».
+
+    Заглушка LLM в тестах отвечает заранее заданным текстом, поэтому здесь
+    проверяется контракт: если модель всё же отказалась, подставляется
+    запасное представление, а не отказ.
+    """
+    import app.services.rag_service as rs
+
+    async def refusing_llm(*args, **kwargs):
+        class R:
+            text = "В предоставленных источниках нет информации, чтобы ответить."
+        return R()
+
+    service = rs.RagFusionService()
+    chat_llm = service.registry.global_service().chat_llm
+    chat_llm.call_single = refusing_llm
+
+    result = await service._answer_trivial(
+        "ты кто?", mode=rs.SearchMode.global_only, kind="identity")
+
+    answer = result.answer.answer.lower()
+    # отказ заменён представлением: имя есть, а отказа — нет.
+    # Проверять «нет источников» во всём ответе нельзя: нормальное
+    # представление о них упоминает (отвечаю со ссылками на источники).
+    assert "бо" in answer
+    assert not answer.startswith("в предоставленных источниках")
+    assert "ответить на этот вопрос" not in answer
+
+
+@pytest.mark.parametrize("query", [
+    "ты кто", "Ты кто?", "кто ты", "кто ты такой", "как тебя зовут",
+    "твоё имя", "представься", "расскажи о себе", "ты бот", "ты робот",
+    "ты машина", "ты человек или машина", "что ты умеешь", "чем ты можешь помочь",
+    "что ты делаешь", "как ты работаешь", "who are you", "what can you do",
+    "introduce yourself",
+])
+def test_is_identity_query_accepts_questions_about_assistant(query: str) -> None:
+    from app.services.rag_service import is_identity_query
+
+    assert is_identity_query(query) is True
+
+
+@pytest.mark.parametrize("query", [
+    "что такое биобот",              # «ты бот» в теме — это вопрос по базе
+    "ты знаешь что такое биомасса",  # «ты» в начале, но это вопрос по теме
+    "что ты такое",                  # похоже, но не в списке: лучше уйти в базу
+    "CTD-зонд", "хлорофилл",
+    "ты и я вместе изучаем океан",  # длиннее 4 слов — не вопрос обо мне
+    "",
+])
+def test_is_identity_query_rejects_research_questions(query: str) -> None:
+    """Словарь закрытый: цена ложного срабатывания — потерянный ответ по теме."""
+    from app.services.rag_service import is_identity_query
+
+    assert is_identity_query(query) is False
+
+
+def test_refusal_detection_does_not_swallow_normal_answers() -> None:
+    """Отказ ловится по началу ответа, а не по вхождению где угодно."""
+    from app.services.rag_service import _is_refusal
+
+    assert _is_refusal("В предоставленных источниках нет информации.") is True
+    assert _is_refusal("Источников по этому вопросу нет.") is True
+    assert _is_refusal("В базе среди них сведений не нашлось.") is True
+    assert _is_refusal("Не могу ответить на этот вопрос.") is True
+    # нормальный ответ может упоминать ограничения — это не отказ
+    assert _is_refusal(
+        "Меня зовут Бо. В источниках нет данных по этому вопросу, но вот что я умею."
+    ) is False
+
+
+async def test_identity_fast_path_respects_trivial_query_switch(
+        client, researcher, seeded, monkeypatch) -> None:
+    """TRIVIAL_QUERY_FAST_PATH=false отключает и представление.
+
+    Иначе получился бы разнобой: «привет» по настройке строгий, а «ты кто?»
+    всё равно отвечает разговорчиво.
+    """
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "trivial_query_fast_path", False,
+                        raising=False)
+
+    body = await _quick(client, researcher, query="ты кто?", no_cache=True)
+
+    assert body["stats"].get("identity") is None

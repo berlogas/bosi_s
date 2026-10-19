@@ -327,3 +327,29 @@ test('восстановление после F5: поллинг задачи п
     page.getByRole('button', { name: 'Отменить', exact: true }),
   ).toBeVisible()
 })
+
+test('выход в меню не гасит пункт «Текущая сессия»', async ({ page }) => {
+  await mockApi(page)
+  await login(page)
+  await openChat(page)
+
+  // пункт активен, пока мы в сессии
+  const sessionItem = page.locator('.mantine-NavLink-root', {
+    hasText: 'Текущая сессия',
+  })
+  await expect(sessionItem).not.toHaveAttribute('data-disabled', 'true')
+
+  // выход в меню: пункт обязан остаться доступным
+  await page
+    .locator('.mantine-NavLink-root', { hasText: 'Информационная панель' })
+    .click()
+  await expect(
+    page.getByRole('heading', { name: 'Информационная панель' }),
+  ).toBeVisible()
+  await expect(sessionItem).not.toHaveAttribute('data-disabled', 'true')
+
+  // и возвращает в ту же сессию
+  await sessionItem.click()
+  await expect(page).toHaveURL(/\/s\/s-1\/chat$/)
+  await expect(page.getByLabel('Ваш вопрос')).toBeVisible()
+})

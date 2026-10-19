@@ -27,6 +27,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { client } from '../../api/client'
 import { displayName, roleLabel } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
+import { useCurrentSessionPath } from '../sessions/useCurrentSession'
 
 /** Метка сборки интерфейса (аналог UI_BUILD в Streamlit-версии app.py). */
 export const UI_BUILD = '2026-10-07a'
@@ -74,10 +75,10 @@ export function AppLayout() {
   // Крутилка в подвале сайдбара, пока идёт восстановление сессии после F5.
   const bootPending = useAuth((state) => state.status === 'boot')
 
-  // Текущая сессия: /s/:id в адресной строке — переживает F5 (в отличие
-  // от session_state у Streamlit).
-  const currentSessionMatch = /^\/s\/[^/]+/.exec(location.pathname)
-  const currentSessionPath = currentSessionMatch ? currentSessionMatch[0] : null
+  // Текущая сессия — не из адресной строки, а последняя открытая: стоило уйти
+  // в меню, пункт серел, хотя сессия никуда не делась, и вернуться можно было
+  // только через дашборд. Хранится в sessionStorage (useCurrentSession).
+  const currentSessionPath = useCurrentSessionPath()
 
   const items = [
     { to: '/', label: 'Информационная панель', enabled: true },

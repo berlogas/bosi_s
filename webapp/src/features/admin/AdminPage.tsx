@@ -67,6 +67,7 @@ import {
   useSessionsTable,
   useUpdateUser,
 } from './queries'
+import { useClearMessages } from '../chat/queries'
 
 const ROLES = ['researcher', 'admin']
 
@@ -1020,6 +1021,65 @@ function TasksTab() {
 
 type AdminSessionRow = SessionOut
 
+/**
+ * Очистка переписки из админки — паритет кнопки «Очистить чат» в чате
+ * сессии (ChatTab): два шага, документы и заметки сессии не трогаются.
+ */
+function ClearChatCell({ sessionId }: { sessionId: string }) {
+  const [ask, setAsk] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const clear = useClearMessages(sessionId)
+
+  return (
+    <>
+      <Button
+        size="compact-xs"
+        variant="subtle"
+        color="red"
+        onClick={() => setAsk(true)}
+      >
+        Очистить чат
+      </Button>
+      <Modal
+        opened={ask}
+        onClose={() => setAsk(false)}
+        title="Очистить переписку?"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            Удалить всю переписку этой сессии? Отменить будет нельзя.
+          </Text>
+          {error && (
+            <Alert color="red" role="alert">
+              {error}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setAsk(false)}>
+              Отмена
+            </Button>
+            <Button
+              color="red"
+              loading={clear.isPending}
+              onClick={() => {
+                setError(null)
+                clear.mutate(undefined, {
+                  onSuccess: () => setAsk(false),
+                  onError: (cause) =>
+                    setError(errorText(cause, 'Не удалось очистить переписку')),
+                })
+              }}
+            >
+              Да, очистить
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  )
+}
+
 function SessionsTab() {
   const users = useAdminUsers()
   const sessions = useSessionsTable()
@@ -1084,6 +1144,7 @@ function SessionsTab() {
                   <Table.Th>название</Table.Th>
                   <Table.Th>статус</Table.Th>
                   <Table.Th>действие</Table.Th>
+                  <Table.Th>чат</Table.Th>
                   <Table.Th>активность</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -1094,6 +1155,9 @@ function SessionsTab() {
                     <Table.Td>{session.title ?? ''}</Table.Td>
                     <Table.Td>{session.status ?? ''}</Table.Td>
                     <Table.Td>{session.last_action_label ?? ''}</Table.Td>
+                    <Table.Td>
+                      {session.id && <ClearChatCell sessionId={session.id} />}
+                    </Table.Td>
                     <Table.Td>{shortWhen(session.last_activity_at)}</Table.Td>
                   </Table.Tr>
                 ))}

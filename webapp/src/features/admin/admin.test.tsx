@@ -917,9 +917,58 @@ describe('админка', () => {
     const header = within(table2)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
-    expect(header).toEqual(['id', 'название', 'статус', 'действие', 'активность'])
+    expect(header).toEqual([
+      'id',
+      'название',
+      'статус',
+      'действие',
+      'чат',
+      'активность',
+    ])
     expect(within(table2).getByText('abcdefgh')).toBeInTheDocument()
     expect(within(table2).getByText('2026-10-07 12:34')).toBeInTheDocument()
+  })
+
+  it('вкладка Сессии: «Очистить чат» чистит переписку сессии в два шага', async () => {
+    loginAs(TEST_ADMIN)
+    const { calls } = mockApi(
+      adminRoutes({
+        'GET /api/sessions': [
+          {
+            id: 'abcdefgh-1234',
+            user_id: 'u-1',
+            title: 'Баренцево',
+            status: 'active',
+            last_action_label: 'chat',
+            last_activity_at: '2026-10-07T12:34:00+00:00',
+            created_at: '2026-10-01T00:00:00+00:00',
+            expires_at: '2026-12-01T00:00:00+00:00',
+          },
+        ],
+        'DELETE /api/chat/messages': {},
+      }),
+    )
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Сессии' }))
+
+    // шаг 1: кнопка в строке сессии, шаг 2 — подтверждение, как в чате сессии
+    await userEvent.click(await screen.findByRole('button', { name: 'Очистить чат' }))
+    expect(
+      await screen.findByText(
+        'Удалить всю переписку этой сессии? Отменить будет нельзя.',
+      ),
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Да, очистить' }))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) =>
+          c.url.includes('/api/chat/messages?session_id=abcdefgh-1234') &&
+          (c.init.method ?? 'GET').toUpperCase() === 'DELETE',
+      )
+      expect(call).toBeDefined()
+    })
   })
 
   it('вкладка Аудит: сводка и период фильтруют выборку', async () => {

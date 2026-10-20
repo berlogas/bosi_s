@@ -29,19 +29,22 @@ export function TaskPanel({
   const running = task.status === 'running' || task.status === 'queued'
   const icon = STATUS_ICONS[task.status] ?? ''
   // Секундомер тикает локально: сервер присылает `seconds`/`stage_seconds`
-  // только вместе с событием (SSE/опрос), а между ними время прибавляем
-  // сами от момента последнего обновления задачи.
-  const [, forceTick] = useState(0)
-  const receivedAt = useRef(Date.now())
+  // только вместе с событием (SSE/опрос), а между ними прибавляем сами
+  // от момента последнего обновления задачи. Дрифт — state, а не расчёт
+  // в рендере: render должен оставаться чистым (react-hooks/purity).
+  const [drift, setDrift] = useState(0)
+  const receivedAt = useRef(0)
   useEffect(() => {
     receivedAt.current = Date.now()
+    setDrift(0) // новое событие задачи — база заново с сервера
   }, [task])
   useEffect(() => {
     if (!running) return
-    const timer = setInterval(() => forceTick((n) => n + 1), 1000)
+    const tick = () => setDrift((Date.now() - receivedAt.current) / 1000)
+    tick()
+    const timer = setInterval(tick, 1000)
     return () => clearInterval(timer)
   }, [running])
-  const drift = running ? (Date.now() - receivedAt.current) / 1000 : 0
   const stage = fmtSeconds(
     task.stage_seconds != null ? task.stage_seconds + drift : task.stage_seconds,
   )

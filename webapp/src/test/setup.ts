@@ -45,7 +45,7 @@ if (!Element.prototype.scrollIntoView) {
 // замолкают (реальные события приходят только от сервера).
 if (!globalThis.EventSource) {
   globalThis.EventSource = class {
-    constructor(_url: string | URL, _init?: EventSourceInit) {}
+    constructor() {}
     close(): void {}
     addEventListener(): void {}
     removeEventListener(): void {}

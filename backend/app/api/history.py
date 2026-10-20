@@ -29,6 +29,15 @@ def quick_history(user: User = Depends(get_current_user),
     return MessagePage(messages=[_out(m) for m in items], total=len(items))
 
 
+@router.delete("/quick-history", status_code=status.HTTP_204_NO_CONTENT)
+def clear_quick_history(request: Request, user: User = Depends(get_current_user),
+                        db: Session = Depends(get_db)) -> None:
+    """Очистить всю историю быстрых запросов пользователя (свою)."""
+    removed = messages_repo.delete_quick_messages(db, user.id)
+    audit(db, action="chat.quick_history_clear", actor=user, target_type="user",
+          target_id=user.id, ip=_ip(request), removed=removed)
+
+
 @router.get("/messages", response_model=MessagePage)
 def session_history(session_id: str, user: User = Depends(get_current_user),
                     db: Session = Depends(get_db),

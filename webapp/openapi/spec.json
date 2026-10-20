@@ -2981,6 +2981,24 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Clear Quick History",
+        "description": "Очистить всю историю быстрых запросов пользователя (свою).",
+        "operationId": "clear_quick_history_api_chat_quick_history_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
       }
     },
     "/api/chat/messages": {

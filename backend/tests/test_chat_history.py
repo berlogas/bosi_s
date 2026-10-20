@@ -117,6 +117,24 @@ def test_delete_messages_clears_only_session(db, researcher_user, talk) -> None:
     assert db.query(Message).filter(Message.session_id.is_(None)).count() == 1
 
 
+def test_delete_quick_messages_clears_only_quick(db, researcher_user, talk) -> None:
+    from app.db.repositories.users import create_user
+
+    other = create_user(db, username="petrov", password="password-1234",
+                        hashed_password="x" * 40)
+    messages_repo.add_message(db, user_id=researcher_user.id, content="быстрый",
+                              session_id=None)
+    messages_repo.add_message(db, user_id=researcher_user.id, content="в сессии",
+                              session_id=talk.id)
+    messages_repo.add_message(db, user_id=other.id, content="чужой быстрый",
+                              session_id=None)
+
+    assert messages_repo.delete_quick_messages(db, researcher_user.id) == 1
+    assert messages_repo.list_quick_messages(db, researcher_user.id) == []
+    assert [m.content for m in messages_repo.list_messages(db, talk.id)] == ["в сессии"]
+    assert [m.content for m in messages_repo.list_quick_messages(db, other.id)] == ["чужой быстрый"]
+
+
 # --------------------------------------------------------------------------- API
 async def test_chat_query_persists_history(client, researcher, session_id,
                                            stub_registry, tmp_path) -> None:
@@ -202,6 +220,17 @@ async def test_quick_message_and_history_api(client, researcher) -> None:
     history = await client.get("/api/chat/quick-history", headers=researcher)
     assert history.json()["total"] == 1
     assert history.json()["messages"][0]["content"] == "Что такое CTD?"
+
+
+async def test_clear_quick_history_api(client, researcher) -> None:
+    await client.post("/api/chat/quick-message", headers=researcher,
+                      json={"query": "Что такое CTD?"})
+
+    response = await client.delete("/api/chat/quick-history", headers=researcher)
+
+    assert response.status_code == 204
+    history = await client.get("/api/chat/quick-history", headers=researcher)
+    assert history.json()["total"] == 0
 
 
 async def test_history_of_foreign_session_is_404(client, researcher, session_id,

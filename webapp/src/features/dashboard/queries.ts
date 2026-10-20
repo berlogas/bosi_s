@@ -96,6 +96,17 @@ export function useQuickHistory(limit = 20) {
   })
 }
 
+/** Очистить историю быстрых вопросов — инвалидация покрывает все лимиты. */
+export function useClearQuickHistory() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => client.clearQuickHistory(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.quickHistory })
+    },
+  })
+}
+
 export function useCreateSession() {
   const queryClient = useQueryClient()
   return useMutation({

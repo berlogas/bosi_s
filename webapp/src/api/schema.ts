@@ -1032,7 +1032,11 @@ export interface paths {
         get: operations["quick_history_api_chat_quick_history_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Clear Quick History
+         * @description Очистить всю историю быстрых запросов пользователя (свою).
+         */
+        delete: operations["clear_quick_history_api_chat_quick_history_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4609,6 +4613,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    clear_quick_history_api_chat_quick_history_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

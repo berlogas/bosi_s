@@ -458,6 +458,11 @@ class ApiClient {
     return this.request('/api/chat/quick-history', { query: { limit } })
   }
 
+  /** Очистить всю историю быстрых вопросов пользователя. */
+  clearQuickHistory(): Promise<void> {
+    return this.request('/api/chat/quick-history', { method: 'DELETE' })
+  }
+
   async suggestQueries(query: string): Promise<string[]> {
     const body = await this.request<SuggestionsResponse>('/api/chat/suggest-queries', {
       query: { query },

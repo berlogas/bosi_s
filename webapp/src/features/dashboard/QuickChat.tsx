@@ -19,6 +19,7 @@ import {
   Card,
   Group,
   Loader,
+  Modal,
   Stack,
   Text,
   Textarea,
@@ -32,7 +33,7 @@ import { AnswerView } from '../../components/AnswerView'
 import { TaskPanel } from '../../components/TaskPanel'
 import type { AnswerSource, MessageOut, QuickQueryResult } from '../../api/types'
 import { useTask } from '../chat/queries'
-import { queryKeys, useQuickHistory } from './queries'
+import { queryKeys, useClearQuickHistory, useQuickHistory } from './queries'
 
 /** Ровно то, что умеет рисовать AnswerView. */
 type RenderableAnswer = {
@@ -121,6 +122,7 @@ function Bubble({
 export function QuickChat() {
   const queryClient = useQueryClient()
   const past = useQuickHistory()
+  const clearQuick = useClearQuickHistory()
   const [live, setLive] = useState<Live | null>(null)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<string[]>([])
@@ -129,6 +131,8 @@ export function QuickChat() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const answerRef = useRef<HTMLDivElement>(null)
   const [pinAnswer, setPinAnswer] = useState(false)
+  const [clearAsk, setClearAsk] = useState(false)
+  const [clearError, setClearError] = useState<string | null>(null)
 
   const task = useTask(taskId)
   const busy = sending || Boolean(taskId)
@@ -230,9 +234,38 @@ export function QuickChat() {
     })
   }, [history.length, live, status, suggestions, pinAnswer])
 
+  function handleClearConfirm() {
+    setClearError(null)
+    clearQuick.mutate(undefined, {
+      onSuccess: () => {
+        setClearAsk(false)
+        setLive(null)
+        setSuggestions([])
+        setPinAnswer(false)
+      },
+      onError: (cause) =>
+        setClearError(
+          cause instanceof Error ? cause.message : 'Не удалось очистить чат',
+        ),
+    })
+  }
+
   return (
     <Card withBorder>
       <Stack gap="sm">
+        <Group justify="space-between">
+          <Text fw={600}>Быстрый чат</Text>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="red"
+            leftSection="🗑"
+            onClick={() => setClearAsk(true)}
+          >
+            Очистить чат
+          </Button>
+        </Group>
+
         {past.isError && (
           <Alert color="yellow" role="alert">
             История быстрых вопросов не загрузилась:{' '}
@@ -342,6 +375,36 @@ export function QuickChat() {
             </Button>
           </Group>
         </form>
+
+        <Modal
+          opened={clearAsk}
+          onClose={() => setClearAsk(false)}
+          title="Очистить переписку?"
+          centered
+        >
+          <Stack>
+            <Text size="sm">
+              Удалить всю историю быстрых вопросов? Отменить будет нельзя.
+            </Text>
+            {clearError && (
+              <Alert color="red" role="alert">
+                {clearError}
+              </Alert>
+            )}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setClearAsk(false)}>
+                Отмена
+              </Button>
+              <Button
+                color="red"
+                loading={clearQuick.isPending}
+                onClick={handleClearConfirm}
+              >
+                Да, очистить
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
       </Stack>
     </Card>
   )

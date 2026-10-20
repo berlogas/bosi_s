@@ -154,6 +154,13 @@ def delete_messages(db: Session, session_id: str) -> int:
     db.commit()
     return int(result.rowcount or 0)
 
+def delete_quick_messages(db: Session, user_id: str) -> int:
+    """Очистить историю быстрых запросов пользователя (session_id IS NULL)."""
+    result = db.execute(delete(Message).where(Message.user_id == user_id,
+                                              Message.session_id.is_(None)))
+    db.commit()
+    return int(result.rowcount or 0)
+
 
 def delete_message(db: Session, message_id: str, *, user_id: str) -> int:
     """Удалить сообщение вместе с парным. Возвращает 0, если его нет или чужое.

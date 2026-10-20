@@ -728,6 +728,57 @@ describe('дашборд: быстрый чат', () => {
     })
     expect(findPost(calls, '/api/chat/quick-query')).toBeDefined()
   }, 15_000)
+
+  it('«Очистить чат» убирает переписку в два шага', async () => {
+    loginAs()
+    const { calls } = mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'GET /api/chat/quick-history': quickHistory([
+        {
+          id: 'm-9',
+          session_id: null,
+          role: 'user',
+          content: 'прошлый вопрос',
+          sources: [],
+          checks: {},
+          duration_seconds: null,
+          created_at: '2026-10-06T09:00:00+00:00',
+        },
+      ]),
+      'DELETE /api/chat/quick-history': json({}),
+    })
+
+    renderApp()
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Очистить чат/ }),
+    )
+    expect(
+      await screen.findByText(
+        'Удалить всю историю быстрых вопросов? Отменить будет нельзя.',
+      ),
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Да, очистить' }))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) =>
+          c.url.includes('/api/chat/quick-history') &&
+          (c.init.method ?? 'GET').toUpperCase() === 'DELETE',
+      )
+      expect(call).toBeDefined()
+    })
+    // подтверждение закрылось после успеха — модалка уходит с транзишеном
+    await waitFor(() => {
+      expect(
+        screen.queryByText(
+          'Удалить всю историю быстрых вопросов? Отменить будет нельзя.',
+        ),
+      ).toBeNull()
+    })
+  })
 })
 
 describe('вход после Фазы 0', () => {

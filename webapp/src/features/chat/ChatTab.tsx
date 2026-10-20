@@ -25,7 +25,7 @@ import {
   TextInput,
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { client } from '../../api/client'
 import { AnswerView } from '../../components/AnswerView'
@@ -105,12 +105,21 @@ export function ChatTab({
   const deleteMessage = useDeleteMessage(sessionId)
   const clearMessages = useClearMessages(sessionId)
   const task = useTask(taskId)
+  // Якорь автоскролла: следуем за свежим ответом, пока он не приедет.
+  const answerRef = useRef<HTMLDivElement>(null)
+  const [follow, setFollow] = useState<number | null>(null)
 
   // ---------------------------------------------------------------- история
   const messages = useMessages(sessionId, limit)
   // useMemo: иначе новый массив на каждый рендер гонит эффекты-«хвосты»
   const items = useMemo(() => messages.data?.messages ?? [], [messages.data])
   const total = messages.data?.total ?? 0
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      if (items[i].role === 'assistant') return i
+    }
+    return -1
+  }, [items])
   const historyError = messages.isError
     ? messages.error instanceof Error
       ? messages.error.message
@@ -164,6 +173,17 @@ export function ChatTab({
     if (pending && asked(items, pending)) setPending(null)
   }, [items, messages.data, failed, last, pending])
 
+  // Свежий ответ должен быть виден: приехали ответ (live `last`) или история
+  // дописалась — скроллим к началу ответа один раз, потом отпускаем.
+  useEffect(() => {
+    if (follow === null) return
+    if (last === null && items.length <= follow) return
+    requestAnimationFrame(() =>
+      answerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    )
+    setFollow(null)
+  }, [follow, items.length, last])
+
   // ---------------------------------------------------------------- отправка
   async function send(text: string) {
     const question = text.trim()
@@ -178,9 +198,11 @@ export function ChatTab({
         saveChatTask({ sessionId, taskId: task_id, question })
         setTaskId(task_id)
         setPending(question)
+        setFollow(items.length)
       } else {
         const answer = await client.chatQuery(sessionId, question, mode)
         setLast({ q: question, answer })
+        setFollow(items.length)
         // не из кэша — обмен уже на сервере: подтянуть историю
         if (!answer.from_cache) {
           void queryClient.invalidateQueries({
@@ -289,6 +311,7 @@ export function ChatTab({
         return (
           <ChatBubble
             key={message.id ?? `${index}-${message.created_at}`}
+            ref={follow !== null && index === lastAssistantIndex ? answerRef : undefined}
             role={role}
             action={
               deletable ? (
@@ -426,7 +449,7 @@ export function ChatTab({
               {last.q}
             </Text>
           </ChatBubble>
-          <ChatBubble role="assistant">
+          <ChatBubble role="assistant" ref={follow !== null ? answerRef : undefined}>
             <AnswerView answer={last.answer} />
           </ChatBubble>
         </>

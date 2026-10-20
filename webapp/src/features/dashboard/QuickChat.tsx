@@ -25,6 +25,7 @@ import {
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Ref } from 'react'
 
 import { client } from '../../api/client'
 import { AnswerView } from '../../components/AnswerView'
@@ -80,6 +81,7 @@ function toEntry(message: MessageOut): ChatEntry {
 
 function Bubble({
   entry,
+  ref,
 }: {
   entry: {
     role: 'user' | 'assistant'
@@ -87,10 +89,12 @@ function Bubble({
     answer?: RenderableAnswer
     error?: string
   }
+  /** DOM-узел пузыря — якорь автоскролла к свежему ответу. */
+  ref?: Ref<HTMLDivElement>
 }) {
   const user = entry.role === 'user'
   return (
-    <Group align="flex-start" wrap="nowrap" gap="xs">
+    <Group ref={ref} align="flex-start" wrap="nowrap" gap="xs">
       <Avatar size="sm" radius="xl" color={user ? 'green' : 'blue'}>
         {user ? '🔬' : '💻'}
       </Avatar>
@@ -123,15 +127,24 @@ export function QuickChat() {
   const [prompt, setPrompt] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const answerRef = useRef<HTMLDivElement>(null)
+  const [pinAnswer, setPinAnswer] = useState(false)
 
   const task = useTask(taskId)
   const busy = sending || Boolean(taskId)
 
   const history = useMemo(() => (past.data?.messages ?? []).map(toEntry), [past.data])
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      if (history[i].role === 'assistant') return i
+    }
+    return -1
+  }, [history])
 
   async function submit(text: string) {
     const question = text.trim()
     if (!question || busy) return
+    setPinAnswer(false)
     setSending(true)
     setPrompt('')
     setSuggestions([])
@@ -200,11 +213,22 @@ export function QuickChat() {
     if (history.some((entry) => entry.content === live.question)) setLive(null)
   }, [history, live, past.isFetching])
 
+  // Ответ приходит длинным: доскроллить до «низа» — показать только хвост
+  // у поля ввода, а начало спрятать. Поэтому свежий ответ «закрепляется»:
+  // скроллим к его верху и держим позицию, пока не задан новый вопрос.
   useEffect(() => {
-    requestAnimationFrame(() =>
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' }),
-    )
-  }, [history.length, live, status, suggestions])
+    if (live?.answer && !live.error && !pinAnswer) {
+      setPinAnswer(true)
+      return
+    }
+    requestAnimationFrame(() => {
+      if (pinAnswer) {
+        answerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
+    })
+  }, [history.length, live, status, suggestions, pinAnswer])
 
   return (
     <Card withBorder>
@@ -222,8 +246,16 @@ export function QuickChat() {
           </Text>
         )}
 
-        {history.map((entry) => (
-          <Bubble key={entry.key} entry={entry} />
+        {history.map((entry, index) => (
+          <Bubble
+            key={entry.key}
+            ref={
+              pinAnswer && index === lastAssistantIndex && entry.role === 'assistant'
+                ? answerRef
+                : undefined
+            }
+            entry={entry}
+          />
         ))}
 
         {/* обмен в полёте: пока ответа нет, в истории его тоже нет */}
@@ -250,7 +282,10 @@ export function QuickChat() {
               <Bubble entry={{ role: 'assistant', content: '', error: live.error }} />
             )}
             {live.answer && !live.error && (
-              <Bubble entry={{ role: 'assistant', content: '', answer: live.answer }} />
+              <Bubble
+                ref={answerRef}
+                entry={{ role: 'assistant', content: '', answer: live.answer }}
+              />
             )}
           </>
         )}

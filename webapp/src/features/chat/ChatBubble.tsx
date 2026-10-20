@@ -7,7 +7,7 @@
  */
 
 import { Avatar, Box, Group, Paper, Text } from '@mantine/core'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 
 export type ChatRole = 'user' | 'assistant'
 
@@ -15,15 +15,19 @@ export function ChatBubble({
   role,
   action,
   children,
+  ref,
 }: {
   role: ChatRole
   /** Действие в шапке пузыря (например, «🗑» — удалить пару). */
   action?: ReactNode
   children: ReactNode
+  /** DOM-узел пузыря — якорь автоскролла к свежему ответу. */
+  ref?: Ref<HTMLDivElement>
 }) {
   const isUser = role === 'user'
   return (
     <Paper
+      ref={ref}
       withBorder
       p="sm"
       bg={isUser ? 'gray.0' : undefined}

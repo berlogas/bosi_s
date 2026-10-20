@@ -441,6 +441,17 @@ describe('чат: синхронный режим и очистка', () => {
     )
   })
 
+  it('при пустом чате кнопки «Очистить чат» нет', async () => {
+    mockChatApi()
+
+    renderApp()
+
+    expect(
+      await screen.findByText('Переписки пока нет — задайте первый вопрос.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Очистить чат/ })).toBeNull()
+  })
+
   it('архивная сессия: ввод и кнопки заблокированы (read-only)', async () => {
     mockChatApi({
       'GET /api/sessions/s-1': { ...DETAIL, status: 'archived', writable: false },

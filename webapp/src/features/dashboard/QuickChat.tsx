@@ -255,15 +255,17 @@ export function QuickChat() {
       <Stack gap="sm">
         <Group justify="space-between">
           <Text fw={600}>Быстрый чат</Text>
-          <Button
-            size="xs"
-            variant="subtle"
-            color="red"
-            leftSection="🗑"
-            onClick={() => setClearAsk(true)}
-          >
-            Очистить чат
-          </Button>
+          {(history.length > 0 || live) && (
+            <Button
+              size="xs"
+              variant="subtle"
+              color="red"
+              leftSection="🗑"
+              onClick={() => setClearAsk(true)}
+            >
+              Очистить чат
+            </Button>
+          )}
         </Group>
 
         {past.isError && (

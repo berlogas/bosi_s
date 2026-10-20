@@ -779,6 +779,25 @@ describe('дашборд: быстрый чат', () => {
       ).toBeNull()
     })
   })
+
+  it('при пустой истории кнопки «Очистить чат» нет', async () => {
+    loginAs()
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'GET /api/chat/quick-history': quickHistory(),
+    })
+
+    renderApp()
+
+    expect(
+      await screen.findByText(
+        'Спросите что-нибудь по базе знаний — ответ появится здесь.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Очистить чат/ })).toBeNull()
+  })
 })
 
 describe('вход после Фазы 0', () => {

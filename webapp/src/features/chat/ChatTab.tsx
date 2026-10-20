@@ -120,6 +120,8 @@ export function ChatTab({
     }
     return -1
   }, [items])
+  // пустой чат — нечего очищать: кнопка и заглушка скрыты вместе
+  const chatEmpty = items.length === 0 && !pending && !failed && !last
   const historyError = messages.isError
     ? messages.error instanceof Error
       ? messages.error.message
@@ -266,7 +268,7 @@ export function ChatTab({
     <Stack gap="sm">
       <Group justify="space-between">
         <Text fw={600}>Чат</Text>
-        {!readOnly && (
+        {!readOnly && !chatEmpty && (
           <Button
             size="xs"
             variant="subtle"
@@ -285,7 +287,7 @@ export function ChatTab({
 
       {historyError && <Alert color="red">{historyError}</Alert>}
 
-      {items.length === 0 && !pending && !failed && !last && (
+      {chatEmpty && (
         <Text size="sm" c="dimmed">
           Переписки пока нет — задайте первый вопрос.
         </Text>

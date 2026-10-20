@@ -6,16 +6,20 @@ UI не должен висеть спиннером минутами — он �
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError
 from app.core.security import get_current_user, require_researcher
 from app.db.models import User
 from app.db.session import get_db
-from app.services.tasks import Task, TaskStatus, tasks
+from app.services.tasks import Task, TaskStatus, event_manager, tasks
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"],
                    dependencies=[Depends(require_researcher)])
@@ -81,3 +85,31 @@ def tasks_health() -> dict[str, Any]:
     return {"active": tasks.active_count(),
             "total": len(tasks.list(limit=1000)),
             "statuses": [s.value for s in TaskStatus]}
+
+@router.get("/events")
+async def task_events(user: User = Depends(get_current_user)) -> StreamingResponse:
+    """SSE-канал для live-прогресса задач вместо поллинга.
+
+    Подключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.
+    События приходят в реальном времени при изменении статуса задач.
+    """
+
+    async def event_generator() -> AsyncIterator[str]:
+        queue = await event_manager.subscribe(user.id)
+        try:
+            while True:
+                task = await queue.get()
+                data = task.to_dict()
+                yield f"data: {json.dumps(data, default=str)}\n\n"
+                if task.finished:
+                    break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await event_manager.unsubscribe(user.id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

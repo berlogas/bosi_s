@@ -434,6 +434,10 @@ class DocumentChunk(Base):
     citation: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     settings_md5: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Версия схемы хранилища чанков. При изменении структуры `doc_blob` или
+    # `texts_blob` старые записи становятся нечитаемыми — версия позволяет
+    # обнаружить это при старте и переиндексировать, а не молча потерять данные.
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     doc_blob: Mapped[bytes] = mapped_column(LargeBinary)
     texts_blob: Mapped[bytes] = mapped_column(LargeBinary)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,

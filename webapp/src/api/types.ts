@@ -113,6 +113,7 @@ export interface Task {
   seconds: number | null
   /** секунды в текущем этапе */
   stage_seconds: number | null
+
   result: unknown
 }
 

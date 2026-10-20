@@ -10,6 +10,7 @@
  * чате (опрос одной задачи до done/error/cancelled).
  */
 
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Box, Button, Group, Progress, Stack, Text } from '@mantine/core'
 
 import type { Task } from '../api/types'
@@ -27,8 +28,24 @@ export function TaskPanel({
 }) {
   const running = task.status === 'running' || task.status === 'queued'
   const icon = STATUS_ICONS[task.status] ?? ''
-  const stage = fmtSeconds(task.stage_seconds)
-  const total = fmtSeconds(task.seconds)
+  // Секундомер тикает локально: сервер присылает `seconds`/`stage_seconds`
+  // только вместе с событием (SSE/опрос), а между ними время прибавляем
+  // сами от момента последнего обновления задачи.
+  const [, forceTick] = useState(0)
+  const receivedAt = useRef(Date.now())
+  useEffect(() => {
+    receivedAt.current = Date.now()
+  }, [task])
+  useEffect(() => {
+    if (!running) return
+    const timer = setInterval(() => forceTick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [running])
+  const drift = running ? (Date.now() - receivedAt.current) / 1000 : 0
+  const stage = fmtSeconds(
+    task.stage_seconds != null ? task.stage_seconds + drift : task.stage_seconds,
+  )
+  const total = fmtSeconds(task.seconds != null ? task.seconds + drift : task.seconds)
 
   return (
     <Stack gap="xs" py="xs">

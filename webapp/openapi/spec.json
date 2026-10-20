@@ -4413,6 +4413,31 @@
         ]
       }
     },
+    "/api/tasks/events": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Task Events",
+        "description": "SSE-канал для live-прогресса задач вместо поллинга.\n\nПодключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.\nСобытия приходят в реальном времени при изменении статуса задач.",
+        "operationId": "task_events_api_tasks_events_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/metrics.json": {
       "get": {
         "tags": [

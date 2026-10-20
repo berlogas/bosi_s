@@ -2,14 +2,15 @@
  * Запросы чата сессии (Фаза 2).
  *
  * История, отправка вопроса (фоновый/синхронный), удаление пары,
- * очистка переписки, поллинг задачи и «точка возврата» (save_state).
+ * очистка переписки, live-прогресс задачи (SSE) и «точка возврата» (save_state).
  */
 
+import { useEffect } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
-import type { SearchMode } from '../../api/types'
+import type { SearchMode, Task } from '../../api/types'
 import { isActiveTask, queryKeys } from '../dashboard/queries'
 
 export const chatKeys = {
@@ -35,12 +36,31 @@ export function useMessages(sessionId: string | null, limit: number) {
   })
 }
 
-/** Единый источник истины о фоновой задаче чата: поллинг 2 с, пока активна. */
+/** Единый источник истины о фоновой задаче чата: SSE вместо поллинга. */
 export function useTask(taskId: string | null) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (!taskId) return
+    const eventSource = new EventSource('/api/tasks/events')
+    eventSource.onmessage = (event) => {
+      const task = JSON.parse(event.data) as Task
+      if (task.id === taskId) {
+        queryClient.setQueryData(chatKeys.task(taskId), task)
+        if (!isActiveTask(task.status)) {
+          eventSource.close()
+        }
+      }
+    }
+    return () => eventSource.close()
+  }, [taskId, queryClient])
+
   return useQuery({
     queryKey: chatKeys.task(taskId ?? ''),
     queryFn: () => client.task(taskId as string),
     enabled: taskId !== null && taskId !== '',
+    // SSE пушит изменения сразу; опрос ниже — страховка от пропущенного
+    // события (гасится, как только задача завершилась)
     refetchInterval: (query) => {
       const task = query.state.data
       if (!task) return 2000

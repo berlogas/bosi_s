@@ -40,3 +40,23 @@ if (!('fonts' in document)) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
+
+// jsdom не реализует EventSource — SSE-подписки на задачи в тестах
+// замолкают (реальные события приходят только от сервера).
+if (!globalThis.EventSource) {
+  globalThis.EventSource = class {
+    constructor(_url: string | URL, _init?: EventSourceInit) {}
+    close(): void {}
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null
+    onerror: ((this: EventSource, ev: Event) => unknown) | null = null
+    onopen: ((this: EventSource, ev: Event) => unknown) | null = null
+    readonly CONNECTING = 0
+    readonly OPEN = 1
+    readonly CLOSED = 2
+    readyState = 1
+    url = ''
+    withCredentials = false
+  } as unknown as typeof EventSource
+}

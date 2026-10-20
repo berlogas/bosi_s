@@ -285,7 +285,7 @@ async def test_quick_query_saves_exchange_to_history(client, researcher,
 async def test_trivial_query_skips_search_and_returns_no_citations(
         client, researcher, seeded, monkeypatch) -> None:
     """«привет» не ищет по базе и не притворяется, что нашёл источник."""
-    import app.services.rag_service as rs
+    from app.services.rag_retrieval import EvidenceRetriever
 
     calls: list[str] = []
 
@@ -293,7 +293,7 @@ async def test_trivial_query_skips_search_and_returns_no_citations(
         calls.append("evidence")
         raise AssertionError("поиск по базе для болтовни запускаться не должен")
 
-    monkeypatch.setattr(rs.RagFusionService, "_evidence", boom)
+    monkeypatch.setattr(EvidenceRetriever, "_evidence", boom)
 
     body = await _quick(client, researcher, query="привет")
 
@@ -551,7 +551,7 @@ async def test_summary_fallback_when_llm_scores_everything_zero(
     время впустую. Тогда делаем один повтор без сводок — релевантность считается
     по эмбеддингам.
     """
-    from app.services.rag_service import RagFusionService
+    from app.services.rag_retrieval import EvidenceRetriever
 
     calls: list[bool | None] = []
 
@@ -559,11 +559,10 @@ async def test_summary_fallback_when_llm_scores_everything_zero(
         calls.append(skip_summary)
         return [] if skip_summary is None else ["fallback-ok"]
 
-    monkeypatch.setattr(RagFusionService, "_evidence_once", fake_once)
-    service = RagFusionService(app=service_app)
+    monkeypatch.setattr(EvidenceRetriever, "_evidence_once", fake_once)
+    retriever = EvidenceRetriever(app=service_app)
 
-    result = await service._evidence("вопрос", "sid", SearchMode.hybrid, 10,
-                                     _empty_catalog())
+    result = await retriever._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
 
     assert calls == [None, True], "сначала сводки, затем повтор без них"
     assert result == ["fallback-ok"]
@@ -572,7 +571,7 @@ async def test_summary_fallback_when_llm_scores_everything_zero(
 async def test_no_fallback_when_summaries_returned_something(
         service_app, monkeypatch) -> None:
     """Если сводки дали результат, повтор не делаем — лишних вызовов не нужно."""
-    from app.services.rag_service import RagFusionService
+    from app.services.rag_retrieval import EvidenceRetriever
 
     calls: list[bool | None] = []
 
@@ -580,11 +579,10 @@ async def test_no_fallback_when_summaries_returned_something(
         calls.append(skip_summary)
         return ["ok"]
 
-    monkeypatch.setattr(RagFusionService, "_evidence_once", fake_once)
-    service = RagFusionService(app=service_app)
+    monkeypatch.setattr(EvidenceRetriever, "_evidence_once", fake_once)
+    retriever = EvidenceRetriever(app=service_app)
 
-    result = await service._evidence("вопрос", "sid", SearchMode.hybrid, 10,
-                                     _empty_catalog())
+    result = await retriever._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
 
     assert calls == [None]
     assert result == ["ok"]
@@ -593,7 +591,7 @@ async def test_no_fallback_when_summaries_returned_something(
 async def test_no_fallback_when_skip_summary_is_configured(
         service_app, monkeypatch) -> None:
     """Если сводки выключены конфигом, повтор делать нечего."""
-    from app.services.rag_service import RagFusionService
+    from app.services.rag_retrieval import EvidenceRetriever
 
     calls: list[bool | None] = []
 
@@ -601,11 +599,11 @@ async def test_no_fallback_when_skip_summary_is_configured(
         calls.append(skip_summary)
         return []
 
-    monkeypatch.setattr(RagFusionService, "_evidence_once", fake_once)
-    service = RagFusionService(app=service_app.model_copy(
+    monkeypatch.setattr(EvidenceRetriever, "_evidence_once", fake_once)
+    retriever = EvidenceRetriever(app=service_app.model_copy(
         update={"evidence_skip_summary": True}))
 
-    await service._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
+    await retriever._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
 
     assert calls == [None]
 
@@ -621,7 +619,7 @@ async def test_no_fallback_when_skip_summary_is_configured(
 async def test_identity_query_skips_search(client, researcher, seeded,
                                             monkeypatch) -> None:
     """«Ты кто?» не ищет по базе и не отвечает отказом."""
-    import app.services.rag_service as rs
+    from app.services.rag_retrieval import EvidenceRetriever
 
     calls: list[str] = []
 
@@ -629,7 +627,7 @@ async def test_identity_query_skips_search(client, researcher, seeded,
         calls.append("evidence")
         raise AssertionError("поиск по базе для вопроса обо мне запускаться не должен")
 
-    monkeypatch.setattr(rs.RagFusionService, "_evidence", boom)
+    monkeypatch.setattr(EvidenceRetriever, "_evidence", boom)
 
     body = await _quick(client, researcher, query="ты кто?", no_cache=True)
 
@@ -660,7 +658,7 @@ async def test_identity_answer_names_assistant_or_explains_itself(
     chat_llm = service.registry.global_service().chat_llm
     chat_llm.call_single = refusing_llm
 
-    result = await service._answer_trivial(
+    result = await service._generator._answer_trivial(
         "ты кто?", mode=rs.SearchMode.global_only, kind="identity")
 
     answer = result.answer.answer.lower()

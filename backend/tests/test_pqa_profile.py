@@ -58,8 +58,12 @@ def test_qa_prompt_keeps_required_placeholders() -> None:
     assert "{answer_length}" in qa
 
 
-def test_qa_prompt_passes_paperqa_variable_validation() -> None:
+def test_qa_prompt_passes_paperqa_variable_validation(
+        monkeypatch: pytest.MonkeyPatch) -> None:
     """paperqa сам ругается на неизвестные `{переменные}` — пусть ругается здесь."""
+    # На машине может висеть одноимённая переменная окружения (AGENT=1):
+    # pydantic-settings читает её как поле `agent` и ломает конструирование.
+    monkeypatch.delenv("AGENT", raising=False)
     qa = build_qa_prompt(_app())
 
     assert set(re.findall(r"\{(\w+)\}", qa)) <= ALLOWED_QA_VARS

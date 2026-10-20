@@ -69,7 +69,7 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 
 ```bash
 cd backend
-../.venv/Scripts/python.exe -m pytest -q        # 632 теста
+../.venv/Scripts/python.exe -m pytest -q        # 690 тестов
 ../.venv/Scripts/python.exe -m ruff check app tests
 
 cd webapp

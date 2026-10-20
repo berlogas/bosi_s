@@ -17,6 +17,7 @@ Streamlit живёт в HTTP-запросе. Поэтому долгие опе�
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import logging
 import time
@@ -60,6 +61,9 @@ class Task:
     stage_started_at: float = field(default_factory=time.monotonic,
                                     repr=False, compare=False)
     result: Any = None
+    error: str | None = None
+    cancel_requested: bool = False
+    created_at: datetime = field(default_factory=utcnow)
     error: str | None = None
     cancel_requested: bool = False
     created_at: datetime = field(default_factory=utcnow)
@@ -244,3 +248,51 @@ class ProgressReporter:
 
 __all__ = ["ProgressReporter", "Task", "TaskRegistry", "TaskStatus",
            "get_registry", "reset_registry", "tasks"]
+
+
+class TaskEventManager:
+    """Pub/sub для событий задач — для SSE вместо поллинга.
+
+    Подписчики получают обновления в реальном времени, без опроса
+    каждые 2 секунды. Это снижает нагрузку на сервер и даёт настоящий
+    live-прогресс.
+    """
+
+    def __init__(self) -> None:
+        self._subscribers: dict[str, asyncio.Queue[Task]] = {}
+        self._lock = asyncio.Lock()
+
+    async def subscribe(self, user_id: str) -> asyncio.Queue[Task]:
+        """Подписаться на события задач пользователя."""
+        queue: asyncio.Queue[Task] = asyncio.Queue(maxsize=100)
+        async with self._lock:
+            self._subscribers[user_id] = queue
+        return queue
+
+    async def unsubscribe(self, user_id: str) -> None:
+        """Отписаться от событий."""
+        async with self._lock:
+            self._subscribers.pop(user_id, None)
+
+    async def publish(self, task: Task) -> None:
+        """Опубликовать событие задачи подписчикам."""
+        if task.user_id is None:
+            return
+        async with self._lock:
+            queue = self._subscribers.get(task.user_id)
+        if queue is not None:
+            with contextlib.suppress(asyncio.QueueFull):
+                queue.put_nowait(task)
+
+    async def get_queue(self, user_id: str) -> asyncio.Queue[Task] | None:
+        """Получить очередь подписки пользователя."""
+        async with self._lock:
+            return self._subscribers.get(user_id)
+
+
+event_manager = TaskEventManager()
+
+
+__all__ = ["ProgressReporter", "Task", "TaskEventManager", "TaskRegistry",
+           "TaskStatus", "event_manager", "get_registry", "reset_registry",
+           "tasks"]

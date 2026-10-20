@@ -29,7 +29,7 @@ from app.services.rag_fusion import (
     to_pqa_session,
     tokenize,
 )
-from app.services.rag_service import RagFusionService
+from app.services.rag_retrieval import EvidenceRetriever
 
 
 # --------------------------------------------------------------------------- helpers
@@ -544,10 +544,10 @@ class _GoodService:
         return {}
 
 
-def _fusion(global_service, session_service) -> RagFusionService:
+def _retriever(global_service, session_service) -> EvidenceRetriever:
     registry = SimpleNamespace(global_service=lambda: global_service,
                                 session_service=lambda _sid: session_service)
-    return RagFusionService(registry=registry)
+    return EvidenceRetriever(registry=registry)
 
 
 @pytest.mark.asyncio
@@ -563,9 +563,9 @@ async def test_упавшая_коллекция_не_роняет_осталь�
     context = SimpleNamespace(
         text=SimpleNamespace(doc=_doc("d1", "doc1"), name="1", text="фрагмент"),
         score=5)
-    fusion = _fusion(_BrokenService(), _GoodService([context]))
+    retriever = _retriever(_BrokenService(), _GoodService([context]))
 
-    candidates = await fusion._evidence_once(
+    candidates = await retriever._evidence_once(
         "запрос", session_id="s-1", mode=SearchMode.hybrid, k=5,
         catalog=DocumentCatalog(), skip_summary=False)
 
@@ -576,10 +576,10 @@ async def test_упавшая_коллекция_не_роняет_осталь�
 @pytest.mark.asyncio
 async def test_сбой_логируется_со_стеком(caplog) -> None:
     """Без трассировки видно только текст ошибки — этого мало для разбора."""
-    fusion = _fusion(_BrokenService(), _GoodService([]))
+    retriever = _retriever(_BrokenService(), _GoodService([]))
 
     with caplog.at_level(logging.WARNING):
-        await fusion._evidence_once(
+        await retriever._evidence_once(
             "запрос", session_id="s-1", mode=SearchMode.hybrid, k=5,
             catalog=DocumentCatalog(), skip_summary=False)
 

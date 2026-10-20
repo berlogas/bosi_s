@@ -1,13 +1,15 @@
 /**
  * Запросы Фазы 1: сессии и активные задачи.
  *
- * Поллинг задач — как в Streamlit (каждые 2 с), но только пока есть
- * живые: refetchInterval считает по данным, готовая задача гасит опрос.
+ * Задачи обновляются через SSE (EventSource) вместо поллинга — сервер
+ * пушит изменения в реальном времени, без лишних запросов каждые 2 секунды.
  */
 
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
+import type { Task } from '../../api/types'
 
 export const queryKeys = {
   sessions: ['sessions'] as const,
@@ -37,18 +39,40 @@ export function useSessionDetail(sessionId: string | null) {
   })
 }
 
-/** Активные задачи пользователя; поллинг останавливается на готовых. */
+/** Активные задачи пользователя; SSE вместо поллинга. */
 export function useActiveTasks() {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const eventSource = new EventSource('/api/tasks/events')
+    eventSource.onmessage = (event) => {
+      const task = JSON.parse(event.data) as Task
+      queryClient.setQueryData(queryKeys.activeTasks, (old: Task[] | undefined) => {
+        if (!old) return [task]
+        const index = old.findIndex((t) => t.id === task.id)
+        if (index === -1) return [...old, task]
+        const updated = [...old]
+        updated[index] = task
+        return updated
+      })
+      if (!isActiveTask(task.status)) {
+        eventSource.close()
+      }
+    }
+    return () => eventSource.close()
+  }, [queryClient])
+
   return useQuery({
     queryKey: queryKeys.activeTasks,
     queryFn: async () => {
       const body = await client.tasks()
-      return body.tasks.filter((task) => isActiveTask(task.status))
+      return body.tasks.filter((task: Task) => isActiveTask(task.status))
     },
+    // SSE пушит изменения сразу, но как страховка от пропущенного события —
+    // короткий опрос, пока есть живые задачи (готовые гасят refetchInterval)
     refetchInterval: (query) => {
       const tasks = query.state.data
       if (!tasks) return 2000
-      // опрос только пока есть живые — иначе дашборд не тратит запросы
       return tasks.some((task) => isActiveTask(task.status)) ? 2000 : false
     },
     refetchIntervalInBackground: false,

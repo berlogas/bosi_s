@@ -25,6 +25,10 @@ from sqlalchemy import select
 from app.db.models import DocumentChunk, utcnow
 from app.db.session import get_session_factory
 
+# Версия схемы хранилища чанков. При изменении структуры `doc_blob` или
+# `texts_blob` увеличьте это значение — старые записи будут помечены как
+# устаревшие и потребуют переиндексации.
+SCHEMA_VERSION = 1
 
 def _dumps(value: Any) -> bytes:
     return zlib.compress(json.dumps(value, ensure_ascii=False).encode("utf-8"), level=6)
@@ -83,6 +87,7 @@ class SqliteChunkStore:
             citation=doc.citation,
             chunk_count=len(texts),
             settings_md5=settings_md5,
+            schema_version=SCHEMA_VERSION,
             doc_blob=_dumps(doc.model_dump(mode="json")),
             texts_blob=_dumps([t.model_dump(mode="json") for t in texts]),
             updated_at=utcnow(),
@@ -149,7 +154,11 @@ class SqliteChunkStore:
                     .order_by(DocumentChunk.docname)
                 ))
                 result = []
+                stale_count = 0
                 for row in rows:
+                    if row.schema_version != SCHEMA_VERSION:
+                        stale_count += 1
+                        continue
                     doc = Doc.model_validate(_loads(row.doc_blob)) if with_payload else None
                     texts = (
                         [Text.model_validate(item) for item in _loads(row.texts_blob)]
@@ -160,6 +169,11 @@ class SqliteChunkStore:
                         chunk_count=row.chunk_count, settings_md5=row.settings_md5,
                         updated_at=row.updated_at, doc=doc, texts=texts,
                     ))
+                if stale_count:
+                    import logging
+                    logging.getLogger("boasi.services.chunk_store").warning(
+                        "load: %d записей с устаревшей версией схемы (stale=%d, current=%d)",
+                        stale_count, row.schema_version, SCHEMA_VERSION)
                 return result
 
         return await anyio.to_thread.run_sync(_read)

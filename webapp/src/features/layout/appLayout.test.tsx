@@ -261,3 +261,58 @@ describe('пункт «Текущая сессия»', () => {
     ).not.toBeNull()
   })
 })
+
+  it('на вкладке projects активен пункт сессии', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/s/s-1/projects')
+
+    await screen.findByText('Текущая сессия')
+    expect(
+      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+    expect(
+      screen.getByText('Информационная панель').closest('[aria-current="page"]'),
+    ).toBeNull()
+  })
+
+  it('на вкладке notes активен пункт сессии', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/s/s-1/notes')
+
+    await screen.findByText('Текущая сессия')
+    expect(
+      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+    expect(
+      screen.getByText('Информационная панель').closest('[aria-current="page"]'),
+    ).toBeNull()
+  })
+
+  it('на /admin активен пункт администрирования', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/admin')
+
+    await screen.findByRole('heading', { name: 'Администрирование' })
+    expect(
+      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+    ).toBeNull()
+    expect(
+      screen.getByText('Администрирование').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+  })
+
+  it('на /knowledge активна только «База знаний»', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/knowledge')
+
+    await screen.findByRole('heading', { name: 'База знаний' })
+    expect(
+      navItem('База знаний').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+    expect(navItem('Информационная панель').closest('[aria-current="page"]')).toBeNull()
+    expect(navItem('Текущая сессия').closest('[aria-current="page"]')).toBeNull()
+  })

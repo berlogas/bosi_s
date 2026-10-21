@@ -1386,6 +1386,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tasks Health */
+        get: operations["tasks_health_api_tasks_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Task Events
+         * @description SSE-канал для live-прогресса задач вместо поллинга.
+         *
+         *     Подключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.
+         *     События приходят в реальном времени при изменении статуса задач.
+         *
+         *     Браузерный EventSource не умеет задавать HTTP-заголовки, поэтому токен
+         *     разрешено передавать в query: `?access_token=...`. Это единственный
+         *     маршрут, принимающий токен из query, — заголовок тоже поддерживается.
+         */
+        get: operations["task_events_api_tasks_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -1434,46 +1478,6 @@ export interface paths {
         put?: never;
         /** Clear Finished */
         post: operations["clear_finished_api_tasks_clear_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/tasks/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Tasks Health */
-        get: operations["tasks_health_api_tasks_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/tasks/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Task Events
-         * @description SSE-канал для live-прогресса задач вместо поллинга.
-         *
-         *     Подключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.
-         *     События приходят в реальном времени при изменении статуса задач.
-         */
-        get: operations["task_events_api_tasks_events_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5353,6 +5357,59 @@ export interface operations {
             };
         };
     };
+    tasks_health_api_tasks_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    task_events_api_tasks_events_get: {
+        parameters: {
+            query?: {
+                access_token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_task_api_tasks__task_id__get: {
         parameters: {
             query?: never;
@@ -5434,48 +5491,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    tasks_health_api_tasks_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    task_events_api_tasks_events_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
             };
         };
     };

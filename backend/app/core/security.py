@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
@@ -94,10 +94,33 @@ def get_current_user(
     return user
 
 
-def require_role(*roles: Role) -> Any:
+def get_current_user_sse(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    access_token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    """Пользователь из Bearer-заголовка ИЛИ query-параметра `access_token`.
+
+    Браузерный EventSource не умеет задавать HTTP-заголовки — для SSE-канала
+    `/api/tasks/events` токен уходит в query. Применяется ТОЛЬКО там; обычные
+    маршруты по-прежнему требуют Authorization (см. test_query_token_sse_only).
+    """
+    token = credentials.credentials if credentials is not None else access_token
+    if token is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Требуется авторизация")
+    payload = decode_token(token, expected_type="access")
+    user = db.get(User, payload.get("sub"))
+    if user is None or not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь не найден или отключён")
+    request.state.user = user
+    return user
+
+
+def require_role(*roles: Role, user_dep: Any = get_current_user) -> Any:
     """Зависимость FastAPI: пускает только пользователей с указанными ролями."""
 
-    def dependency(user: User = Depends(get_current_user)) -> User:
+    def dependency(user: User = Depends(user_dep)) -> User:
         if user.role not in roles:
             raise HTTPException(
                 HTTP_403_FORBIDDEN,
@@ -110,6 +133,9 @@ def require_role(*roles: Role) -> Any:
 
 require_admin = require_role(Role.admin)
 require_researcher = require_role(Role.researcher, Role.admin)
+# Тот же ролевой барьер, но для SSE: авторизация query-токеном.
+require_researcher_sse = require_role(Role.researcher, Role.admin,
+                                      user_dep=get_current_user_sse)
 
 
 def verify_secret(provided: str, expected: str) -> bool:

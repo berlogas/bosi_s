@@ -4285,6 +4285,87 @@
         }
       }
     },
+    "/api/tasks/health": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Tasks Health",
+        "operationId": "tasks_health_api_tasks_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Tasks Health Api Tasks Health Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/events": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Task Events",
+        "description": "SSE-канал для live-прогресса задач вместо поллинга.\n\nПодключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.\nСобытия приходят в реальном времени при изменении статуса задач.\n\nБраузерный EventSource не умеет задавать HTTP-заголовки, поэтому токен\nразрешено передавать в query: `?access_token=...`. Это единственный\nмаршрут, принимающий токен из query, — заголовок тоже поддерживается.",
+        "operationId": "task_events_api_tasks_events_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "access_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{task_id}": {
       "get": {
         "tags": [
@@ -4394,59 +4475,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/tasks/health": {
-      "get": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Tasks Health",
-        "operationId": "tasks_health_api_tasks_health_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Tasks Health Api Tasks Health Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/tasks/events": {
-      "get": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Task Events",
-        "description": "SSE-канал для live-прогресса задач вместо поллинга.\n\nПодключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.\nСобытия приходят в реальном времени при изменении статуса задач.",
-        "operationId": "task_events_api_tasks_events_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
           }
         },
         "security": [

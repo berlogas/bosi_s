@@ -22,7 +22,7 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -90,10 +90,17 @@ class Task:
 
     def set_stage(self, progress: int, step: str) -> None:
         """Перейти на новый этап: процент (с зажимом 0..100), подпись,
-        сброс секундомера этапа."""
+        сброс секундомера этапа.
+
+        Каждый переход публикуется в SSE: без этого `event_manager`
+        существовал, но события до клиента не доходили — прогресс ехал
+        только поллингом. Зовётся и из async-тела задачи, и из синхронного
+        роута отмены, поэтому публикация потокобезопасна (см. менеджер).
+        """
         self.progress = max(0, min(100, int(progress)))
         self.step = step
         self.stage_started_at = time.monotonic()
+        event_manager.publish_threadsafe(self)
 
     @property
     def stage_seconds(self) -> float:
@@ -158,6 +165,9 @@ class TaskRegistry:
         self._tasks[task.id] = task
         task._handle = asyncio.create_task(self._run(task, body), name=f"task:{task.id}")
         self._trim()
+        # Задача уже видна админам/автору в SSE до того, как `_run` успеет
+        # перевести её в `running`.
+        event_manager.publish_threadsafe(task)
         return task
 
     async def _run(self, task: Task, body: TaskBody) -> None:
@@ -261,17 +271,34 @@ class TaskEventManager:
     def __init__(self) -> None:
         self._subscribers: dict[str, asyncio.Queue[Task]] = {}
         self._lock = asyncio.Lock()
+        # Loop подписчика: нужен, чтобы публиковать из чужих потоков
+        # (threadpool anyio), где `asyncio.get_running_loop()` недоступен.
+        self._loop: asyncio.AbstractEventLoop | None = None
+        # Ссылка на отложенные корутины: без неё GC может собрать задачу
+        # до выполнения (RUF006).
+        self._background: set[asyncio.Task[None]] = set()
 
     async def subscribe(self, user_id: str) -> asyncio.Queue[Task]:
         """Подписаться на события задач пользователя."""
         queue: asyncio.Queue[Task] = asyncio.Queue(maxsize=100)
+        self._loop = asyncio.get_running_loop()
         async with self._lock:
             self._subscribers[user_id] = queue
         return queue
 
-    async def unsubscribe(self, user_id: str) -> None:
-        """Отписаться от событий."""
+    async def unsubscribe(self, user_id: str,
+                          queue: asyncio.Queue[Task] | None = None) -> None:
+        """Отписаться от событий.
+
+        Если передан `queue`, снимаем подписку, только пока она ещё
+        текущая. Иначе при переподключении EventSource старый генератор
+        успевал пережить новую подписку, и слепой `pop` съедал бы живого
+        подписчика — канал молчал бы до следующего разрыва.
+        """
         async with self._lock:
+            current = self._subscribers.get(user_id)
+            if queue is not None and current is not queue:
+                return
             self._subscribers.pop(user_id, None)
 
     async def publish(self, task: Task) -> None:
@@ -283,6 +310,38 @@ class TaskEventManager:
         if queue is not None:
             with contextlib.suppress(asyncio.QueueFull):
                 queue.put_nowait(task)
+
+    def publish_threadsafe(self, task: Task) -> None:
+        """Опубликовать событие из любого потока.
+
+        `set_stage` зовётся и из async-тела задачи (в event loop), и из
+        синхронного роута отмены (в threadpool anyio). `queue.put_nowait`
+        не потокобезопасен, поэтому публикацию всегда перекладываем в loop:
+        из loop-потока — отложенной корутиной, из чужого — через
+        `run_coroutine_threadsafe` на loop подписчика.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            in_loop = True
+        except RuntimeError:
+            loop = self._loop
+            in_loop = False
+        if loop is None or not loop.is_running():
+            return
+        try:
+            if in_loop:
+                self._spawn(self.publish(task))
+            else:
+                asyncio.run_coroutine_threadsafe(self.publish(task), loop)
+        except RuntimeError:
+            # loop успел закрыться (shutdown) — подписчику уже ничего не нужно
+            pass
+
+    def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
+        """Запустить корутину в текущем loop, удерживая ссылку до конца."""
+        spawned = asyncio.create_task(coro)
+        self._background.add(spawned)
+        spawned.add_done_callback(self._background.discard)
 
     async def get_queue(self, user_id: str) -> asyncio.Queue[Task] | None:
         """Получить очередь подписки пользователя."""

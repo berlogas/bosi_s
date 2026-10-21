@@ -105,29 +105,19 @@
 `test.env.TZ` в `vite.config.ts` (Vitest) и `timezoneId` в
 `playwright.config.ts` (Playwright — отдельный раннер, `test.env` на него не
 действует).
-
 ### F3. Активный пункт сайдбара
 
-**Симптом.** Внутри сессии пункт «Текущая сессия» серый.
 
-**Причина.** `active={location.pathname === item.to}`; `item.to = /s/:id`,
-путь — `/s/:id/chat`.
-
-**Правка.**
-
-- Предикат: `pathname === to || pathname.startsWith(to + '/')`.
-- Для `/` оставить строгое равенство, иначе «Информационная панель» будет
-  активна везде.
-- Перейти на `NavLink component={Link}` с `end` для корня — заодно получится
-  нативная семантика ссылки.
-
-**Приёмка.**
-
+- ✅ Выполнено.
+- Предикат `isNavItemActive(pathname, to)` реализован в `AppLayout.tsx` (строки 76-86).
+- `item.to` для «Текущей сессии» = `currentSessionPath ?? ''` (`/s/<конкретный-id>`), предикат `startsWith(to + '/')` покрывает `/chat`, `/documents`, `/projects`, `/notes`.
 - На всех четырёх вкладках сессии пункт активен.
-- На `/knowledge` и `/admin` активны только они.
+- На `/knowledge` и `/admin` активны только они (пункт «Администрирование» / «База знаний»).
 - На `/` активна только панель.
-- `appLayout.test.tsx` покрывает все случаи.
-
+- `appLayout.test.tsx` покрывает: `/s/s-1/chat`, `/s/s-1/documents`, `/s/s-1/projects`, `/s/s-1/notes`, `/knowledge`, `/admin`, `/`.
+- Навигация закрывает мобильный drawer.
+- Добавлен `aria-current={active ? 'page' : undefined}` к `NavLink` — нативная семантика без перехода на `component={Link}`.
+- `AppLayout` содержит `TaskEventsProvider` (F1), `RouteErrorBoundary` (F9), `Burger/drawer` (F10) — см. коммиты F1, F2.
 ### F4. Удаление: один pending и подтверждение
 
 **Симптомы.**

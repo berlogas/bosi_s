@@ -190,6 +190,14 @@ Enter/Space.
 
 ### F9. ErrorBoundary
 
+- ✅ Выполнено.
+- `RouteErrorBoundary` добавлен вокруг `AppLayout` в `routes.tsx`.
+- Компонент ловит ошибки рендера, показывает заголовок «Что-то сломалось», alert с сообщением, кнопки «Обновить» и «На панель».
+- `getDerivedStateFromError` + `componentDidCatch` с `console.error` для отслеживания.
+- `resetKey` через `location.pathname` для сброса состояния при переходе между секциями.
+- `onReset` — перезагрузка страницы, `onHome` — возврат на главную.
+### F9. ErrorBoundary
+
 Добавить `RouteErrorBoundary` вокруг layout/route-элементов: заголовок
 «Что-то сломалось», текст ошибки, кнопки «Обновить» и «На панель».
 

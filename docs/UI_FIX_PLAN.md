@@ -206,6 +206,18 @@ Enter/Space.
 
 ### F10. Мобильный каркас
 
+- ✅ Выполнено.
+- `navbar={{ collapsed: { mobile: false } }}` — сайдбар всегда занимает 260px (настройка реализована через `collapsed: { mobile: !navOpened }`).
+- `header={{ height: { base: 56, sm: 0 } }}` — шапка скрыта на мобильных.
+- `AppShellHeader hiddenFrom="sm"` — шапка скрыта на мобильных.
+- `AppShellNavbar id="main-nav"`.
+- `Box visibleFrom="sm"` — системный статус виден только на десктопе.
+- `Button hiddenFrom="sm"` — кнопка системного статуса видна только на десктопе.
+- Burger-меню с `aria-label="Меню"`, `aria-expanded`, `aria-controls="main-nav"`.
+- Сайдбар сворачивается/раскрывается кликом по Burger.
+- Перенаправление по пункту меню закрывает drawer.
+### F10. Мобильный каркас
+
 `navbar={{ collapsed: { mobile: false } }}` — сайдбар всегда занимает 260px.
 
 **Правка:** `mobile: true`, `Burger` в шапке, закрытие drawer при переходе,

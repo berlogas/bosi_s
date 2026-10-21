@@ -154,7 +154,19 @@
 - Тест на paused покрывает сценарий архивации
 - Поведение UI и API совпадает: archive_session работает и для paused, и для active
 
+### F7. Клавиатурная доступность
+
+- ✅ Выполнено.
+- `AnswerView`, `ChecksView`, `QuickChat`: `Text role="button"` → `UnstyledButton` + `aria-expanded`.
+- Focus-ring виден, Enter/Space переключает элементы.
+- В `AnswerView`/`ChecksView` нет `role="button"` на неинтерактивных узлах.
 ### F7. Клавиатурная доступность### F7. Клавиатурная доступность
+
+- ✅ Выполнено.
+- `AnswerView`, `ChecksView`, `QuickChat`: `Text role="button"` → `UnstyledButton` + `aria-expanded`.
+- Focus-ring виден, Enter/Space переключает элементы.
+- В `AnswerView`/`ChecksView` нет `role="button"` на неинтерактивных узлах.
+### F7. Клавиатурная доступность
 
 `AnswerView` («Список источников»), `ChecksView` («Все предупреждения»),
 подсказки QuickChat — это `Text` с `role="button"` без `tabIndex` и обработки

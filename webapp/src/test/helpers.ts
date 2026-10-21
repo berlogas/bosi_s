@@ -97,6 +97,76 @@ export function mockApi(routes: Record<string, Route | unknown>) {
   return { spy, calls }
 }
 
+/**
+ * Подменить EventSource классом, который лишь записывает URL подписки.
+ *
+ * Возвращает живой список: `urls[0]` — URL первой (и обычно единственной)
+ * подписки. Нужен, чтобы проверить передачу access-токена в query.
+ */
+export function captureEventSourceUrls(): string[] {
+  const urls: string[] = []
+  vi.stubGlobal(
+    'EventSource',
+    class {
+      onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null
+      onerror: ((this: EventSource, ev: Event) => unknown) | null = null
+      onopen: ((this: EventSource, ev: Event) => unknown) | null = null
+      constructor(url: string | URL) {
+        urls.push(String(url))
+      }
+      close(): void {}
+      addEventListener(): void {}
+      removeEventListener(): void {}
+    } as unknown as typeof EventSource,
+  )
+  return urls
+}
+
+/**
+ * EventSource, которым можно управлять из теста: записывает экземпляры,
+ * умеет отдавать событие и помнит, закрыли ли поток.
+ */
+export interface FakeEventSourceInstance {
+  url: string
+  closed: boolean
+  emit(task: unknown): void
+  /** Сымитировать установку/восстановление соединения (`onopen`). */
+  open(): void
+}
+
+export function captureEventSourceInstances(): FakeEventSourceInstance[] {
+  const instances: FakeEventSourceInstance[] = []
+  vi.stubGlobal(
+    'EventSource',
+    class {
+      onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null
+      onerror: ((this: EventSource, ev: Event) => unknown) | null = null
+      onopen: ((this: EventSource, ev: Event) => unknown) | null = null
+      readonly url: string
+      closed = false
+      constructor(url: string | URL) {
+        this.url = String(url)
+        instances.push(this as unknown as FakeEventSourceInstance)
+      }
+      emit(task: unknown): void {
+        this.onmessage?.call(
+          this as unknown as EventSource,
+          { data: JSON.stringify(task) } as MessageEvent,
+        )
+      }
+      open(): void {
+        this.onopen?.call(this as unknown as EventSource, new Event('open'))
+      }
+      close(): void {
+        this.closed = true
+      }
+      addEventListener(): void {}
+      removeEventListener(): void {}
+    } as unknown as typeof EventSource,
+  )
+  return instances
+}
+
 /** Минимальный XHR: прогресс отправки + onload/onerror поверх роутера. */
 function fakeXhrClass(resolveRoute: RouteResolver) {
   return class FakeXhr {

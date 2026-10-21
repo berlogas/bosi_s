@@ -30,6 +30,7 @@ import type {
   SearchMode,
   SessionDetail,
   SessionOut,
+  SessionResume,
   Task,
   TaskListResponse,
 } from './types'
@@ -403,11 +404,24 @@ class ApiClient {
     })
   }
 
-  resumeSession(sessionId: string): Promise<SessionDetail> {
+  resumeSession(sessionId: string): Promise<SessionResume> {
     return this.request(`/api/sessions/${sessionId}/resume`, { method: 'POST' })
   }
 
   // ---------------------------------------------------------------- задачи
+  /**
+   * URL SSE-канала задач для EventSource.
+   *
+   * EventSource не умеет задавать HTTP-заголовки, поэтому access-токен уходит
+   * в query (`?access_token=`), а не в Authorization. Без токена подписка
+   * бессмысленна (401) — возвращаем null, и вызывающий остаётся на поллинге.
+   */
+  taskEventsUrl(): string | null {
+    const access = tokens.getAccess()
+    if (!access) return null
+    return `/api/tasks/events?access_token=${encodeURIComponent(access)}`
+  }
+
   tasks(
     options: { sessionId?: string; activeOnly?: boolean } = {},
   ): Promise<TaskListResponse> {

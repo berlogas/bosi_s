@@ -7,6 +7,7 @@
  */
 
 import {
+  Accordion,
   Alert,
   Button,
   Card,
@@ -83,23 +84,32 @@ export function LoginPage() {
       </Card>
 
       <Text size="sm" c="dimmed">
-        Логин и пароль выдаёт администратор. Регистрации нет.
+        Логин и пароль выдаёт администратор. Регистрации нет — если доступа нет,
+        обратитесь к администратору.
       </Text>
-      <Stack gap={4} maw={480}>
-        <Text size="xs" c="dimmed">
-          Нет доступа?
-        </Text>
-        <Text size="xs" c="dimmed">
-          1. Создать администратора (если система пустая):{' '}
-          <Code>./scripts/start.sh admin &lt;логин&gt;</Code>
-        </Text>
-        <Text size="xs" c="dimmed">
-          2. Восстановить пароль: <Code>./scripts/start.sh password &lt;логин&gt;</Code>
-        </Text>
-        <Text size="xs" c="dimmed">
-          3. Посмотреть список пользователей: <Code>./scripts/start.sh users</Code>
-        </Text>
-      </Stack>
+      {/* CLI-команды нужны администратору, а не исследователю: держим их
+          свёрнутыми, чтобы экран входа не выглядел инструкцией для сисадмина. */}
+      <Accordion variant="subtle" maw={480} w="100%">
+        <Accordion.Item value="admin">
+          <Accordion.Control>Для администратора</Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap={4}>
+              <Text size="xs" c="dimmed">
+                1. Создать администратора (если система пустая):{' '}
+                <Code>./scripts/start.sh admin &lt;логин&gt;</Code>
+              </Text>
+              <Text size="xs" c="dimmed">
+                2. Восстановить пароль:{' '}
+                <Code>./scripts/start.sh password &lt;логин&gt;</Code>
+              </Text>
+              <Text size="xs" c="dimmed">
+                3. Посмотреть список пользователей:{' '}
+                <Code>./scripts/start.sh users</Code>
+              </Text>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
     </Stack>
   )
 }

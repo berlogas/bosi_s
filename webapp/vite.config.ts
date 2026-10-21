@@ -17,6 +17,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Даты форматируются в локальной зоне: фиксируем её, иначе ожидания
+    // в тестах зависят от машины и CI (UTC).
+    env: { TZ: 'Europe/Moscow' },
     globals: true,
     css: false,
     // e2e гоняет Playwright, а не Vitest (см. playwright.config.ts)

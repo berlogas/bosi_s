@@ -273,6 +273,17 @@ def test_archive_is_manual_and_marked(db, research_session) -> None:
         sessions_repo.ensure_writable(research_session)
 
 
+def test_paused_can_be_archived(db, research_session) -> None:
+    """UI и API сходятся: paused убирается в архив без возобновления."""
+    sessions_repo.pause_session(db, research_session)
+    sessions_repo.archive_session(db, research_session, note="передумал")
+
+    assert research_session.status is SessionStatus.archived
+    assert research_session.archived_at is not None
+    with pytest.raises(ConflictError):
+        sessions_repo.reactivate_session(db, research_session)
+
+
 def test_archived_session_cannot_be_reactivated(db, research_session) -> None:
     sessions_repo.archive_session(db, research_session)
     with pytest.raises(ConflictError) as exc:

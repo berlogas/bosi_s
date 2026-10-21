@@ -26,26 +26,22 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { client } from '../../api/client'
-import { useArchiveSession, useSessionDetail } from '../dashboard/queries'
+import {
+  useArchiveSession,
+  useResumeSession,
+  useSessionDetail,
+} from '../dashboard/queries'
 import { useSaveState } from '../chat/queries'
 import { sessionStatusLabel, ttlLabel } from '../../lib/format'
 
-/** Идентификаторы вкладок — как в TABS workspace.py (в$order). */
-export const TABS = ['documents', 'projects', 'chat', 'notes'] as const
-export type TabId = (typeof TABS)[number]
+import { TABS, sessionTabPath, tabFromState, tabIdFromPath } from './tabPaths'
+import type { TabId } from './tabPaths'
 
 const TAB_LABELS: Record<TabId, string> = {
   documents: 'Документы',
   projects: 'Проекты',
   chat: 'Чат',
   notes: 'Заметки',
-}
-
-export function tabIdFromPath(pathname: string): TabId {
-  const segment = pathname.split('/').pop()
-  return (TABS as readonly string[]).includes(segment ?? '')
-    ? (segment as TabId)
-    : 'chat'
 }
 
 function Limits({
@@ -87,6 +83,7 @@ export function SessionPage() {
   const location = useLocation()
   const detail = useSessionDetail(sessionId ?? null)
   const archive = useArchiveSession()
+  const resume = useResumeSession()
   const saveState = useSaveState(sessionId ?? '')
   const [confirmOpened, setConfirmOpened] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -138,6 +135,18 @@ export function SessionPage() {
     }
   }
 
+  function handleResume() {
+    setActionError(null)
+    resume.mutate(session.id, {
+      onSuccess: (data) =>
+        navigate(sessionTabPath(session.id, tabFromState(data.state))),
+      onError: (cause) =>
+        setActionError(
+          cause instanceof Error ? cause.message : 'Не удалось возобновить сессию',
+        ),
+    })
+  }
+
   function handleArchiveConfirm() {
     setActionError(null)
     archive.mutate(session.id, {
@@ -173,7 +182,7 @@ export function SessionPage() {
           <Button
             size="xs"
             variant="light"
-            disabled={readOnly}
+            disabled={readOnly || session.status === 'paused'}
             onClick={() => void handlePause()}
           >
             Пауза
@@ -196,6 +205,20 @@ export function SessionPage() {
       {actionError && (
         <Alert color="red" role="alert">
           {actionError}
+        </Alert>
+      )}
+
+      {session.status === 'paused' && (
+        <Alert color="yellow" title="Сессия на паузе">
+          <Group justify="space-between" align="center" wrap="wrap">
+            <Text size="sm">
+              Работа приостановлена. Возобновите сессию, чтобы вернуться к сохранённой
+              вкладке и восстановить индекс документов.
+            </Text>
+            <Button size="xs" loading={resume.isPending} onClick={handleResume}>
+              Возобновить
+            </Button>
+          </Group>
         </Alert>
       )}
 

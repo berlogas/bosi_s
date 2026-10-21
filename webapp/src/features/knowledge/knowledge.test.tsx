@@ -124,28 +124,50 @@ describe('База знаний', () => {
     expect(await screen.findByRole('button', { name: 'Управлять базой' })).toBeVisible()
   })
 
-  it('поиск уходит на сервер с введённым словом', async () => {
+  it('поиск уходит на сервер с введённым словом после debounce', async () => {
     const { calls } = mockKnowledgeApi()
     renderPath()
 
     await screen.findByText('Хлорофилл и фотосинтез')
     await userEvent.type(screen.getByLabelText('Поиск по базе'), 'ctd')
-    await userEvent.click(screen.getByRole('button', { name: 'Найти' }))
 
     await waitFor(() =>
       expect(calls.some((call) => call.url.includes('q=ctd'))).toBe(true),
     )
   })
 
-  it('каждая буква не порождает запрос — отправка по кнопке', async () => {
+  it('debounce: три буквы дают один запрос, а не три', async () => {
     const { calls } = mockKnowledgeApi()
     renderPath()
 
     await screen.findByText('Хлорофилл и фотосинтез')
-    const before = calls.length
     await userEvent.type(screen.getByLabelText('Поиск по базе'), 'ctd')
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.includes('q=ctd'))).toBe(true),
+    )
 
-    expect(calls.length).toBe(before)
+    const searchCalls = calls.filter((call) => call.url.includes('q='))
+    expect(searchCalls).toHaveLength(1)
+    expect(searchCalls[0]?.url).toContain('q=ctd')
+  })
+
+  it('категория применяется сразу, без кнопки', async () => {
+    const { calls } = mockKnowledgeApi()
+    renderPath()
+
+    await screen.findByText('Хлорофилл и фотосинтез')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Категория' }))
+    // Mantine держит выпадающий список в слое с display:none — по умолчанию
+    // его не видно в дереве доступности, поэтому ищем с hidden: true.
+    await userEvent.click(
+      screen.getByRole('option', { name: 'Временная литература', hidden: true }),
+    )
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.includes('category=temp_literature'))).toBe(
+        true,
+      ),
+    )
   })
 
   it('пустая база объясняет, кто её наполняет', async () => {

@@ -12,20 +12,20 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { SessionOut } from '../../api/types'
-import { shortWhen, sessionStatusLabel, STATUS_ICONS } from '../../lib/format'
-import { useArchiveSession } from './queries'
+import {
+  fullWhen,
+  shortWhen,
+  sessionStatusLabel,
+  STATUS_ICONS,
+  ttlLabel,
+} from '../../lib/format'
+import { sessionTabPath, tabFromState } from '../sessions/tabPaths'
+import { useArchiveSession, useResumeSession } from './queries'
 
 /** Сколько дней осталось — как days_left() на бэкенде: ceil до суток. */
 function daysLeft(session: SessionOut): number {
   const delta = new Date(session.expires_at).getTime() - Date.now()
   return Math.max(0, Math.ceil(delta / 86_400_000))
-}
-
-function ttlLabel(days: number): string {
-  if (days <= 0) return 'срок истёк'
-  if (days === 1) return 'остался 1 день'
-  if (days < 5) return `осталось ${days} дня`
-  return `осталось ${days} дней`
 }
 
 /**
@@ -38,11 +38,29 @@ export function SessionCard({ session }: { session: SessionOut }) {
   const [confirmOpened, setConfirmOpened] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const archive = useArchiveSession()
+  const resume = useResumeSession()
 
   const archived = session.status === 'archived'
+  const paused = session.status === 'paused'
   const title = session.title || 'Без названия'
   const icon = STATUS_ICONS[session.status] ?? ''
   const label = session.last_action_label || 'без действий'
+
+  function handleOpen() {
+    if (paused) {
+      setError(null)
+      resume.mutate(session.id, {
+        onSuccess: (data) =>
+          navigate(sessionTabPath(session.id, tabFromState(data.state))),
+        onError: (cause) =>
+          setError(
+            cause instanceof Error ? cause.message : 'Не удалось возобновить сессию',
+          ),
+      })
+      return
+    }
+    navigate(`/s/${session.id}`)
+  }
 
   function handleArchive() {
     archive.mutate(session.id, {
@@ -59,7 +77,9 @@ export function SessionCard({ session }: { session: SessionOut }) {
           <Text fw={600}>{title}</Text>
           <Text size="xs" c="dimmed">
             {icon} {sessionStatusLabel(session.status)} · {label} ·{' '}
-            {shortWhen(session.last_action_at)}
+            <span title={fullWhen(session.last_action_at)}>
+              {shortWhen(session.last_action_at)}
+            </span>
           </Text>
 
           {session.resume_note && (
@@ -78,21 +98,30 @@ export function SessionCard({ session }: { session: SessionOut }) {
           size="xs"
           variant="light"
           disabled={archived}
-          onClick={() => navigate(`/s/${session.id}`)}
+          loading={resume.isPending && resume.variables === session.id}
+          onClick={handleOpen}
         >
-          Продолжить
+          {paused ? 'Возобновить' : 'Продолжить'}
         </Button>
 
         <Button
           size="xs"
           variant="light"
           color="red"
-          disabled={session.status !== 'active'}
+          // paused архивируется так же, как active: API это разрешает, а
+          // «убрать с глаз» не должно требовать сначала возобновлять сессию
+          disabled={archived}
           onClick={() => setConfirmOpened(true)}
         >
           Архив
         </Button>
       </Group>
+
+      {error && !confirmOpened && (
+        <Text size="xs" c="red" role="alert">
+          {error}
+        </Text>
+      )}
 
       <Modal
         opened={confirmOpened}

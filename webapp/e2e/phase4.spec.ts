@@ -421,12 +421,17 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
   }
   const table = page.getByRole('table')
   await expect(table.getByText('abcdefgh')).toBeVisible()
-  await expect(table.getByText('2026-10-07 12:34')).toBeVisible()
+  await expect(table.getByText('07.10.2026, 15:34')).toBeVisible()
 
   // Аудит: строка и признак ok
   await page.getByRole('tab', { name: 'Аудит' }).click()
   await expect(page.getByText('session.create')).toBeVisible()
   await expect(page.getByText('✓')).toBeVisible()
+  // Время события — в локальной зоне браузера, а не в UTC: 10:00 UTC = 13:00 MSK.
+  const auditTime = page.getByRole('table').getByText('07.10.2026, 13:00')
+  await expect(auditTime).toBeVisible()
+  // В подсказке — полная дата с зоной: видно, что перевод действительно был.
+  await expect(auditTime).toHaveAttribute('title', /GMT\+3/)
 })
 
 test('исследователь видит глобальную базу на чтение', async ({ page }) => {

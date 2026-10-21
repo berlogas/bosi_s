@@ -99,6 +99,22 @@ describe('AnswerView', () => {
     expect(screen.getByText('Список источников')).toBeInTheDocument()
   })
 
+  it('«Список источников» — кнопка: Enter и Space раскрывают', async () => {
+    render(<AnswerView answer={{ answer: 'Ответ', references: ['[1] Данные GF/F'] }} />)
+
+    const toggle = screen.getByRole('button', { name: 'Список источников' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    toggle.focus()
+    expect(toggle).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('• [1] Данные GF/F')).toBeInTheDocument()
+
+    await userEvent.keyboard(' ')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('предупреждения grounding из stats: первое + expander остальных', async () => {
     render(
       <AnswerView
@@ -112,9 +128,14 @@ describe('AnswerView', () => {
       />,
     )
     expect(screen.getByText(/Цитата \[3\] не найдена/)).toBeInTheDocument()
-    const expander = screen.getByText(/Все предупреждения проверки \(2\)/)
-    await userEvent.click(expander)
+    const expander = screen.getByRole('button', {
+      name: /Все предупреждения проверки \(2\)/,
+    })
+    expect(expander).toHaveAttribute('aria-expanded', 'false')
+    expander.focus()
+    await userEvent.keyboard('{Enter}')
     expect(await screen.findByText(/Факт без опоры/)).toBeInTheDocument()
+    expect(expander).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('base_empty и from_cache: поясняющие подписи', () => {

@@ -24,6 +24,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core'
+import { useDebouncedValue } from '@mantine/hooks'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -61,12 +62,12 @@ export function KnowledgePage() {
   const user = useAuth((state) => state.user)
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string | null>(null)
 
   // Поиск по подстроке уходит на сервер: база может быть большой, а фильтра
-  // на клиенте нет. Ввод разделён с отправкой, иначе каждый символ был бы
-  // запросом; форма шлёт по Enter.
+  // на клиенте нет. Debounce, а не кнопка: категория применяется сразу, и
+  // поиск по Enter вёл бы себя иначе — теперь обе фильтрации живые.
+  const [search] = useDebouncedValue(query.trim(), 300)
   const documents = useKnowledgeDocuments(search, category)
   const stats = useKnowledgeStats()
 
@@ -98,33 +99,23 @@ export function KnowledgePage() {
         </Group>
       )}
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          setSearch(query.trim())
-        }}
-      >
-        <Group align="flex-end" gap="sm" wrap="nowrap">
-          <TextInput
-            label="Поиск по базе"
-            placeholder="название, имя файла или метка"
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            style={{ flex: 1 }}
-          />
-          <Select
-            label="Категория"
-            data={CATEGORY_OPTIONS}
-            value={category}
-            onChange={setCategory}
-            allowDeselect={false}
-            w={240}
-          />
-          <Button type="submit" variant="default">
-            Найти
-          </Button>
-        </Group>
-      </form>
+      <Group align="flex-end" gap="sm" wrap="nowrap">
+        <TextInput
+          label="Поиск по базе"
+          placeholder="название, имя файла или метка"
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          style={{ flex: 1 }}
+        />
+        <Select
+          label="Категория"
+          data={CATEGORY_OPTIONS}
+          value={category}
+          onChange={setCategory}
+          allowDeselect={false}
+          w={240}
+        />
+      </Group>
 
       {documents.isError && (
         <Alert color="red" role="alert" title="Не удалось загрузить список">
@@ -137,7 +128,7 @@ export function KnowledgePage() {
       {documents.data && documents.data.length === 0 && (
         <Paper withBorder p="md">
           <Text c="dimmed" size="sm">
-            {search
+            {search || category
               ? 'Ничего не нашлось. Попробуйте другое слово или снимите фильтр по категории.'
               : 'База пока пуста. Наполняет её администратор.'}
           </Text>

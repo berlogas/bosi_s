@@ -610,6 +610,10 @@ describe('админка', () => {
     expect(await screen.findByText('годовой отчёт.pdf')).toBeInTheDocument()
     expect(screen.getByText('принят')).toBeInTheDocument()
     expect(screen.getByText('отклонён')).toBeInTheDocument()
+    // Время прогона — в локальной зоне, а не в UTC: 10:00 UTC = 13:00 MSK.
+    const startedAt = screen.getByText('09.10.2026, 13:00')
+    expect(startedAt).toBeInTheDocument()
+    expect(startedAt).toHaveAttribute('title', expect.stringContaining('GMT+3'))
     // причина спрятана за «почему?» — по кнопке раскрывается
     await userEvent.click(screen.getByRole('button', { name: 'почему?' }))
     expect(screen.getByText('Неподдерживаемый тип файла: .jpg')).toBeInTheDocument()
@@ -926,7 +930,7 @@ describe('админка', () => {
       'активность',
     ])
     expect(within(table2).getByText('abcdefgh')).toBeInTheDocument()
-    expect(within(table2).getByText('2026-10-07 12:34')).toBeInTheDocument()
+    expect(within(table2).getByText('07.10.2026, 15:34')).toBeInTheDocument()
   })
 
   it('вкладка Сессии: «Очистить чат» чистит переписку сессии в два шага', async () => {
@@ -980,7 +984,8 @@ describe('админка', () => {
 
     // сводка: видно, что ретрация работает и сколько всего записей
     expect(await screen.findByText(/всего записей: 1234/)).toBeInTheDocument()
-    expect(screen.getByText(/самые старые от/)).toBeInTheDocument()
+    // День самой старой записи — в локальной зоне: 10:00 UTC = 13:00 MSK.
+    expect(screen.getByText(/самые старые от 05\.01\.2026/)).toBeInTheDocument()
     expect(calls.some((c) => c.url.includes('/audit/stats'))).toBe(true)
 
     // «Всё время» — запрос без since

@@ -16,6 +16,11 @@ const HEALTH = {
 
 const SESSION = {
   id: 's-1',
+  // `user_id` обязателен в контракте SessionOut: без него в списке сессий
+  // `groupByOwner` получает пустого владельца, и React ругается на key.
+  user_id: 'u-1',
+  owner_username: 'ivanov',
+  owner_full_name: null,
   title: 'Сессия для архива',
   status: 'active',
   created_at: '2026-10-01T00:00:00+00:00',

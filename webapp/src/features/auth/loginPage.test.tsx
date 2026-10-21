@@ -104,7 +104,9 @@ describe('вход в приложение', () => {
 
     // Боковая панель: состояние системы и пользователь. Подписей «Навигация»
     // и метки сборки в подвале больше нет — это шум, а не информация.
-    expect(screen.getByText('Состояние системы')).toBeInTheDocument()
+    // desktop-блок и мобильная кнопка поповера — оба в DOM (CSS решает,
+    // что видно), поэтому проверяем наличие, а не единственность
+    expect(screen.getAllByText('Состояние системы').length).toBeGreaterThan(0)
     expect(screen.queryByText('Навигация')).not.toBeInTheDocument()
     expect(screen.queryByText(/сборка/)).not.toBeInTheDocument()
     // в сайдбаре — ФИО и русская подпись роли
@@ -140,6 +142,23 @@ describe('вход в приложение', () => {
       'Неверный логин или пароль',
     )
     expect(screen.getByText('Вход в boasi_s')).toBeInTheDocument()
+  })
+
+  it('CLI-команды спрятаны под «Для администратора»', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    renderApp()
+    await screen.findByText('Вход в boasi_s')
+
+    expect(screen.getByText(/обратитесь к администратору/)).toBeInTheDocument()
+    const control = screen.getByRole('button', { name: 'Для администратора' })
+    expect(control).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText(/1\. Создать администратора/)).not.toBeVisible()
+
+    await userEvent.click(control)
+    expect(control).toHaveAttribute('aria-expanded', 'true')
+    await waitFor(() =>
+      expect(screen.getByText(/1\. Создать администратора/)).toBeVisible(),
+    )
   })
 
   it('пустая форма → подсказка, без сетевых запросов', async () => {

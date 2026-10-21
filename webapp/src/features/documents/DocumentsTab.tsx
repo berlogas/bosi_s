@@ -23,6 +23,7 @@ import {
 import { useMemo, useRef, useState } from 'react'
 
 import type { DocumentOut } from '../../api/types'
+import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal'
 import { TaskPanel } from '../../components/TaskPanel'
 import { categoryLabel } from '../../lib/format'
 import {
@@ -62,6 +63,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   const [uploadResult, setUploadResult] = useState<string | null>(null)
   /** % отправленных байтов при загрузке (XHR onprogress); null — не идёт. */
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  /** Документ, удаление которого подтверждаем; запрос — только после «Удалить». */
+  const [deleteAsk, setDeleteAsk] = useState<DocumentOut | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const documents = useSessionDocuments(sessionId)
@@ -332,7 +336,10 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                         variant="subtle"
                         disabled={readOnly}
                         loading={remove.isPending && remove.variables === document.id}
-                        onClick={() => remove.mutate(document.id as string)}
+                        onClick={() => {
+                          setDeleteError(null)
+                          setDeleteAsk(document)
+                        }}
                       >
                         Удалить
                       </Button>
@@ -344,6 +351,32 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           </Accordion.Item>
         ))}
       </Accordion>
+
+      <ConfirmDeleteModal
+        opened={deleteAsk !== null}
+        title="Удалить документ?"
+        subject={
+          <>
+            Документ <b>«{deleteAsk?.title || deleteAsk?.docname}»</b> будет удалён из
+            сессии вместе с чанками.
+          </>
+        }
+        error={deleteError}
+        loading={remove.isPending && remove.variables === deleteAsk?.id}
+        onCancel={() => {
+          if (!remove.isPending) setDeleteAsk(null)
+        }}
+        onConfirm={() => {
+          if (!deleteAsk?.id) return
+          remove.mutate(deleteAsk.id, {
+            onSuccess: () => setDeleteAsk(null),
+            onError: (cause) =>
+              setDeleteError(
+                cause instanceof Error ? cause.message : 'Не удалось удалить документ',
+              ),
+          })
+        }}
+      />
     </Stack>
   )
 }

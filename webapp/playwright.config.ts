@@ -22,6 +22,9 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
+    // Даты в UI форматируются в локальной зоне браузера: без явной зоны
+    // e2e-ожидания зависели от машины (CI — UTC, разработчик — Europe/Moscow).
+    timezoneId: 'Europe/Moscow',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

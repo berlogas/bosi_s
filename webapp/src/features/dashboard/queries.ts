@@ -5,7 +5,7 @@
  * пушит изменения в реальном времени, без лишних запросов каждые 2 секунды.
  */
 
-import { useEffect } from 'react'
+import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
@@ -39,29 +39,14 @@ export function useSessionDetail(sessionId: string | null) {
   })
 }
 
-/** Активные задачи пользователя; SSE вместо поллинга. */
+/**
+ * Активные задачи пользователя.
+ *
+ * Сам SSE-поток открывает `TaskEventsProvider` (один на приложение); здесь
+ * остаётся запрос-снимок и короткий опрос как страховка от пропущенных
+ * событий.
+ */
 export function useActiveTasks() {
-  const queryClient = useQueryClient()
-
-  useEffect(() => {
-    const eventSource = new EventSource('/api/tasks/events')
-    eventSource.onmessage = (event) => {
-      const task = JSON.parse(event.data) as Task
-      queryClient.setQueryData(queryKeys.activeTasks, (old: Task[] | undefined) => {
-        if (!old) return [task]
-        const index = old.findIndex((t) => t.id === task.id)
-        if (index === -1) return [...old, task]
-        const updated = [...old]
-        updated[index] = task
-        return updated
-      })
-      if (!isActiveTask(task.status)) {
-        eventSource.close()
-      }
-    }
-    return () => eventSource.close()
-  }, [queryClient])
-
   return useQuery({
     queryKey: queryKeys.activeTasks,
     queryFn: async () => {
@@ -127,6 +112,34 @@ export function useArchiveSession() {
     mutationFn: (sessionId: string) => client.archiveSession(sessionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+    },
+  })
+}
+
+/**
+ * Возврат к работе: `paused` → `active`, реконструкция `Docs` на сервере.
+ *
+ * Ответ несёт точку возврата (вкладку) и число восстановленных документов —
+ * вызывающий сам решает, куда перейти. Ошибка не меняет статус: сбрасывать
+ * кэш до успеха нельзя, иначе карточка покажет `active` без реактивации.
+ */
+export function useResumeSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) => client.resumeSession(sessionId),
+    onSuccess: (data, sessionId) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.sessionDetail(sessionId),
+      })
+      notifications.show({
+        title: 'Сессия возобновлена',
+        message:
+          data.restored_documents > 0
+            ? `Восстановлено документов: ${data.restored_documents}`
+            : 'Можно продолжать работу',
+        color: 'green',
+      })
     },
   })
 }

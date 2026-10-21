@@ -37,7 +37,7 @@ import type { InboxRun } from '../../api/client'
 import type { AuditLogEntry, SessionOut, Task, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
-import { shortWhen } from '../../lib/format'
+import { dayWhen, fullWhen, shortWhen } from '../../lib/format'
 import { roleOptions } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { isActiveTask } from '../dashboard/queries'
@@ -616,7 +616,9 @@ function InboxPanel() {
       {runs.data?.map((run) => (
         <Paper key={run.id} withBorder p="sm">
           <Group justify="space-between" wrap="nowrap">
-            <Text size="sm">{new Date(run.started_at).toLocaleString('ru-RU')}</Text>
+            <Text size="sm" title={fullWhen(run.started_at)}>
+              {shortWhen(run.started_at)}
+            </Text>
             <Badge
               size="sm"
               color={
@@ -1158,7 +1160,9 @@ function SessionsTab() {
                     <Table.Td>
                       {session.id && <ClearChatCell sessionId={session.id} />}
                     </Table.Td>
-                    <Table.Td>{shortWhen(session.last_activity_at)}</Table.Td>
+                    <Table.Td title={fullWhen(session.last_activity_at)}>
+                      {shortWhen(session.last_activity_at)}
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -1230,9 +1234,7 @@ function AuditTab() {
   }
 
   const total = stats.data?.total ?? null
-  const oldest = stats.data?.oldest_at
-    ? new Date(stats.data.oldest_at).toLocaleDateString('ru-RU')
-    : null
+  const oldest = stats.data?.oldest_at ? dayWhen(stats.data.oldest_at) : null
 
   return (
     <Stack gap="sm">
@@ -1290,7 +1292,9 @@ function AuditTab() {
         <Table.Tbody>
           {visible.map((entry: AuditLogEntry) => (
             <Table.Tr key={entry.id}>
-              <Table.Td>{(entry.created_at ?? '').slice(0, 19)}</Table.Td>
+              <Table.Td title={fullWhen(entry.created_at)}>
+                {shortWhen(entry.created_at)}
+              </Table.Td>
               <Table.Td>{entry.actor_username ?? '—'}</Table.Td>
               <Table.Td>{entry.action}</Table.Td>
               <Table.Td>{entry.target_type ?? ''}</Table.Td>
@@ -1583,8 +1587,8 @@ function BackupsSection() {
                   </Text>
                 </Table.Td>
                 <Table.Td>{item.human_size}</Table.Td>
-                <Table.Td>
-                  {(item.created_at ?? '').replace('T', ' ').slice(0, 19)}
+                <Table.Td title={fullWhen(item.created_at)}>
+                  {shortWhen(item.created_at)}
                 </Table.Td>
                 <Table.Td>
                   <Button

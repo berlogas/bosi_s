@@ -65,8 +65,45 @@ export const STATUS_ICONS: Record<string, string> = {
   cancelled: '🚫',
 }
 
-/** «16.10.2026 12:34» из ISO-строки; пусто, если дата невалидна. */
+/**
+ * Даты — в локальной зоне пользователя.
+ *
+ * Сервер отдаёт UTC (`...Z` или `+00:00`); срез строки показывал UTC-время,
+ * то есть в Москве событие «уезжало» на три часа назад.
+ */
+const SHORT_WHEN = new Intl.DateTimeFormat('ru-RU', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+})
+// В `title` — та же дата с зоной: по нему видно, что перевод действительно был.
+const FULL_WHEN = new Intl.DateTimeFormat('ru-RU', {
+  dateStyle: 'full',
+  timeStyle: 'long',
+})
+
+// День без времени — для подписей вида «самые старые от 05.01.2026».
+const DAY_WHEN = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short' })
+
+function parseWhen(iso: string | null | undefined): Date | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** «20.10.2026, 15:00» в локальной зоне; пусто, если дата невалидна. */
 export function shortWhen(iso: string | null | undefined): string {
-  if (!iso) return ''
-  return iso.slice(0, 16).replace('T', ' ')
+  const date = parseWhen(iso)
+  return date ? SHORT_WHEN.format(date) : ''
+}
+
+/** «20.10.2026» — только день, локальная зона; пусто, если дата невалидна. */
+export function dayWhen(iso: string | null | undefined): string {
+  const date = parseWhen(iso)
+  return date ? DAY_WHEN.format(date) : ''
+}
+
+/** «вторник, 20 октября 2026 г. в 15:00:00 GMT+3» — для `title`. */
+export function fullWhen(iso: string | null | undefined): string {
+  const date = parseWhen(iso)
+  return date ? FULL_WHEN.format(date) : ''
 }

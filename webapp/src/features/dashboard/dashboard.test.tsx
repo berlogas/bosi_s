@@ -6,14 +6,23 @@
  * отвечает, архив — в два шага (модалка, а не один клик).
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { tokens } from '../../api/tokens'
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
-import { json, loginAs, mockApi, resetAuth, TEST_ADMIN } from '../../test/helpers'
+import {
+  captureEventSourceInstances,
+  captureEventSourceUrls,
+  json,
+  loginAs,
+  mockApi,
+  resetAuth,
+  TEST_ADMIN,
+} from '../../test/helpers'
 
 const SESSION = {
   id: 's-1',
@@ -245,30 +254,29 @@ describe('дашборд администратора: группировка п
 describe('дашборд: кнопка «Продолжить» открывает рабочую страницу', () => {
   it('клик по «Продолжить» показывает страницу сессии с вкладками', async () => {
     loginAs()
-    const detail = {
-      ...SESSION,
-      days_left: 90,
-      writable: true,
-      summary: {
-        documents: 0,
-        documents_by_category: {},
-        storage_bytes: 0,
-        storage_limit_bytes: 524_288_000,
-        documents_limit: 50,
-        projects: 0,
-        projects_limit: 5,
-        messages: 0,
-        links: 0,
-        read_only: false,
-      },
-    }
-    mockApi({
+    const { calls } = mockApi({
       'GET /api/sessions': [SESSION],
-      'GET /api/sessions/s-1': detail,
+      'GET /api/sessions/s-1': {
+        ...SESSION,
+        days_left: 90,
+        writable: true,
+        summary: {
+          documents: 0,
+          documents_by_category: {},
+          storage_bytes: 0,
+          storage_limit_bytes: 524_288_000,
+          documents_limit: 50,
+          projects: 0,
+          projects_limit: 5,
+          messages: 0,
+          links: 0,
+          read_only: false,
+        },
+      },
       'GET /api/sessions/s-1/messages': { messages: [], total: 0 },
       'GET /api/health': HEALTH,
       'GET /api/tasks': { tasks: [], active: 0 },
-      'PUT /api/sessions/s-1/state': detail,
+      'PUT /api/sessions/s-1/state': {},
     })
 
     renderApp()
@@ -279,6 +287,103 @@ describe('дашборд: кнопка «Продолжить» открывае
       await screen.findByRole('heading', { name: 'Баренцево море' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Чат' })).toBeInTheDocument()
+    // active не требует resume: это лишняя реконструкция Docs
+    expect(calls.some((call) => call.url.includes('/resume'))).toBe(false)
+  })
+
+  it('paused: «Возобновить» вызывает resume и открывает сохранённую вкладку', async () => {
+    loginAs()
+    const paused = {
+      ...SESSION,
+      id: 's-paused',
+      title: 'Приостановленная',
+      status: 'paused',
+      state_snapshot: { tab: 'documents' },
+    }
+    const summary = {
+      documents: 2,
+      documents_by_category: {},
+      storage_bytes: 1024,
+      storage_limit_bytes: 524_288_000,
+      documents_limit: 50,
+      projects: 0,
+      projects_limit: 5,
+      messages: 0,
+      links: 0,
+      read_only: false,
+    }
+    const detail = {
+      ...paused,
+      days_left: 90,
+      writable: true,
+      summary,
+    }
+    const { calls } = mockApi({
+      'GET /api/sessions': [paused],
+      'GET /api/sessions/s-paused': { ...detail, status: 'active' },
+      'POST /api/sessions/s-paused/resume': {
+        session: { ...paused, status: 'active' },
+        summary,
+        state: { tab: 'documents' },
+        restored_documents: 2,
+        days_left: 90,
+        last_exchange: null,
+      },
+      'GET /api/sessions/s-paused/documents': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+      'PUT /api/sessions/s-paused/state': {},
+    })
+
+    renderApp()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Возобновить' }))
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) =>
+            call.init.method === 'POST' && call.url.includes('/s-paused/resume'),
+        ),
+      ).toBe(true),
+    )
+    // перешли на вкладку из точки возврата, а не на чат по умолчанию
+    expect(
+      await screen.findByRole('tab', { name: 'Документы', selected: true }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Сессия возобновлена')).toBeInTheDocument()
+    expect(await screen.findByText('Восстановлено документов: 2')).toBeInTheDocument()
+  })
+
+  it('paused: ошибка resume остаётся на карточке, статус не меняется', async () => {
+    loginAs()
+    const paused = {
+      ...SESSION,
+      id: 's-paused',
+      title: 'Приостановленная',
+      status: 'paused',
+    }
+    mockApi({
+      'GET /api/sessions': [paused],
+      'POST /api/sessions/s-paused/resume': json(
+        { detail: 'Не удалось восстановить индекс' },
+        500,
+      ),
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+    })
+
+    renderApp()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Возобновить' }))
+
+    expect(
+      await screen.findByText('Не удалось восстановить индекс'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Возобновить' })).toBeInTheDocument()
+    expect(screen.getByText('Приостановленная')).toBeInTheDocument()
+    // paused можно убрать в архив, не возобновляя (как в API и на странице)
+    expect(screen.getByRole('button', { name: 'Архив' })).toBeEnabled()
   })
 })
 
@@ -416,6 +521,129 @@ describe('дашборд: активные задачи', () => {
     // 200 с неожиданным телом → tasks() вернёт объект, фильтр упадёт
     renderApp()
     expect(await screen.findByText('Баренцево море')).toBeInTheDocument()
+  })
+})
+
+describe('дашборд: SSE-подписка на задачи', () => {
+  it('открывает поток с access-токеном в query', async () => {
+    loginAs()
+    const urls = captureEventSourceUrls()
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+    })
+
+    renderApp()
+
+    await waitFor(() => expect(urls).toHaveLength(1))
+    expect(urls[0]).toBe('/api/tasks/events?access_token=test-access')
+  })
+
+  it('без access-токена подписку не открывает — остаётся поллинг', async () => {
+    loginAs()
+    tokens.clear() // например, refresh не удался и access потерян
+    const urls = captureEventSourceUrls()
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+    })
+
+    renderApp()
+
+    expect(
+      await screen.findByText('Активных сессий нет — создайте первую.'),
+    ).toBeInTheDocument()
+    expect(urls).toHaveLength(0)
+  })
+
+  it('не закрывает поток после завершённой задачи и слушает следующие', async () => {
+    loginAs()
+    const sources = captureEventSourceInstances()
+    let serverTasks: unknown[] = []
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': () => json({ tasks: serverTasks, active: serverTasks.length }),
+    })
+
+    renderApp()
+    expect(
+      await screen.findByText('Активных сессий нет — создайте первую.'),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(sources).toHaveLength(1))
+    const source = sources[0]!
+
+    serverTasks = [ACTIVE_TASK]
+    act(() => source.emit(ACTIVE_TASK))
+    expect(await screen.findByText('Активные задачи')).toBeInTheDocument()
+    expect(screen.getByText(/55%/)).toBeInTheDocument()
+
+    // Первая задача завершилась: строка исчезает, но поток остаётся открыт.
+    serverTasks = []
+    act(() =>
+      source.emit({
+        ...ACTIVE_TASK,
+        status: 'done',
+        progress: 100,
+        finished_at: '2026-10-07T09:05:00+00:00',
+      }),
+    )
+    await waitFor(() =>
+      expect(screen.queryByText('Активные задачи')).not.toBeInTheDocument(),
+    )
+    expect(source.closed).toBe(false)
+
+    // Вторая задача продолжает приходить по тому же потоку.
+    const second = {
+      ...ACTIVE_TASK,
+      id: 't-2',
+      title: 'Индексация документов',
+      step: 'разбор PDF',
+      progress: 10,
+    }
+    serverTasks = [second]
+    act(() => source.emit(second))
+    // У running-задачи заголовок живёт в aria-label прогресс-бара, а не в
+    // тексте (текст — этап и проценты).
+    expect(
+      await screen.findByLabelText('Индексация документов: 10%'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/разбор PDF/)).toBeInTheDocument()
+    expect(source.closed).toBe(false)
+  })
+
+  it('после переподключения подтягивает задачи, пропущенные за время обрыва', async () => {
+    loginAs()
+    const sources = captureEventSourceInstances()
+    let serverTasks: unknown[] = []
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': () => json({ tasks: serverTasks, active: serverTasks.length }),
+    })
+
+    renderApp()
+    await screen.findByText('Активных сессий нет — создайте первую.')
+    await waitFor(() => expect(sources).toHaveLength(1))
+
+    // Пока канал лежал, на сервере стартовала задача: события её не донесли.
+    const missed = {
+      ...ACTIVE_TASK,
+      id: 't-3',
+      title: 'Пропущенная задача',
+      status: 'queued',
+      step: 'в очереди',
+      progress: 0,
+    }
+    serverTasks = [missed]
+
+    // EventSource после восстановления сети шлёт onopen — список сверяется
+    // с GET /api/tasks.
+    await act(async () => sources[0]!.open())
+
+    expect(await screen.findByLabelText('Пропущенная задача: 0%')).toBeInTheDocument()
   })
 })
 
@@ -558,6 +786,18 @@ describe('дашборд: быстрый чат', () => {
       await screen.findByText('Можно уточнить:', {}, { timeout: 5000 }),
     ).toBeInTheDocument()
     expect(screen.getByText('— как считать биомассу')).toBeInTheDocument()
+
+    // подсказка — настоящая кнопка: Enter отправляет, как клик
+    const hint = screen.getByRole('button', { name: '— как считать биомассу' })
+    hint.focus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(
+        calls.filter(
+          (call) => call.init.method === 'POST' && call.url.includes('/quick-query'),
+        ).length,
+      ).toBe(2),
+    )
   }, 15_000)
 
   it('отмена задачи убирает ожидание и говорит, что вопрос отменён', async () => {
@@ -752,9 +992,7 @@ describe('дашборд: быстрый чат', () => {
 
     renderApp()
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Очистить чат/ }),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: /Очистить чат/ }))
     expect(
       await screen.findByText(
         'Удалить всю историю быстрых вопросов? Отменить будет нельзя.',

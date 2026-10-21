@@ -11,7 +11,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
-import { json, loginAs, mockApi, resetAuth } from '../../test/helpers'
+import {
+  captureEventSourceUrls,
+  json,
+  loginAs,
+  mockApi,
+  resetAuth,
+} from '../../test/helpers'
 
 const HEALTH = {
   status: 'ok',
@@ -181,13 +187,72 @@ describe('чат: история', () => {
       within(assistantBubble).queryByRole('button', { name: /удалить/i }),
     ).toBeNull()
 
+    // первый клик только спрашивает: запроса ещё нет
+    const deleteButton = within(userBubble).getByRole('button', { name: /удалить/i })
+    await userEvent.click(deleteButton)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Что такое биомасса\?/)).toBeInTheDocument()
+    expect(calls.some((call) => call.url.includes('/api/chat/messages/m-1'))).toBe(
+      false,
+    )
+
+    // «Отмена» ничего не меняет
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(calls.some((call) => call.url.includes('/api/chat/messages/m-1'))).toBe(
+      false,
+    )
+    // фокус вернулся на инициатора, а не потерялся
+    expect(deleteButton).toHaveFocus()
+
     // удаление пары: DELETE на конкретное сообщение + перезапрос истории
     await userEvent.click(within(userBubble).getByRole('button', { name: /удалить/i }))
+    const again = await screen.findByRole('dialog')
+    await userEvent.click(within(again).getByRole('button', { name: 'Удалить' }))
     await waitFor(() =>
       expect(calls.some((call) => call.url.includes('/api/chat/messages/m-1'))).toBe(
         true,
       ),
     )
+  })
+
+  it('спиннер удаления — только у целевой пары', async () => {
+    let release: ((response: Response) => void) | undefined
+    mockChatApi({
+      'GET /api/chat/messages': {
+        messages: [
+          userMessage('m-1', 'Первый вопрос'),
+          assistantMessage('m-2', 'Первый ответ'),
+          userMessage('m-3', 'Второй вопрос'),
+          assistantMessage('m-4', 'Второй ответ'),
+        ],
+        total: 4,
+        offset: 0,
+      },
+      'DELETE /api/chat/messages/m-1': () => {
+        const pending = Promise.withResolvers<Response>()
+        release = pending.resolve
+        return pending.promise
+      },
+    })
+
+    renderApp()
+    await screen.findByText('Первый вопрос')
+
+    const deleteButtons = screen.getAllByRole('button', {
+      name: 'Удалить вопрос вместе с ответом',
+    })
+    await userEvent.click(deleteButtons[0] as HTMLElement)
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+
+    await waitFor(() =>
+      expect(deleteButtons[0]?.hasAttribute('data-loading')).toBe(true),
+    )
+    expect(deleteButtons[1]?.hasAttribute('data-loading')).toBe(false)
+
+    release?.(new Response(null, { status: 204 }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('ошибка истории не роняет чат — показываем текст ошибки', async () => {
@@ -288,6 +353,22 @@ describe('чат: фоновая задача', () => {
     // запрос задачи реально поллился
     expect(calls.some((call) => call.url.includes('/api/tasks/t-1'))).toBe(true)
   }, 15_000)
+
+  it('подписка SSE несёт access-токен в query (EventSource без заголовков)', async () => {
+    sessionStorage.setItem(
+      'boasi.chat.task',
+      JSON.stringify({ sessionId: 's-1', taskId: 't-1', question: 'вопрос' }),
+    )
+    const urls = captureEventSourceUrls()
+    mockChatApi({
+      'GET /api/tasks/t-1': runningTask(),
+    })
+
+    renderApp()
+
+    await waitFor(() => expect(urls).toHaveLength(1))
+    expect(urls[0]).toBe('/api/tasks/events?access_token=test-access')
+  })
 
   it('ошибка задачи показывает вопрос с ошибкой и кнопку убрать', async () => {
     sessionStorage.setItem(

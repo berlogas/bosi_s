@@ -6,7 +6,7 @@
  * санитизацией (текст приходит от модели).
  */
 
-import { Alert, Collapse, Stack, Text } from '@mantine/core'
+import { Alert, Collapse, Stack, Text, UnstyledButton } from '@mantine/core'
 import { useState } from 'react'
 import type { AnswerChecks, AnswerSource } from '../api/types'
 import { ChecksView } from './ChecksView'
@@ -60,14 +60,15 @@ export function AnswerView({ answer }: AnswerViewProps) {
 
       {references.length > 0 && (
         <>
-          <Text
-            size="sm"
-            style={{ cursor: 'pointer', textDecoration: 'underline' }}
-            role="button"
+          <UnstyledButton
             onClick={() => setReferencesOpened((value) => !value)}
+            aria-expanded={referencesOpened}
+            style={{ textAlign: 'left' }}
           >
-            Список источников
-          </Text>
+            <Text size="sm" td="underline">
+              Список источников
+            </Text>
+          </UnstyledButton>
           <Collapse expanded={referencesOpened}>
             <Stack gap={2} mt={4}>
               {references.map((line) => (

@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
 import { loginAs, mockApi, TEST_USER } from '../../test/helpers'
+import { isNavItemActive } from './AppLayout'
 
 const HEALTH = {
   status: 'ok',
@@ -77,6 +78,13 @@ function mockLayoutApi(routes: Record<string, unknown> = {}) {
   })
 }
 
+/** Пункт меню по подписи: тот же текст бывает заголовком страницы. */
+function navItem(label: string): HTMLElement {
+  const item = screen.getAllByText(label).find((node) => node.closest('a'))
+  if (!item) throw new Error(`Пункт меню «${label}» не найден`)
+  return item
+}
+
 function renderPath(path: string) {
   loginAs(TEST_USER)
   const queryClient = new QueryClient({
@@ -88,6 +96,107 @@ function renderPath(path: string) {
     </AppProviders>,
   )
 }
+
+describe('активный пункт меню', () => {
+  it('подпуть включает пункт, а корень — только сам себя', () => {
+    expect(isNavItemActive('/s/s-1/chat', '/s/s-1')).toBe(true)
+    expect(isNavItemActive('/s/s-1/documents', '/s/s-1')).toBe(true)
+    expect(isNavItemActive('/s/s-1', '/s/s-1')).toBe(true)
+    expect(isNavItemActive('/s/s-2/chat', '/s/s-1')).toBe(false)
+    expect(isNavItemActive('/knowledge', '/s/s-1')).toBe(false)
+    expect(isNavItemActive('/admin/audit', '/admin')).toBe(true)
+    expect(isNavItemActive('/', '/')).toBe(true)
+    expect(isNavItemActive('/knowledge', '/')).toBe(false)
+    expect(isNavItemActive('/admin', '/')).toBe(false)
+  })
+
+  it('в сессии активен только её пункт, панель — нет', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/s/s-1/chat')
+
+    await screen.findByText('Текущая сессия')
+    expect(
+      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+    expect(
+      screen.getByText('Информационная панель').closest('[aria-current="page"]'),
+    ).toBeNull()
+  })
+
+  it('на вкладке документов пункт сессии остаётся активным', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/s/s-1/documents')
+
+    await screen.findByText('Текущая сессия')
+    expect(
+      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+  })
+
+  it('на /knowledge активна только «База знаний»', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/knowledge')
+
+    await screen.findByRole('heading', { name: 'База знаний' })
+    expect(navItem('База знаний').closest('[aria-current="page"]')).not.toBeNull()
+    expect(navItem('Информационная панель').closest('[aria-current="page"]')).toBeNull()
+    expect(navItem('Текущая сессия').closest('[aria-current="page"]')).toBeNull()
+  })
+
+  it('на / активна только панель', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/')
+
+    await screen.findByRole('heading', { name: 'Новая сессия' })
+    expect(
+      navItem('Информационная панель').closest('[aria-current="page"]'),
+    ).not.toBeNull()
+    expect(navItem('База знаний').closest('[aria-current="page"]')).toBeNull()
+  })
+})
+
+describe('мобильный drawer', () => {
+  it('Burger открывает и закрывает меню', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/')
+
+    await screen.findByRole('heading', { name: 'Новая сессия' })
+    const burger = screen.getByRole('button', { name: 'Меню' })
+    expect(burger).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(burger)
+    expect(screen.getByRole('button', { name: 'Меню' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Меню' }))
+    expect(screen.getByRole('button', { name: 'Меню' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+
+  it('переход по пункту меню закрывает drawer', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/')
+
+    await screen.findByRole('heading', { name: 'Новая сессия' })
+    await userEvent.click(screen.getByRole('button', { name: 'Меню' }))
+    await userEvent.click(navItem('База знаний'))
+
+    expect(await screen.findByRole('button', { name: 'Меню' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+})
 
 describe('пункт «Текущая сессия»', () => {
   beforeEach(() => {

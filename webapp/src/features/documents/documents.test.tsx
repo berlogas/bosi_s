@@ -4,7 +4,7 @@
  * прогресс индексации, лимиты и read-only архива.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -259,6 +259,15 @@ describe('вкладка Документы', () => {
     const del = screen.getAllByRole('button', { name: 'Удалить' })[0]
     expect(del).toBeDefined()
     await userEvent.click(del as HTMLElement)
+
+    // первый клик — только подтверждение: DELETE ещё не ушёл
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Отчёт 2025/)).toBeInTheDocument()
+    expect(
+      calls.some((c) => c.init.method === 'DELETE' && c.url.includes('/documents/d-1')),
+    ).toBe(false)
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }))
 
     await waitFor(() =>
       expect(

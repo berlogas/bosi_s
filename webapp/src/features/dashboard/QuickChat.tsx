@@ -23,6 +23,7 @@ import {
   Stack,
   Text,
   Textarea,
+  UnstyledButton,
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -140,7 +141,7 @@ export function QuickChat() {
   const history = useMemo(() => (past.data?.messages ?? []).map(toEntry), [past.data])
   const lastAssistantIndex = useMemo(() => {
     for (let i = history.length - 1; i >= 0; i -= 1) {
-      if (history[i].role === 'assistant') return i
+      if (history[i]?.role === 'assistant') return i
     }
     return -1
   }, [history])
@@ -331,15 +332,16 @@ export function QuickChat() {
               Можно уточнить:
             </Text>
             {suggestions.map((text) => (
-              <Text
-                size="xs"
+              <UnstyledButton
                 key={text}
-                style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                role="button"
+                disabled={busy}
                 onClick={() => void submit(text)}
+                style={{ textAlign: 'left' }}
               >
-                — {text}
-              </Text>
+                <Text size="xs" td="underline">
+                  — {text}
+                </Text>
+              </UnstyledButton>
             ))}
           </Stack>
         )}

@@ -296,7 +296,8 @@ function ExportPanel({
             exportProject.mutate(
               { projectId: project.id, format },
               {
-                onSuccess: ({ filename }) => setMessage(`Файл сохранён: ${filename}`),
+                // Сервер отдаёт файл потоком, на диск его кладёт браузер.
+                onSuccess: ({ filename }) => setMessage(`Файл скачан: ${filename}`),
                 onError: (cause) =>
                   setError(
                     cause instanceof Error

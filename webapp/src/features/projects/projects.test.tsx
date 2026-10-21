@@ -201,7 +201,7 @@ describe('вкладка Проекты', () => {
     const button = await screen.findByRole('button', { name: 'Выгрузить' })
     await userEvent.click(button)
 
-    expect(await screen.findByText('Файл сохранён: Банка.docx')).toBeInTheDocument()
+    expect(await screen.findByText('Файл скачан: Банка.docx')).toBeInTheDocument()
     expect(downloads).toEqual(['Банка.docx'])
     expect(createObjectURL).toHaveBeenCalled()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:article')

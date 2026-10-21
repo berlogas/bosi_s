@@ -29,6 +29,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { client } from '../../api/client'
 import { AnswerView } from '../../components/AnswerView'
+import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal'
 import { TaskPanel } from '../../components/TaskPanel'
 import type { AnswerSource, MessageOut, SearchMode } from '../../api/types'
 import {
@@ -101,6 +102,13 @@ export function ChatTab({
   const [sending, setSending] = useState(false)
   const [clearAsk, setClearAsk] = useState(false)
   const [clearError, setClearError] = useState<string | null>(null)
+  // Пара, которую собираемся удалить: пока диалог открыт, запроса нет.
+  const [deleteAsk, setDeleteAsk] = useState<{
+    id: string
+    question: string | null
+    index: number
+  } | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const deleteMessage = useDeleteMessage(sessionId)
   const clearMessages = useClearMessages(sessionId)
@@ -116,7 +124,7 @@ export function ChatTab({
   const total = messages.data?.total ?? 0
   const lastAssistantIndex = useMemo(() => {
     for (let i = items.length - 1; i >= 0; i -= 1) {
-      if (items[i].role === 'assistant') return i
+      if (items[i]?.role === 'assistant') return i
     }
     return -1
   }, [items])
@@ -235,10 +243,26 @@ export function ChatTab({
     if (failed?.q.trim() === target) setFailed(null)
   }
 
-  function handleDelete(message: MessageOut, index: number) {
+  function askDelete(message: MessageOut, index: number) {
     if (readOnly || !message.id) return
-    forgetExchange(pairQuestion(items, index))
-    deleteMessage.mutate(message.id)
+    setDeleteError(null)
+    setDeleteAsk({ id: message.id, question: pairQuestion(items, index), index })
+  }
+
+  function confirmDelete() {
+    if (!deleteAsk) return
+    const target = deleteAsk
+    deleteMessage.mutate(target.id, {
+      onSuccess: () => {
+        // Локальный кэш (pending/failed/last) относится к той же паре.
+        forgetExchange(target.question)
+        setDeleteAsk(null)
+      },
+      onError: (cause) =>
+        setDeleteError(
+          cause instanceof Error ? cause.message : 'Не удалось удалить сообщение',
+        ),
+    })
   }
 
   function handleCancelTask() {
@@ -313,7 +337,9 @@ export function ChatTab({
         return (
           <ChatBubble
             key={message.id ?? `${index}-${message.created_at}`}
-            ref={follow !== null && index === lastAssistantIndex ? answerRef : undefined}
+            ref={
+              follow !== null && index === lastAssistantIndex ? answerRef : undefined
+            }
             role={role}
             action={
               deletable ? (
@@ -322,8 +348,11 @@ export function ChatTab({
                   variant="subtle"
                   color="red"
                   aria-label="Удалить вопрос вместе с ответом"
-                  loading={deleteMessage.isPending}
-                  onClick={() => handleDelete(message, index)}
+                  // Спиннер — только у удаляемой пары, а не у всех кнопок
+                  loading={
+                    deleteMessage.isPending && deleteMessage.variables === message.id
+                  }
+                  onClick={() => askDelete(message, index)}
                 >
                   🗑
                 </Button>
@@ -535,6 +564,26 @@ export function ChatTab({
           </Group>
         </Stack>
       </Modal>
+
+      <ConfirmDeleteModal
+        opened={deleteAsk !== null}
+        title="Удалить вопрос вместе с ответом?"
+        subject={
+          deleteAsk?.question ? (
+            <>
+              Пара по вопросу: <b>«{deleteAsk.question}»</b>
+            </>
+          ) : (
+            'Ответ без вопроса будет удалён из переписки.'
+          )
+        }
+        error={deleteError}
+        loading={deleteMessage.isPending && deleteMessage.variables === deleteAsk?.id}
+        onCancel={() => {
+          if (!deleteMessage.isPending) setDeleteAsk(null)
+        }}
+        onConfirm={confirmDelete}
+      />
     </Stack>
   )
 }

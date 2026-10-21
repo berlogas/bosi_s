@@ -6,7 +6,7 @@
  * отчёты citation_guard/grounding, сохранённые в messages.checks).
  */
 
-import { Alert, Collapse, Stack, Text } from '@mantine/core'
+import { Alert, Collapse, Stack, Text, UnstyledButton } from '@mantine/core'
 import { useState } from 'react'
 
 import type { AnswerChecks } from '../api/types'
@@ -36,14 +36,15 @@ export function ChecksView(payload: {
       <Alert color="yellow">⚠️ {warnings[0]}</Alert>
       {warnings.length > 1 && (
         <>
-          <Text
-            size="sm"
-            style={{ cursor: 'pointer', textDecoration: 'underline' }}
+          <UnstyledButton
             onClick={() => setOpened((value) => !value)}
-            role="button"
+            aria-expanded={opened}
+            style={{ textAlign: 'left' }}
           >
-            Все предупреждения проверки ({warnings.length})
-          </Text>
+            <Text size="sm" td="underline">
+              Все предупреждения проверки ({warnings.length})
+            </Text>
+          </UnstyledButton>
           <Collapse expanded={opened}>
             <Stack gap={2} mt={4}>
               {warnings.slice(1).map((line) => (

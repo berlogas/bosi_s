@@ -10,6 +10,7 @@ import type { components } from './schema'
 
 export type SessionOut = components['schemas']['SessionOut']
 export type SessionDetail = components['schemas']['SessionDetailOut']
+export type SessionResume = components['schemas']['SessionResumeOut']
 export type SessionStatus = components['schemas']['SessionStatus']
 export type User = components['schemas']['UserOut']
 export type AuditLogEntry = components['schemas']['AuditLogOut']

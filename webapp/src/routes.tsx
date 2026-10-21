@@ -12,6 +12,7 @@ import { LoginPage } from './features/auth/LoginPage'
 import { AdminPage } from './features/admin/AdminPage'
 import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { AppLayout } from './features/layout/AppLayout'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { SessionPage } from './features/sessions/SessionPage'
@@ -46,7 +47,9 @@ export function AppRoutes() {
       <Route
         element={
           <RequireAuth>
-            <AppLayout />
+            <RouteErrorBoundary>
+              <AppLayout />
+            </RouteErrorBoundary>
           </RequireAuth>
         }
       >

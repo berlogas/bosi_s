@@ -83,3 +83,4 @@ npm run test:e2e                                # Playwright, нужен backend
 
 Фазы 0–9 завершены, фаза 10 (приёмка по сценарию) не начата.
 Подробности и ограничения — в [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)."# bosi_s2" 
+"# bosi_s2" 

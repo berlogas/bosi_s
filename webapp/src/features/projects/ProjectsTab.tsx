@@ -467,7 +467,7 @@ function ProjectEditor({
               style={{
                 width: `${Math.min(100, progress.data.percent)}%`,
                 height: '100%',
-                background: 'var(--mantine-color-blue-6)',
+                background: 'var(--mantine-color-blue-filled)',
                 transition: 'width 0.3s',
               }}
             />

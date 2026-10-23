@@ -6,14 +6,21 @@
  * дашборд. Теперь помнится последняя открытая сессия.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
-import { loginAs, mockApi, TEST_USER } from '../../test/helpers'
+import {
+  loginAs,
+  mockApi,
+  TEST_ADMIN,
+  TEST_OTHER_USER,
+  TEST_USER,
+  type TestUser,
+} from '../../test/helpers'
 import { isNavItemActive } from './AppLayout'
 
 const HEALTH = {
@@ -74,6 +81,9 @@ function mockLayoutApi(routes: Record<string, unknown> = {}) {
     'GET /api/chat/quick-history': [],
     'GET /api/documents': [],
     'GET /api/documents/stats': { total: 0, storage_bytes: 0, by_category: {} },
+    // Админка видна только администратору, но её вкладка «Пользователи»
+    // открывается сразу и спрашивает список.
+    'GET /api/admin/users': [],
     ...routes,
   })
 }
@@ -85,8 +95,8 @@ function navItem(label: string): HTMLElement {
   return item
 }
 
-function renderPath(path: string) {
-  loginAs(TEST_USER)
+function renderPath(path: string, user: TestUser = TEST_USER) {
+  loginAs(user)
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   })
@@ -108,6 +118,26 @@ describe('активный пункт меню', () => {
     expect(isNavItemActive('/', '/')).toBe(true)
     expect(isNavItemActive('/knowledge', '/')).toBe(false)
     expect(isNavItemActive('/admin', '/')).toBe(false)
+  })
+
+  it('пункты меню — настоящие ссылки: Tab и Enter работают', async () => {
+    sessionStorage.clear()
+    mockLayoutApi()
+    renderPath('/s/s-1/chat')
+
+    await screen.findByText('Текущая сессия')
+    const sessionLink = navItem('Текущая сессия').closest('a')
+    const panelLink = navItem('Информационная панель').closest('a')
+
+    // Без `href` это не ссылка: Tab пролетает мимо, Ctrl-клик и «открыть в
+    // новой вкладке» не работают.
+    expect(sessionLink).toHaveAttribute('href', '/s/s-1')
+    expect(panelLink).toHaveAttribute('href', '/')
+
+    panelLink!.focus()
+    expect(panelLink).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Новая сессия' })
   })
 
   it('в сессии активен только её пункт, панель — нет', async () => {
@@ -203,16 +233,21 @@ describe('пункт «Текущая сессия»', () => {
     sessionStorage.clear()
   })
 
-  it('вне сессии пункт серый: сессию ещё не открывали', async () => {
+  it('вне сессии пункт серый и не ловит Tab', async () => {
     mockLayoutApi()
     renderPath('/')
 
     await screen.findByRole('heading', { name: 'Новая сессия' })
-    expect(screen.getByText('Текущая сессия')).toBeVisible()
+    const label = screen.getByText('Текущая сессия')
+    expect(label).toBeVisible()
     // серый = disabled у Mantine NavLink
-    expect(
-      screen.getByText('Текущая сессия').closest('[data-disabled="true"]'),
-    ).not.toBeNull()
+    expect(label.closest('[data-disabled="true"]')).not.toBeNull()
+
+    // Неактивный пункт — не ссылка и не цель Tab: адреса у него нет.
+    const item = label.closest('.mantine-NavLink-root') as HTMLElement
+    expect(item).not.toHaveAttribute('href')
+    item.focus()
+    expect(item).not.toHaveFocus()
   })
 
   it('после выхода в меню пункт остаётся доступным и возвращает в сессию', async () => {
@@ -240,7 +275,12 @@ describe('пункт «Текущая сессия»', () => {
   it('после перезагрузки страницы вне сессии пункт помнит сессию', async () => {
     mockLayoutApi()
     // эмулируем перезагрузку: sessionStorage живёт, а рендер начинается с /
-    window.sessionStorage.setItem('boasi.lastSessionPath', '/s/s-1')
+    // значение хранит и сессию, и её владельца: чужая вкладка не должна
+    // подхватить чужую сессию
+    window.sessionStorage.setItem(
+      'boasi.lastSessionPath',
+      JSON.stringify({ path: '/s/s-1', userId: TEST_USER.id }),
+    )
     renderPath('/')
 
     await screen.findByRole('heading', { name: 'Новая сессия' })
@@ -260,59 +300,167 @@ describe('пункт «Текущая сессия»', () => {
       screen.getByText('Текущая сессия').closest('[data-disabled="true"]'),
     ).not.toBeNull()
   })
+
+  it('значение без владельца не подставляется', async () => {
+    mockLayoutApi()
+    // старое значение (путь строкой) и путь без id владельца — подхватывать
+    // нельзя: неясно, чья это сессия
+    window.sessionStorage.setItem('boasi.lastSessionPath', '/s/s-1')
+    renderPath('/')
+    await screen.findByRole('heading', { name: 'Новая сессия' })
+    expect(
+      screen.getByText('Текущая сессия').closest('[data-disabled="true"]'),
+    ).not.toBeNull()
+  })
+
+  it('после выхода из аккаунта пункт гаснет и следующему не достаётся', async () => {
+    mockLayoutApi({ 'POST /api/auth/logout': null })
+    const first = renderPath('/s/s-1/chat')
+
+    await screen.findByText('Текущая сессия')
+    expect(
+      screen.getByText('Текущая сессия').closest('[data-disabled="true"]'),
+    ).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Выйти' }))
+    await screen.findByRole('heading', { name: /Вход/i })
+
+    // выход забывает сессию: в следующей вкладке её предложить нельзя
+    expect(window.sessionStorage.getItem('boasi.lastSessionPath')).toBeNull()
+    first.unmount()
+
+    // тот же браузер, та же вкладка — зашёл другой человек
+    const api = mockLayoutApi()
+    renderPath('/', TEST_OTHER_USER)
+
+    await screen.findByRole('heading', { name: 'Новая сессия' })
+    expect(
+      screen.getByText('Текущая сессия').closest('[data-disabled="true"]'),
+    ).not.toBeNull()
+
+    // и клик по серому пункту никуда не ведёт
+    await userEvent.click(screen.getByText('Текущая сессия'))
+    expect(
+      api.calls.filter((call) => call.url.includes('/api/sessions/s-1')),
+    ).toHaveLength(0)
+    expect(screen.getByRole('heading', { name: 'Новая сессия' })).toBeVisible()
+  })
+
+  it('сессия, сохранённая другим пользователем, не предлагается', async () => {
+    mockLayoutApi()
+    // значение осталось от прошлого владельца (например, вкладку переиспользовали
+    // без выхода) — второй пользователь её видеть не должен
+    window.sessionStorage.setItem(
+      'boasi.lastSessionPath',
+      JSON.stringify({ path: '/s/s-1', userId: TEST_USER.id }),
+    )
+    renderPath('/', TEST_OTHER_USER)
+
+    await screen.findByRole('heading', { name: 'Новая сессия' })
+    expect(
+      screen.getByText('Текущая сессия').closest('[data-disabled="true"]'),
+    ).not.toBeNull()
+  })
 })
 
-  it('на вкладке projects активен пункт сессии', async () => {
-    sessionStorage.clear()
-    mockLayoutApi()
-    renderPath('/s/s-1/projects')
+it('на вкладке projects активен пункт сессии', async () => {
+  sessionStorage.clear()
+  mockLayoutApi()
+  renderPath('/s/s-1/projects')
 
-    await screen.findByText('Текущая сессия')
-    expect(
-      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
-    ).not.toBeNull()
-    expect(
-      screen.getByText('Информационная панель').closest('[aria-current="page"]'),
-    ).toBeNull()
+  await screen.findByText('Текущая сессия')
+  expect(
+    screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+  ).not.toBeNull()
+  expect(
+    screen.getByText('Информационная панель').closest('[aria-current="page"]'),
+  ).toBeNull()
+})
+
+it('на вкладке notes активен пункт сессии', async () => {
+  sessionStorage.clear()
+  mockLayoutApi()
+  renderPath('/s/s-1/notes')
+
+  await screen.findByText('Текущая сессия')
+  expect(
+    screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
+  ).not.toBeNull()
+  expect(
+    screen.getByText('Информационная панель').closest('[aria-current="page"]'),
+  ).toBeNull()
+})
+
+it('на /admin активен пункт администрирования', async () => {
+  sessionStorage.clear()
+  mockLayoutApi()
+  // Пункт и страница админки — только для роли admin (см. AppLayout).
+  renderPath('/admin', TEST_ADMIN)
+
+  await screen.findByRole('heading', { name: 'Администрирование' })
+  expect(screen.getByText('Текущая сессия').closest('[aria-current="page"]')).toBeNull()
+  // Подпись есть и в заголовке страницы — пункт меню ищем по ссылке.
+  expect(navItem('Администрирование').closest('[aria-current="page"]')).not.toBeNull()
+})
+
+it('на /knowledge активна только «База знаний»', async () => {
+  sessionStorage.clear()
+  mockLayoutApi()
+  renderPath('/knowledge')
+
+  await screen.findByRole('heading', { name: 'База знаний' })
+  expect(navItem('База знаний').closest('[aria-current="page"]')).not.toBeNull()
+  expect(navItem('Информационная панель').closest('[aria-current="page"]')).toBeNull()
+  expect(navItem('Текущая сессия').closest('[aria-current="page"]')).toBeNull()
+})
+
+describe('переключатель темы', () => {
+  beforeEach(() => {
+    localStorage.clear()
   })
 
-  it('на вкладке notes активен пункт сессии', async () => {
+  it('по умолчанию системная (auto), клик по «Тёмная» пишет localStorage', async () => {
+    const user = userEvent.setup()
     sessionStorage.clear()
     mockLayoutApi()
-    renderPath('/s/s-1/notes')
+    renderPath('/')
 
-    await screen.findByText('Текущая сессия')
+    const control = await screen.findByRole('radiogroup', { name: 'Тема интерфейса' })
+    // по умолчанию auto: активна «Системная»
     expect(
-      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
-    ).not.toBeNull()
+      within(control).getByRole('radio', { name: 'Системная' }),
+    ).toBeChecked()
+
+    await user.click(within(control).getByRole('radio', { name: 'Тёмная' }))
     expect(
-      screen.getByText('Информационная панель').closest('[aria-current="page"]'),
-    ).toBeNull()
+      within(control).getByRole('radio', { name: 'Тёмная' }),
+    ).toBeChecked()
+    // менеджер провайдера сохранил выбор — тема переживёт F5
+    expect(localStorage.getItem('mantine-color-scheme-value')).toBe('dark')
+    // и DOM-атрибут переключён: тёмная палитра активна
+    expect(document.documentElement).toHaveAttribute(
+      'data-mantine-color-scheme',
+      'dark',
+    )
   })
 
-  it('на /admin активен пункт администрирования', async () => {
+  it('выбор «Светлая» после тёмной возвращает light', async () => {
+    const user = userEvent.setup()
     sessionStorage.clear()
     mockLayoutApi()
-    renderPath('/admin')
+    localStorage.setItem('mantine-color-scheme-value', 'dark')
+    renderPath('/')
 
-    await screen.findByRole('heading', { name: 'Администрирование' })
+    const control = await screen.findByRole('radiogroup', { name: 'Тема интерфейса' })
     expect(
-      screen.getByText('Текущая сессия').closest('[aria-current="page"]'),
-    ).toBeNull()
-    expect(
-      screen.getByText('Администрирование').closest('[aria-current="page"]'),
-    ).not.toBeNull()
+      within(control).getByRole('radio', { name: 'Тёмная' }),
+    ).toBeChecked()
+
+    await user.click(within(control).getByRole('radio', { name: 'Светлая' }))
+    expect(localStorage.getItem('mantine-color-scheme-value')).toBe('light')
+    expect(document.documentElement).toHaveAttribute(
+      'data-mantine-color-scheme',
+      'light',
+    )
   })
-
-  it('на /knowledge активна только «База знаний»', async () => {
-    sessionStorage.clear()
-    mockLayoutApi()
-    renderPath('/knowledge')
-
-    await screen.findByRole('heading', { name: 'База знаний' })
-    expect(
-      navItem('База знаний').closest('[aria-current="page"]'),
-    ).not.toBeNull()
-    expect(navItem('Информационная панель').closest('[aria-current="page"]')).toBeNull()
-    expect(navItem('Текущая сессия').closest('[aria-current="page"]')).toBeNull()
-  })
+})

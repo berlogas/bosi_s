@@ -18,7 +18,13 @@ const HEALTH = {
   build: { build: 'e2e', commit: null, built_at: null, ui: null },
 }
 
-const USER = { username: 'admin', role: 'admin', display_name: 'Admin' }
+const USER = {
+  id: 'u-1',
+  username: 'admin',
+  full_name: 'Admin',
+  role: 'admin',
+  is_active: true,
+}
 
 const SESSION = {
   id: 's-1',

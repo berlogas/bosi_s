@@ -54,7 +54,13 @@ const detail = {
   recent_documents: [],
 }
 
-const USER = { username: 'admin', role: 'admin', display_name: 'Admin' }
+const USER = {
+  id: 'u-1',
+  username: 'admin',
+  full_name: 'Admin',
+  role: 'admin',
+  is_active: true,
+}
 
 type Route = { status?: number; body: unknown | (() => unknown) }
 

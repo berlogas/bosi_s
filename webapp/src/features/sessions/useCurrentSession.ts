@@ -9,42 +9,32 @@
  * Поэтому последняя открытая сессия запоминается отдельно от адреса.
  * Хранилище — `sessionStorage`, а не `localStorage`: сессия работы не должна
  * переживать закрытие вкладки, и на общей машине чужие следы не остаются.
+ * Внутри значения лежит id пользователя (см. `lastSession.ts`): сессия одного
+ * не подставляется другому, кто зашёл в ту же вкладку.
  */
 
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
-const STORAGE_KEY = 'boasi.lastSessionPath'
-
-/** Прочитать запомненную сессию: значение проверяется, а не берётся как есть. */
-export function readLastSessionPath(): string | null {
-  try {
-    const stored = window.sessionStorage.getItem(STORAGE_KEY)
-    return stored && /^\/s\/[^/]+$/.test(stored) ? stored : null
-  } catch {
-    // приватный режим браузера и отключённое хранилище: пункт останется
-    // серым, но приложение работает
-    return null
-  }
-}
+import { useAuth } from '../auth/authStore'
+import { readLastSessionPath, saveLastSessionPath } from './lastSession'
 
 export function useCurrentSessionPath(): string | null {
   const location = useLocation()
+  const userId = useAuth((state) => state.user?.id ?? null)
   const fromUrl = /^\/s\/[^/]+/.exec(location.pathname)?.[0] ?? null
-  const [lastPath, setLastPath] = useState<string | null>(readLastSessionPath)
+  const [lastPath, setLastPath] = useState<string | null>(() =>
+    readLastSessionPath(userId),
+  )
 
   useEffect(() => {
     if (fromUrl) {
       setLastPath(fromUrl)
-      try {
-        window.sessionStorage.setItem(STORAGE_KEY, fromUrl)
-      } catch {
-        // хранилище недоступно — пункт просто не переживёт перезагрузку
-      }
+      saveLastSessionPath(fromUrl, userId)
       return
     }
-    setLastPath(readLastSessionPath())
-  }, [fromUrl, location.pathname])
+    setLastPath(readLastSessionPath(userId))
+  }, [fromUrl, location.pathname, userId])
 
   return fromUrl ?? lastPath
 }

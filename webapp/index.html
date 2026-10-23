@@ -4,7 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>boasi_s</title>
+    <script>
+      // Тема до первого кадра: иначе после F5 светлая страница вспыхивает
+      // до смены на тёмную. Ключ синхронизирован с useColorSchemeStore
+      // (mantine/hooks createThemeStore использует `mantine-color-scheme-value`).
+      try {
+        var stored = localStorage.getItem('mantine-color-scheme-value')
+        var scheme =
+          stored === 'light' || stored === 'dark'
+            ? stored
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+        document.documentElement.setAttribute('data-mantine-color-scheme', scheme)
+      } catch (e) {
+        /* приватный режим: остаёмся в светлой */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

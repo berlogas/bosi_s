@@ -11,6 +11,7 @@ import { create } from 'zustand'
 import { client } from '../../api/client'
 import type { components } from '../../api/schema'
 import { hasStoredSession } from '../../api/tokens'
+import { clearLastSessionPath } from '../sessions/lastSession'
 
 type User = components['schemas']['UserOut']
 
@@ -33,7 +34,26 @@ interface AuthState {
 /** Единоразовость bootstrap: StrictMode в dev зовёт эффект дважды. */
 let bootstrapStarted = false
 
-export const useAuth = create<AuthState>((set) => ({
+/**
+ * Сброс пользовательских кэшей при смене входа.
+ *
+ * Кэш запросов не привязан к пользователю (ключи вроде `['sessions']`):
+ * без сброса следующий вошедший в ту же вкладку видел данные предыдущего —
+ * дашборд грузился из памяти до истечения `staleTime`. Регистрирует его
+ * провайдеры (`AppProviders`): сам store про QueryClient не знает.
+ */
+type IdentityReset = () => void
+let resetIdentityCaches: IdentityReset | null = null
+
+/** Зарегистрировать сброс кэшей; возвращает функцию отписки. */
+export function setIdentityCacheReset(reset: IdentityReset): () => void {
+  resetIdentityCaches = reset
+  return () => {
+    if (resetIdentityCaches === reset) resetIdentityCaches = null
+  }
+}
+
+export const useAuth = create<AuthState>((set, get) => ({
   user: null,
   status: 'boot',
   loginError: null,
@@ -59,6 +79,9 @@ export const useAuth = create<AuthState>((set) => ({
     set({ loginBusy: true, loginError: null })
     try {
       const user = await client.login(username, password)
+      // Чистим кэш до смены состояния: дашборд нового пользователя не должен
+      // ни на кадр показать данные предыдущего.
+      if (get().user?.id !== user.id) resetIdentityCaches?.()
       set({ user, status: 'authenticated', loginBusy: false, loginError: null })
       return true
     } catch (cause) {
@@ -71,10 +94,16 @@ export const useAuth = create<AuthState>((set) => ({
 
   async logout() {
     await client.logout()
+    // Запомненная сессия принадлежала ушедшему: в той же вкладке её нельзя
+    // предлагать следующему пользователю.
+    clearLastSessionPath()
+    resetIdentityCaches?.()
     set({ user: null, status: 'anonymous', loginError: null })
   },
 
   dropSession() {
+    clearLastSessionPath()
+    resetIdentityCaches?.()
     set({
       user: null,
       status: 'anonymous',

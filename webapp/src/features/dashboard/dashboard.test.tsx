@@ -22,6 +22,8 @@ import {
   mockApi,
   resetAuth,
   TEST_ADMIN,
+  TEST_OTHER_USER,
+  TEST_USER,
 } from '../../test/helpers'
 
 const SESSION = {
@@ -647,6 +649,60 @@ describe('дашборд: SSE-подписка на задачи', () => {
   })
 })
 
+describe('дашборд: SSE и параллельные задачи', () => {
+  it('две задачи параллельно: завершение одной не закрывает канал и не теряет вторую', async () => {
+    loginAs()
+    const sources = captureEventSourceInstances()
+    const parallel1 = { ...ACTIVE_TASK, id: 't-1', title: 'Первая задача' }
+    const parallel2 = { ...ACTIVE_TASK, id: 't-2', title: 'Вторая задача' }
+    // Серверный список — то, что вернёт GET /api/tasks (он же источник
+    // для опроса-страховки).
+    let serverTasks: unknown[] = [parallel1, parallel2]
+    mockApi({
+      'GET /api/sessions': [],
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': () => json({ tasks: serverTasks, active: serverTasks.length }),
+    })
+
+    renderApp()
+
+    // У running-задачи заголовок живёт в aria-label прогресс-бара, а не в
+    // тексте (текст — этап и проценты).
+    expect(await screen.findByLabelText('Первая задача: 55%')).toBeInTheDocument()
+    expect(screen.getByLabelText('Вторая задача: 55%')).toBeInTheDocument()
+
+    await waitFor(() => expect(sources).toHaveLength(1))
+    const source = sources[0]!
+
+    // Первая задача завершилась: из активных ушла, вторая жива, канал общий
+    // и потому не закрыт.
+    serverTasks = [parallel2]
+    act(() =>
+      source.emit({
+        ...parallel1,
+        status: 'done',
+        progress: 100,
+        step: null,
+        finished_at: '2026-10-07T09:05:00+00:00',
+      }),
+    )
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Первая задача: 55%')).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByText('Первая задача')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Вторая задача: 55%')).toBeInTheDocument()
+    expect(source.closed).toBe(false)
+
+    // Вторая задача продолжает приходить по тому же потоку.
+    const updated = { ...parallel2, step: 'разбор PDF', progress: 20 }
+    serverTasks = [updated]
+    act(() => source.emit(updated))
+    expect(await screen.findByLabelText('Вторая задача: 20%')).toBeInTheDocument()
+    expect(screen.getByText(/разбор PDF/)).toBeInTheDocument()
+    expect(source.closed).toBe(false)
+  })
+})
+
 describe('дашборд: быстрый чат', () => {
   /** Задача быстрого вопроса: kind=chat, сессии нет — работа по глобальной базе. */
   const quickTask = (patch: Record<string, unknown> = {}) => ({
@@ -1052,3 +1108,60 @@ function findPost(calls: { url: string; init: RequestInit }[], path: string) {
       (call.init.method ?? 'GET').toUpperCase() === 'POST' && call.url.includes(path),
   )
 }
+
+describe('смена пользователя в одной вкладке', () => {
+  it('дашборд второго пользователя не показывает сессии первого', async () => {
+    const sessionsByUser: Record<string, unknown[]> = {
+      [TEST_USER.id]: [{ ...SESSION, title: 'Сессия Иванова' }],
+      [TEST_OTHER_USER.id]: [
+        { ...SESSION, id: 's-9', user_id: TEST_OTHER_USER.id, title: 'Сессия Петрова' },
+      ],
+    }
+    let currentUserId = TEST_USER.id
+
+    const queryClient = new QueryClient({
+      // как в бою: свежие данные не перезапрашиваются — без сброса кэша
+      // второй пользователь увидел бы список первого
+      defaultOptions: {
+        queries: { retry: false, gcTime: 5 * 60_000, staleTime: 30_000 },
+      },
+    })
+
+    mockApi({
+      'POST /api/auth/login': (_url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body)) as { username: string }
+        const user = body.username === 'petrov' ? TEST_OTHER_USER : TEST_USER
+        currentUserId = user.id
+        return json({
+          tokens: { access_token: 'access', refresh_token: 'refresh' },
+          user,
+        })
+      },
+      'POST /api/auth/logout': new Response(null, { status: 204 }),
+      'GET /api/sessions': () => json(sessionsByUser[currentUserId]),
+      'GET /api/health': HEALTH,
+      'GET /api/tasks': { tasks: [], active: 0 },
+    })
+
+    render(
+      <AppProviders initialPath="/login" queryClient={queryClient}>
+        <AppRoutes />
+      </AppProviders>,
+    )
+
+    await userEvent.type(await screen.findByLabelText('Логин'), 'ivanov')
+    await userEvent.type(screen.getByLabelText('Пароль'), 'secret')
+    await userEvent.click(screen.getByRole('button', { name: 'Войти' }))
+    expect(await screen.findByText('Сессия Иванова')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Выйти' }))
+    await screen.findByText('Вход в boasi_s')
+
+    await userEvent.type(screen.getByLabelText('Логин'), 'petrov')
+    await userEvent.type(screen.getByLabelText('Пароль'), 'secret')
+    await userEvent.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByText('Сессия Петрова')).toBeInTheDocument()
+    expect(screen.queryByText('Сессия Иванова')).toBeNull()
+  })
+})

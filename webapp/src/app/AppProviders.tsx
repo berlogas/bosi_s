@@ -3,11 +3,26 @@
  * чтобы тесты рендерили ровно то же дерево, что видит пользователь.
  */
 
-import { MantineProvider } from '@mantine/core'
+import {
+  localStorageColorSchemeManager,
+  MantineProvider,
+} from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { BrowserRouter, MemoryRouter } from 'react-router-dom'
+
+import { setIdentityCacheReset } from '../features/auth/authStore'
+
+/**
+ * Кэш запросов общий для всех пользователей вкладки. При смене входа
+ * auth-store зовёт этот сброс — иначе новый пользователь видит дашборд
+ * предыдущего до истечения `staleTime`.
+ */
+function IdentityCacheReset({ queryClient }: { queryClient: QueryClient }) {
+  useEffect(() => setIdentityCacheReset(() => queryClient.clear()), [queryClient])
+  return null
+}
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -41,9 +56,17 @@ export function AppProviders({
     )
 
   return (
-    <MantineProvider defaultColorScheme="light">
+    <MantineProvider
+      defaultColorScheme="auto"
+      colorSchemeManager={localStorageColorSchemeManager({
+        key: 'mantine-color-scheme-value',
+      })}
+    >
       <Notifications position="top-right" />
-      <QueryClientProvider client={queryClient}>{router}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <IdentityCacheReset queryClient={queryClient} />
+        {router}
+      </QueryClientProvider>
     </MantineProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Request } from '@playwright/test'
 
 /**
  * Приёмка Фазы 2: чат сессии.
@@ -18,7 +18,25 @@ const HEALTH = {
   build: { build: 'e2e', commit: null, built_at: null, ui: null },
 }
 
-const USER = { username: 'admin', role: 'admin', display_name: 'Admin' }
+// Форма UserOut: `id` нужен приложению (в том числе чтобы запомненная
+// сессия не досталась другому пользователю), `full_name` — вместо
+// `display_name`, которого в контракте нет.
+const USER = {
+  id: 'u-1',
+  username: 'admin',
+  full_name: 'Admin',
+  role: 'admin',
+  is_active: true,
+}
+
+/** Второй пользователь: заходит в ту же вкладку после выхода первого. */
+const OTHER_USER = {
+  id: 'u-2',
+  username: 'petrov',
+  full_name: 'Petrov',
+  role: 'researcher',
+  is_active: true,
+}
 
 const SESSION = {
   id: 's-1',
@@ -66,7 +84,7 @@ const SOURCE = {
 
 type Route = {
   status?: number
-  body: unknown | (() => unknown) | ((url: URL) => unknown)
+  body: unknown | (() => unknown) | ((url: URL, req: Request) => unknown)
 }
 
 async function mockApi(
@@ -86,14 +104,22 @@ async function mockApi(
       },
     },
     'POST /api/auth/login': {
-      body: {
-        user: USER,
-        tokens: {
-          access_token: 'e2e-access',
-          refresh_token: 'e2e-refresh',
-          expires_in: 900,
-          refresh_expires_in: 86400,
-        },
+      body: (_url: URL, req: Request) => {
+        // логин приходит в теле запроса: отвечаем тем пользователем, чьё
+        // имя запросили
+        const payload = JSON.parse(req.postData() ?? '{}') as {
+          username?: string
+        }
+        const user = payload.username === 'petrov' ? OTHER_USER : USER
+        return {
+          user,
+          tokens: {
+            access_token: 'e2e-access',
+            refresh_token: 'e2e-refresh',
+            expires_in: 900,
+            refresh_expires_in: 86400,
+          },
+        }
       },
     },
     'GET /api/sessions': { body: [SESSION] },
@@ -124,7 +150,7 @@ async function mockApi(
       }
       const raw =
         typeof handler.body === 'function'
-          ? (handler.body as (u: URL) => unknown)(url)
+          ? (handler.body as (u: URL, r: Request) => unknown)(url, req)
           : handler.body
       await route.fulfill({
         status: handler.status ?? 200,
@@ -343,6 +369,9 @@ test('выход в меню не гасит пункт «Текущая сес�
     hasText: 'Текущая сессия',
   })
   await expect(sessionItem).not.toHaveAttribute('data-disabled', 'true')
+  // пункт — настоящая ссылка: иначе Tab мимо, Ctrl-клик и «открыть в новой
+  // вкладке» не работают
+  await expect(sessionItem).toHaveAttribute('href', '/s/s-1')
 
   // выход в меню: пункт обязан остаться доступным
   await page
@@ -357,4 +386,46 @@ test('выход в меню не гасит пункт «Текущая сес�
   await sessionItem.click()
   await expect(page).toHaveURL(/\/s\/s-1\/chat$/)
   await expect(page.getByLabel('Ваш вопрос')).toBeVisible()
+})
+
+test('после выхода сессия не достаётся следующему пользователю вкладки', async ({
+  page,
+}) => {
+  const { requestLog } = await mockApi(page, {
+    'POST /api/auth/logout': { body: null },
+  })
+  await login(page)
+  await openChat(page)
+
+  // сессия открыта — пункт активен
+  const sessionItem = page.locator('.mantine-NavLink-root', {
+    hasText: 'Текущая сессия',
+  })
+  await expect(sessionItem).not.toHaveAttribute('data-disabled', 'true')
+
+  // выход из аккаунта
+  await page.getByRole('button', { name: 'Выйти' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+
+  // вкладка не должна хранить сессию ушедшего
+  expect(
+    await page.evaluate(() => window.sessionStorage.getItem('boasi.lastSessionPath')),
+  ).toBeNull()
+
+  // следующий пользователь заходит в ту же вкладку
+  await page.getByLabel('Логин').fill('petrov')
+  await page.getByLabel('Пароль').fill('petrov')
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page).toHaveURL(/\/$/)
+
+  // пункт серый: чужая сессия предлагаться не должна
+  await expect(sessionItem).toHaveAttribute('data-disabled', 'true')
+
+  // и клик по нему ничего не открывает
+  const mark = requestLog.length
+  await sessionItem.click({ force: true })
+  await expect(page).toHaveURL(/\/$/)
+  expect(
+    requestLog.slice(mark).filter((line) => line.includes('/api/sessions/s-1')),
+  ).toEqual([])
 })

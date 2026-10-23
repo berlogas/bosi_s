@@ -66,7 +66,7 @@ export function SourceList({
             size="xs"
             key={`${source.index}-${source.dockey ?? label}`}
             data-src={source.index}
-            bg={active ? 'yellow.2' : undefined}
+            bg={active ? 'var(--mantine-color-yellow-light)' : undefined}
             px={active ? 4 : undefined}
             style={{ cursor: onHighlight ? 'pointer' : undefined, borderRadius: 4 }}
             onClick={

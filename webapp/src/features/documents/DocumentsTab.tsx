@@ -208,12 +208,12 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         data-testid="doc-dropzone"
         aria-disabled={readOnly}
         style={{
-          border: `2px dashed ${dragOver ? 'var(--mantine-color-blue-4)' : 'var(--mantine-color-default-border)'}`,
+          border: `2px dashed ${dragOver ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-default-border)'}`,
           borderRadius: 'var(--mantine-radius-md)',
           padding: 'var(--mantine-spacing-md)',
           textAlign: 'center',
           cursor: readOnly ? 'not-allowed' : 'pointer',
-          background: dragOver ? 'var(--mantine-color-blue-light)' : undefined,
+          background: dragOver ? 'var(--mantine-color-blue-light)' : undefined, // светло-синяя подложка, темнеет в dark
           opacity: readOnly ? 0.6 : 1,
         }}
       >

@@ -30,7 +30,7 @@ export function ChatBubble({
       ref={ref}
       withBorder
       p="sm"
-      bg={isUser ? 'gray.0' : undefined}
+      bg={isUser ? 'var(--mantine-color-gray-light)' : undefined}
       data-testid="chat-bubble"
     >
       <Group gap="xs" align="center" wrap="nowrap">

@@ -58,6 +58,8 @@ export function AppRoutes() {
             который не может её наполнять (наполняет администратор) */}
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/admin" element={<AdminPage />} />
+        {/* вкладка админки — в адресе: F5 и ссылки сохраняют её */}
+        <Route path="/admin/:tab" element={<AdminPage />} />
         <Route path="/s/:sessionId" element={<SessionPage />}>
           {/* без вкладки — на чат (у Streamlit это был active_tab) */}
           <Route index element={<Navigate to="chat" replace />} />

@@ -21,13 +21,15 @@ import {
   NavLink,
   Popover,
   ScrollArea,
+  SegmentedControl,
   Stack,
   Text,
   Title,
+  useMantineColorScheme,
 } from '@mantine/core'
 import { Suspense, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { client } from '../../api/client'
 import { RouteErrorBoundary } from '../../components/RouteErrorBoundary'
@@ -82,6 +84,36 @@ function SystemStatus() {
 export function isNavItemActive(pathname: string, to: string): boolean {
   if (to === '/') return pathname === '/'
   return pathname === to || pathname.startsWith(`${to}/`)
+}
+
+/**
+ * Переключатель темы: светлая / системная / тёмная.
+ *
+ * `setColorScheme('auto')` — «Системная»: тема следует за настройками ОС,
+ * пока пользователь не выбрал явно. Менеджер провайдера
+ * (localStorageColorSchemeManager) сохраняет выбор — тема живёт до F5,
+ * а inline-скрипт в index.html применяет её до первого кадра, без вспышки.
+ */
+function ThemeSwitch() {
+  const { colorScheme, setColorScheme } = useMantineColorScheme()
+  return (
+    <Group gap={4} mb="xs" wrap="nowrap">
+      <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+        Тема:
+      </Text>
+      <SegmentedControl
+        size="xs"
+        aria-label="Тема интерфейса"
+        value={colorScheme}
+        onChange={setColorScheme}
+        data={[
+          { value: 'light', label: 'Светлая' },
+          { value: 'auto', label: 'Системная' },
+          { value: 'dark', label: 'Тёмная' },
+        ]}
+      />
+    </Group>
+  )
 }
 
 export function AppLayout() {
@@ -167,18 +199,33 @@ export function AppLayout() {
                   // была бы активна везде.
                   const active =
                     item.enabled && isNavItemActive(location.pathname, item.to)
+
+                  // Включённый пункт — настоящая ссылка: Mantine NavLink сам
+                  // рендерит `<a>`, но без `href` он не фокусируется с
+                  // клавиатуры и не даёт Ctrl-клик/«открыть в новой вкладке».
+                  // Поэтому `component={Link}`: адрес настоящий, активность
+                  // по-прежнему из предиката (`NavLink` из Mantine про роутер
+                  // не знает). Выключенному пункту `to` не нужен — он остаётся
+                  // неинтерактивным.
+                  if (!item.enabled) {
+                    return (
+                      <NavLink
+                        key={item.label}
+                        label={item.label}
+                        disabled
+                        aria-current={undefined}
+                      />
+                    )
+                  }
                   return (
                     <NavLink
                       key={item.label}
+                      component={Link}
+                      to={item.to}
                       label={item.label}
-                      disabled={!item.enabled}
                       active={active}
                       aria-current={active ? 'page' : undefined}
-                      onClick={() => {
-                        if (!item.enabled) return
-                        setNavOpened(false)
-                        navigate(item.to)
-                      }}
+                      onClick={() => setNavOpened(false)}
                     />
                   )
                 })}
@@ -189,6 +236,7 @@ export function AppLayout() {
               <Text size="xs" c="dimmed" mb={4}>
                 👤 {displayName(user)} · {roleLabel(user.role)}
               </Text>
+              <ThemeSwitch />
               <Button
                 variant="light"
                 fullWidth

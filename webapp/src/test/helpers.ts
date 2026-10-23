@@ -21,6 +21,16 @@ export const TEST_ADMIN = {
   is_active: true,
 }
 
+/** Второй пользователь: проверки, где важно, чья это вкладка. */
+export const TEST_OTHER_USER = {
+  id: 'u-2',
+  username: 'petrov',
+  role: 'researcher' as const,
+  is_active: true,
+}
+
+export type TestUser = typeof TEST_USER | typeof TEST_ADMIN | typeof TEST_OTHER_USER
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -29,7 +39,7 @@ export function json(body: unknown, status = 200): Response {
 }
 
 /** Войти без сети: напрямую положить состояние auth-store и токены. */
-export function loginAs(user: typeof TEST_USER | typeof TEST_ADMIN = TEST_USER): void {
+export function loginAs(user: TestUser = TEST_USER): void {
   tokens.setPair('test-access', 'test-refresh')
   useAuth.setState({
     user,

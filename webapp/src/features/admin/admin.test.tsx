@@ -240,6 +240,45 @@ describe('админка', () => {
     expect(screen.queryByRole('tab', { name: 'Пользователи' })).toBeNull()
   })
 
+  it('вкладка берётся из адреса: /admin/audit открывается после F5', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminRoutes())
+
+    renderApp('/admin/audit')
+
+    expect(await screen.findByRole('tab', { name: 'Аудит' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(
+      await screen.findByRole('combobox', { name: 'Фильтр: период журнала' }),
+    ).toBeVisible()
+  })
+
+  it('/admin/base открывает «Глобальную базу» — цель кнопки «Управлять базой»', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminRoutes())
+
+    renderApp('/admin/base')
+
+    expect(
+      await screen.findByRole('tab', { name: 'Глобальная база' }),
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByLabelText('Путь к файлу')).toBeVisible()
+  })
+
+  it('неизвестная вкладка в адресе → «Пользователи»', async () => {
+    loginAs(TEST_ADMIN)
+    mockApi(adminRoutes())
+
+    renderApp('/admin/nope')
+
+    expect(await screen.findByRole('tab', { name: 'Пользователи' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
   it('вкладки по умолчанию: пользователи с ролями и ФИО', async () => {
     loginAs(TEST_ADMIN)
     mockApi(adminRoutes())

@@ -18,8 +18,23 @@ const HEALTH = {
   build: { build: 'e2e', commit: null, built_at: null, ui: null },
 }
 
-const ADMIN = { username: 'admin', role: 'admin', display_name: 'Admin' }
-const RESEARCHER = { username: 'user', role: 'researcher', display_name: 'User' }
+// Форма UserOut: `id` нужен приложению (в том числе чтобы запомненная
+// сессия не досталась другому пользователю), `full_name` — вместо
+// `display_name`, которого в контракте нет.
+const ADMIN = {
+  id: 'u-1',
+  username: 'admin',
+  full_name: 'Admin',
+  role: 'admin',
+  is_active: true,
+}
+const RESEARCHER = {
+  id: 'u-2',
+  username: 'user',
+  full_name: 'User',
+  role: 'researcher',
+  is_active: true,
+}
 
 type Body = unknown | (() => unknown)
 type Route = { status?: number; body: Body }

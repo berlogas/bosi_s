@@ -30,7 +30,7 @@ import {
   Title,
 } from '@mantine/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { client } from '../../api/client'
 import type { InboxRun } from '../../api/client'
@@ -1677,8 +1677,20 @@ function MaintenanceTab() {
 
 // ------------------------------------------------------------------------ page
 
+const TAB_IDS = ['users', 'base', 'tasks', 'sessions', 'audit', 'service'] as const
+
+/** Вкладка из адреса: `/admin/audit` → «Аудит»; неизвестный сегмент → «Пользователи». */
+function tabFromParam(value: string | undefined): (typeof TAB_IDS)[number] {
+  return TAB_IDS.includes(value as (typeof TAB_IDS)[number])
+    ? (value as (typeof TAB_IDS)[number])
+    : 'users'
+}
+
 export function AdminPage() {
   const role = useAuth((state) => state.user?.role)
+  const { tab: tabParam } = useParams()
+  const navigate = useNavigate()
+  const tab = tabFromParam(tabParam)
 
   if (role !== 'admin') {
     return (
@@ -1691,7 +1703,7 @@ export function AdminPage() {
   return (
     <Stack gap="md">
       <Title order={3}>Администрирование</Title>
-      <Tabs defaultValue="users">
+      <Tabs value={tab} onChange={(value) => value && navigate(`/admin/${value}`)}>
         <Tabs.List>
           <Tabs.Tab value="users">Пользователи</Tabs.Tab>
           <Tabs.Tab value="base">Глобальная база</Tabs.Tab>

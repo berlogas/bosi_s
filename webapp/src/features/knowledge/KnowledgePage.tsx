@@ -82,7 +82,7 @@ export function KnowledgePage() {
           </Text>
         </Stack>
         {user?.role === 'admin' && (
-          <Button variant="light" onClick={() => navigate('/admin')}>
+          <Button variant="light" onClick={() => navigate('/admin/base')}>
             Управлять базой
           </Button>
         )}

@@ -144,21 +144,15 @@ describe('вход в приложение', () => {
     expect(screen.getByText('Вход в boasi_s')).toBeInTheDocument()
   })
 
-  it('CLI-команды спрятаны под «Для администратора»', async () => {
+  it('на экране входа нет команд для администратора', async () => {
     vi.stubGlobal('fetch', vi.fn())
     renderApp()
     await screen.findByText('Вход в boasi_s')
 
     expect(screen.getByText(/обратитесь к администратору/)).toBeInTheDocument()
-    const control = screen.getByRole('button', { name: 'Для администратора' })
-    expect(control).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByText(/1\. Создать администратора/)).not.toBeVisible()
-
-    await userEvent.click(control)
-    expect(control).toHaveAttribute('aria-expanded', 'true')
-    await waitFor(() =>
-      expect(screen.getByText(/1\. Создать администратора/)).toBeVisible(),
-    )
+    // команды (`start.sh admin|password|users`) живут в docs/ADMIN_GUIDE.md
+    expect(screen.queryByText(/start\.sh/)).toBeNull()
+    expect(screen.queryByText(/Для администратора/)).toBeNull()
   })
 
   it('пустая форма → подсказка, без сетевых запросов', async () => {

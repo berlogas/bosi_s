@@ -51,7 +51,7 @@ export function TaskPanel({
   const total = fmtSeconds(task.seconds != null ? task.seconds + drift : task.seconds)
 
   return (
-    <Stack gap="xs" py="xs">
+    <Stack gap="xs" py="xs" aria-busy={running ? 'true' : undefined}>
       <Group align="flex-start" wrap="nowrap">
         <Box style={{ flex: 1 }}>
           {running ? (

@@ -6,6 +6,7 @@
  */
 
 import type { QueryClient } from '@tanstack/react-query'
+import type { UseMutationOptions } from '@tanstack/react-query'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
@@ -85,7 +86,10 @@ export function useChatSync(sessionId: string) {
 }
 
 /** Удаление пары «вопрос + ответ» (сервер удаляет оба). */
-export function useDeleteMessage(sessionId: string) {
+export function useDeleteMessage(
+  sessionId: string,
+  options?: UseMutationOptions<unknown, Error, string, { previous?: unknown }>,
+) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (messageId: string) => client.deleteMessage(messageId),
@@ -97,6 +101,7 @@ export function useDeleteMessage(sessionId: string) {
         queryKey: queryKeys.sessionDetail(sessionId),
       })
     },
+    ...options,
   })
 }
 

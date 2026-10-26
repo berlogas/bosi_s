@@ -16,21 +16,22 @@ import {
   Badge,
   Button,
   Group,
-  Paper,
   Select,
   Stack,
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core'
 import { useDebouncedValue } from '@mantine/hooks'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { categoryLabel } from '../../lib/format'
 import { useAuth } from '../auth/authStore'
 import { useKnowledgeDocuments, useKnowledgeStats } from './queries'
+import { EmptyState } from '../../components/EmptyState'
+import { PageHeader } from '../../components/PageHeader'
+import { SkeletonList } from '../../components/SkeletonList'
+import { StatusBadge } from '../../components/StatusBadge'
 
 /** Категории глобальной базы: те же, что и в админском списке. */
 const CATEGORIES = [
@@ -45,12 +46,6 @@ const CATEGORY_OPTIONS = [
   ...CATEGORIES.map((value) => ({ value, label: categoryLabel(value) })),
 ]
 
-const STATUS_LABELS: Record<string, string> = {
-  ready: 'готов',
-  pending: 'в обработке',
-  error: 'ошибка',
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} Б`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
@@ -61,32 +56,37 @@ function formatBytes(bytes: number): string {
 export function KnowledgePage() {
   const user = useAuth((state) => state.user)
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
-  const [category, setCategory] = useState<string | null>(null)
 
-  // Поиск по подстроке уходит на сервер: база может быть большой, а фильтра
-  // на клиенте нет. Debounce, а не кнопка: категория применяется сразу, и
-  // поиск по Enter вёл бы себя иначе — теперь обе фильтрации живые.
-  const [search] = useDebouncedValue(query.trim(), 300)
-  const documents = useKnowledgeDocuments(search, category)
+  // Фильтры живут в URL (план Волны 2, п. 7): ссылка shareable, F5 ничего
+  // не сбрасывает. Debounce остаётся — URL меняется сразу, запрос через 300 мс.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const search = searchParams.get('q') ?? ''
+  const category = searchParams.get('category') ?? ''
+
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setSearchParams(next, { replace: true })
+  }
+
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300)
+  const documents = useKnowledgeDocuments(debouncedSearch, category || null)
   const stats = useKnowledgeStats()
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <Stack gap={2}>
-          <Title order={3}>База знаний</Title>
-          <Text size="sm" c="dimmed">
-            Общие документы, по которым ищет система. Наполняет базу администратор;
-            здесь список для чтения.
-          </Text>
-        </Stack>
-        {user?.role === 'admin' && (
-          <Button variant="light" onClick={() => navigate('/admin/base')}>
-            Управлять базой
-          </Button>
-        )}
-      </Group>
+      <PageHeader
+        title="База знаний"
+        description="Общие документы, по которым ищет система. Наполняет базу администратор; здесь список для чтения."
+        actions={
+          user?.role === 'admin' ? (
+            <Button variant="light" onClick={() => navigate('/admin/base')}>
+              Управлять базой
+            </Button>
+          ) : undefined
+        }
+      />
 
       {stats.data && (
         <Group gap="xs">
@@ -103,40 +103,54 @@ export function KnowledgePage() {
         <TextInput
           label="Поиск по базе"
           placeholder="название, имя файла или метка"
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
+          value={search}
+          onChange={(event) => setFilter('q', event.currentTarget.value.trim())}
           style={{ flex: 1 }}
         />
         <Select
           label="Категория"
           data={CATEGORY_OPTIONS}
           value={category}
-          onChange={setCategory}
+          onChange={(value) => setFilter('category', value ?? '')}
           allowDeselect={false}
           w={240}
         />
       </Group>
 
       {documents.isError && (
-        <Alert color="red" role="alert" title="Не удалось загрузить список">
+        <Alert color="error" role="alert" title="Не удалось загрузить список">
           {documents.error instanceof Error
             ? documents.error.message
             : 'Неизвестная ошибка запроса'}
         </Alert>
       )}
 
-      {documents.data && documents.data.length === 0 && (
-        <Paper withBorder p="md">
-          <Text c="dimmed" size="sm">
-            {search || category
-              ? 'Ничего не нашлось. Попробуйте другое слово или снимите фильтр по категории.'
-              : 'База пока пуста. Наполняет её администратор.'}
-          </Text>
-        </Paper>
-      )}
+      {documents.isPending ? (
+        <SkeletonList count={6} />
+      ) : documents.data && documents.data.length === 0 ? (
+        <EmptyState
+          title={search || category ? 'Ничего не нашлось.' : 'База пока пуста.'}
+          description={
+            search || category
+              ? 'Попробуйте другое слово или снимите фильтр.'
+              : 'Наполняет её администратор.'
+          }
+          action={
+            search || category ? (
+              <Button
+                variant="subtle"
+                size="xs"
+                onClick={() => setSearchParams({}, { replace: true })}
+              >
+                Сбросить фильтр
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
 
       {documents.data && documents.data.length > 0 && (
-        <Paper withBorder>
+        <Table.ScrollContainer minWidth={640} type="native">
           <Table highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -163,18 +177,10 @@ export function KnowledgePage() {
                     <Text size="sm">{categoryLabel(document.category)}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Badge
-                      size="sm"
-                      color={
-                        document.status === 'ready'
-                          ? 'green'
-                          : document.status === 'error'
-                            ? 'red'
-                            : 'yellow'
-                      }
-                    >
-                      {STATUS_LABELS[document.status ?? ''] ?? document.status ?? '—'}
-                    </Badge>
+                    <StatusBadge
+                      kind="document"
+                      status={document.status ?? undefined}
+                    />
                   </Table.Td>
                   <Table.Td>{document.chunk_count}</Table.Td>
                   <Table.Td>{formatBytes(document.size_bytes)}</Table.Td>
@@ -187,7 +193,7 @@ export function KnowledgePage() {
               ))}
             </Table.Tbody>
           </Table>
-        </Paper>
+        </Table.ScrollContainer>
       )}
     </Stack>
   )

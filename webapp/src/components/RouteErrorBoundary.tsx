@@ -49,7 +49,7 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
       <Center mih="40vh">
         <Stack gap="sm" maw={640}>
           <Title order={3}>Что-то сломалось</Title>
-          <Alert color="red" role="alert">
+          <Alert color="error" role="alert">
             {error.message || 'Неизвестная ошибка'}
           </Alert>
           <Group>

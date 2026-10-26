@@ -138,7 +138,7 @@ export function useResumeSession() {
           data.restored_documents > 0
             ? `Восстановлено документов: ${data.restored_documents}`
             : 'Можно продолжать работу',
-        color: 'green',
+        color: 'success',
       })
     },
   })

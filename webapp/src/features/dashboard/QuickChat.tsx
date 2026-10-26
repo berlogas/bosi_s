@@ -109,7 +109,7 @@ function Bubble({
             {entry.content}
           </Text>
         ) : entry.error ? (
-          <Alert color="red" role="alert">
+          <Alert color="error" role="alert">
             {entry.error}
           </Alert>
         ) : (
@@ -260,7 +260,7 @@ export function QuickChat() {
             <Button
               size="xs"
               variant="subtle"
-              color="red"
+              color="error"
               leftSection="🗑"
               onClick={() => setClearAsk(true)}
             >
@@ -270,7 +270,7 @@ export function QuickChat() {
         </Group>
 
         {past.isError && (
-          <Alert color="yellow" role="alert">
+          <Alert color="warning" role="alert">
             История быстрых вопросов не загрузилась:{' '}
             {past.error instanceof Error ? past.error.message : 'ошибка запроса'}
           </Alert>
@@ -391,7 +391,7 @@ export function QuickChat() {
               Удалить всю историю быстрых вопросов? Отменить будет нельзя.
             </Text>
             {clearError && (
-              <Alert color="red" role="alert">
+              <Alert color="error" role="alert">
                 {clearError}
               </Alert>
             )}
@@ -400,7 +400,7 @@ export function QuickChat() {
                 Отмена
               </Button>
               <Button
-                color="red"
+                color="error"
                 loading={clearQuick.isPending}
                 onClick={handleClearConfirm}
               >

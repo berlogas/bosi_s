@@ -116,12 +116,12 @@ function CreateUser() {
           >
             <Stack gap="sm">
               {create.isError && (
-                <Alert color="red" role="alert">
+                <Alert color="error" role="alert">
                   {errorText(create.error, 'Ошибка запроса')}
                 </Alert>
               )}
               {done && (
-                <Alert color="green" role="status">
+                <Alert color="success" role="status">
                   Пользователь создан.
                 </Alert>
               )}
@@ -190,7 +190,7 @@ function DeleteUserButton({ user }: { user: User }) {
     <>
       <Button
         size="xs"
-        color="red"
+        color="error"
         variant="light"
         disabled={isSelf}
         title={isSelf ? 'Нельзя удалить самого себя' : undefined}
@@ -209,14 +209,14 @@ function DeleteUserButton({ user }: { user: User }) {
           <Text size="sm">
             Удалить пользователя <b>{user.username}</b>?
           </Text>
-          <Alert color="red" role="alert">
+          <Alert color="error" role="alert">
             Действие необратимо. Вместе с учётной записью каскадно удалятся его сессии,
             сообщения, документы и проекты. Восстановление возможно только из резервной
             копии. Если достаточно закрыть доступ — используйте снятие галочки
             активности.
           </Alert>
           {remove.isError && (
-            <Alert color="red" role="alert">
+            <Alert color="error" role="alert">
               {errorText(remove.error, 'Ошибка запроса')}
             </Alert>
           )}
@@ -229,7 +229,7 @@ function DeleteUserButton({ user }: { user: User }) {
               Отмена
             </Button>
             <Button
-              color="red"
+              color="error"
               loading={remove.isPending}
               onClick={() =>
                 remove.mutate(user.id, { onSuccess: () => setOpened(false) })
@@ -373,7 +373,7 @@ function UserRow({
             Сохранить
           </Button>
           {update.isError && update.variables?.userId === user.id && (
-            <Text size="sm" c="red" role="alert">
+            <Text size="sm" c="error" role="alert">
               {errorText(update.error, 'Ошибка запроса')}
             </Text>
           )}
@@ -402,7 +402,7 @@ function UsersTab() {
   if (users.isPending) return <Loader size="sm" />
   if (users.isError) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {errorText(users.error, 'Ошибка запроса')}
       </Alert>
     )
@@ -435,7 +435,7 @@ function UsersTab() {
             {savedFor && (
               <Text
                 size="sm"
-                c="green"
+                c="success"
                 role="status"
                 pos="absolute"
                 top={4}
@@ -502,7 +502,7 @@ function InboxRunFiles({ run }: { run: InboxRun }) {
               )}
             </Group>
             {opened === file.id && file.reason_text && (
-              <Text size="xs" c="red" mt={4} role="note">
+              <Text size="xs" c="error" mt={4} role="note">
                 {file.reason_text}
               </Text>
             )}
@@ -573,12 +573,12 @@ function InboxPanel() {
           </Button>
         </Group>
         {message && (
-          <Text size="sm" c="green" role="status" mt="xs">
+          <Text size="sm" c="success" role="status" mt="xs">
             {message}
           </Text>
         )}
         {scan.isError && (
-          <Alert color="red" role="alert" mt="xs">
+          <Alert color="error" role="alert" mt="xs">
             {errorText(scan.error, 'Ошибка запроса')}
           </Alert>
         )}
@@ -602,13 +602,13 @@ function InboxPanel() {
         </Button>
       </Group>
       {clearRejected.isSuccess && (
-        <Text size="xs" c="green" role="status">
+        <Text size="xs" c="success" role="status">
           {`Удалено файлов: ${clearRejected.data.removed}`}
         </Text>
       )}
       {runs.isPending && <Loader size="sm" />}
       {runs.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(runs.error, 'Не удалось загрузить журнал')}
         </Alert>
       )}
@@ -640,7 +640,7 @@ function InboxPanel() {
             {`принято ${run.archived}, заменено ${run.replaced}, отклонено ${run.rejected}, ошибок ${run.failed}`}
           </Text>
           {run.error && (
-            <Text size="xs" c="red" role="note">
+            <Text size="xs" c="error" role="note">
               {run.error}
             </Text>
           )}
@@ -668,7 +668,7 @@ function GlobalBaseTab() {
   return (
     <Stack gap="sm">
       {message && (
-        <Alert color="green" role="status">
+        <Alert color="success" role="status">
           {message}
         </Alert>
       )}
@@ -697,7 +697,7 @@ function GlobalBaseTab() {
         </Button>
       </Group>
       {addPath.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(addPath.error, 'Ошибка запроса')}
         </Alert>
       )}
@@ -738,7 +738,7 @@ function GlobalBaseTab() {
         </Button>
       </Group>
       {upload.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(upload.error, 'Ошибка запроса')}
         </Alert>
       )}
@@ -753,7 +753,7 @@ function GlobalBaseTab() {
       <Group justify="space-between">
         <Title order={5}>Документы глобальной базы</Title>
         <Button
-          color="orange"
+          color="warning"
           variant="light"
           size="xs"
           loading={reindex.isPending}
@@ -766,18 +766,18 @@ function GlobalBaseTab() {
         </Button>
       </Group>
       {reindex.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(reindex.error, 'Ошибка запроса')}
         </Alert>
       )}
       {reindexDone && (
-        <Alert color="green" role="status">
+        <Alert color="success" role="status">
           Готово.
         </Alert>
       )}
       {documents.isPending && <Loader size="sm" />}
       {documents.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(documents.error, 'Ошибка запроса')}
         </Alert>
       )}
@@ -792,7 +792,7 @@ function GlobalBaseTab() {
           </Text>
           <Button
             size="xs"
-            color="red"
+            color="error"
             variant="outline"
             loading={remove.isPending && remove.variables === document.id}
             onClick={() => remove.mutate(document.id as string)}
@@ -802,7 +802,7 @@ function GlobalBaseTab() {
         </Group>
       ))}
       {remove.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(remove.error, 'Ошибка запроса')}
         </Alert>
       )}
@@ -901,7 +901,7 @@ function TasksTab() {
   if (tasks.isPending) return <Loader size="sm" />
   if (tasks.isError) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {errorText(tasks.error, 'Не удалось загрузить задачи')}
       </Alert>
     )
@@ -949,7 +949,7 @@ function TasksTab() {
           {`Показано ${items.length} из ${all.length}`}
         </Text>
         <Button
-          color="orange"
+          color="warning"
           variant="light"
           size="xs"
           style={{ marginLeft: 'auto' }}
@@ -976,7 +976,7 @@ function TasksTab() {
             </Button>
             <Button
               size="xs"
-              color="red"
+              color="error"
               loading={clearFinished.isPending}
               onClick={() => {
                 clearFinished.mutate(undefined, {
@@ -990,12 +990,12 @@ function TasksTab() {
         </Paper>
       )}
       {clearFinished.isSuccess && !confirmClear && (
-        <Text size="sm" c="green" role="status">
+        <Text size="sm" c="success" role="status">
           Завершённые задачи убраны.
         </Text>
       )}
       {clearFinished.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(clearFinished.error, 'Не удалось очистить задачи')}
         </Alert>
       )}
@@ -1037,7 +1037,7 @@ function ClearChatCell({ sessionId }: { sessionId: string }) {
       <Button
         size="compact-xs"
         variant="subtle"
-        color="red"
+        color="error"
         onClick={() => setAsk(true)}
       >
         Очистить чат
@@ -1053,7 +1053,7 @@ function ClearChatCell({ sessionId }: { sessionId: string }) {
             Удалить всю переписку этой сессии? Отменить будет нельзя.
           </Text>
           {error && (
-            <Alert color="red" role="alert">
+            <Alert color="error" role="alert">
               {error}
             </Alert>
           )}
@@ -1062,7 +1062,7 @@ function ClearChatCell({ sessionId }: { sessionId: string }) {
               Отмена
             </Button>
             <Button
-              color="red"
+              color="error"
               loading={clear.isPending}
               onClick={() => {
                 setError(null)
@@ -1110,7 +1110,7 @@ function SessionsTab() {
   if (sessions.isPending || users.isPending) return <Loader size="sm" />
   if (sessions.isError) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {errorText(sessions.error, 'Ошибка запроса')}
       </Alert>
     )
@@ -1227,7 +1227,7 @@ function AuditTab() {
   if (audit.isPending) return <Loader size="sm" />
   if (audit.isError) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {errorText(audit.error, 'Ошибка запроса')}
       </Alert>
     )
@@ -1363,7 +1363,7 @@ function ResetSection() {
 
   return (
     <Stack gap="sm">
-      <Alert color="yellow" title="Сброс необратим">
+      <Alert color="warning" title="Сброс необратим">
         Удалённые сессии, документы и переписка восстановить нельзя — только из бэкапа (
         <code>make backup</code>). Сначала посмотрите план.
       </Alert>
@@ -1391,12 +1391,12 @@ function ResetSection() {
 
       {plan.isPending && <Loader size="sm" />}
       {plan.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(plan.error, 'Ошибка запроса')}
         </Alert>
       )}
       {plan.data && !plan.data.allowed && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           Сброс запрещён: {plan.data.blocked_reason}
         </Alert>
       )}
@@ -1441,7 +1441,7 @@ function ResetSection() {
       )}
 
       <Group>
-        <Button color="red" onClick={openDialog} disabled={!plan.data?.allowed}>
+        <Button color="error" onClick={openDialog} disabled={!plan.data?.allowed}>
           Сбросить…
         </Button>
       </Group>
@@ -1466,7 +1466,7 @@ function ResetSection() {
             data-testid="reset-confirm-input"
           />
           {reset.isError && (
-            <Alert color="red" role="alert">
+            <Alert color="error" role="alert">
               {errorText(reset.error, 'Ошибка запроса')}
             </Alert>
           )}
@@ -1475,7 +1475,7 @@ function ResetSection() {
               Отмена
             </Button>
             <Button
-              color="red"
+              color="error"
               disabled={!canReset}
               loading={reset.isPending}
               onClick={() => {
@@ -1508,7 +1508,7 @@ function BackupsSection() {
 
   return (
     <Stack gap="sm">
-      <Alert color="blue" title="Копия снимается на сервере">
+      <Alert color="info" title="Копия снимается на сервере">
         Архив содержит базу данных (согласованный снимок), файлы сессий и документов и
         манифест с ревизией схемы. Копии складываются в каталог{' '}
         <code>{plan?.backup_dir ?? '—'}</code> — он намеренно вынесен за пределы данных,
@@ -1516,7 +1516,7 @@ function BackupsSection() {
       </Alert>
 
       {plan?.db_exists === false && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           База данных не найдена — копия получится без данных. Проверьте, что платформа
           видит свой каталог данных.
         </Alert>
@@ -1561,7 +1561,7 @@ function BackupsSection() {
 
       {backups.isPending && <Loader size="sm" />}
       {backups.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(backups.error, 'Ошибка запроса')}
         </Alert>
       )}
@@ -1593,7 +1593,7 @@ function BackupsSection() {
                 <Table.Td>
                   <Button
                     size="xs"
-                    color="red"
+                    color="error"
                     variant="outline"
                     loading={remove.isPending && remove.variables === item.name}
                     onClick={() => remove.mutate(item.name)}
@@ -1613,12 +1613,12 @@ function BackupsSection() {
       )}
 
       {remove.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {errorText(remove.error, 'Не удалось удалить копию')}
         </Alert>
       )}
 
-      <Alert color="yellow" title="Восстановление — только скриптом">
+      <Alert color="warning" title="Восстановление — только скриптом">
         Восстановление требует остановки платформы, поэтому из браузера его делать
         нельзя. После копии выполните в корне проекта:
         <code> ./scripts/restore.sh путь/к/архиву.tar.gz</code>
@@ -1641,7 +1641,7 @@ function BackupsSection() {
             </Text>
           )}
           {create.isError && (
-            <Alert color="red" role="alert">
+            <Alert color="error" role="alert">
               {errorText(create.error, 'Не удалось создать копию')}
             </Alert>
           )}
@@ -1694,7 +1694,7 @@ export function AdminPage() {
 
   if (role !== 'admin') {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         Раздел доступен только администратору.
       </Alert>
     )

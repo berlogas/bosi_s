@@ -296,7 +296,7 @@ export function ChatTab({
           <Button
             size="xs"
             variant="subtle"
-            color="red"
+            color="error"
             leftSection="🗑"
             onClick={() => setClearAsk(true)}
           >
@@ -309,7 +309,7 @@ export function ChatTab({
         <TaskPanel task={task.data} onCancel={handleCancelTask} cancelPending={false} />
       )}
 
-      {historyError && <Alert color="red">{historyError}</Alert>}
+      {historyError && <Alert color="error">{historyError}</Alert>}
 
       {chatEmpty && (
         <Text size="sm" c="dimmed">
@@ -346,7 +346,7 @@ export function ChatTab({
                 <Button
                   size="compact-xs"
                   variant="subtle"
-                  color="red"
+                  color="error"
                   aria-label="Удалить вопрос вместе с ответом"
                   // Спиннер — только у удаляемой пары, а не у всех кнопок
                   loading={
@@ -393,7 +393,7 @@ export function ChatTab({
               <Button
                 size="compact-xs"
                 variant="subtle"
-                color="red"
+                color="error"
                 aria-label="Отменить вопрос и убрать его из переписки"
                 onClick={() => {
                   if (taskId) handleCancelTask()
@@ -430,7 +430,7 @@ export function ChatTab({
                 <Button
                   size="compact-xs"
                   variant="subtle"
-                  color="red"
+                  color="error"
                   aria-label="Убрать вопрос и ошибку из переписки"
                   onClick={() => setFailed(null)}
                 >
@@ -449,7 +449,7 @@ export function ChatTab({
                 {failed.text}
               </Text>
             ) : (
-              <Alert color="red" role="alert">
+              <Alert color="error" role="alert">
                 Не получилось ответить: {failed.text}
               </Alert>
             )}
@@ -467,7 +467,7 @@ export function ChatTab({
                 <Button
                   size="compact-xs"
                   variant="subtle"
-                  color="red"
+                  color="error"
                   aria-label="Убрать вопрос и ответ из переписки"
                   onClick={() => setLast(null)}
                 >
@@ -487,7 +487,7 @@ export function ChatTab({
       )}
 
       {sendError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {sendError}
         </Alert>
       )}
@@ -546,7 +546,7 @@ export function ChatTab({
             Удалить всю переписку этой сессии? Отменить будет нельзя.
           </Text>
           {clearError && (
-            <Alert color="red" role="alert">
+            <Alert color="error" role="alert">
               {clearError}
             </Alert>
           )}
@@ -555,7 +555,7 @@ export function ChatTab({
               Отмена
             </Button>
             <Button
-              color="red"
+              color="error"
               loading={clearMessages.isPending}
               onClick={handleClearConfirm}
             >

@@ -261,9 +261,10 @@ describe('админка', () => {
 
     renderApp('/admin/base')
 
-    expect(
-      await screen.findByRole('tab', { name: 'Глобальная база' }),
-    ).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByRole('tab', { name: 'Глобальная база' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(await screen.findByLabelText('Путь к файлу')).toBeVisible()
   })
 

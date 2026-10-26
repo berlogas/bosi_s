@@ -7,6 +7,7 @@
  */
 
 import { Alert, Collapse, Stack, Text, UnstyledButton } from '@mantine/core'
+import { IconAlertTriangle } from '@tabler/icons-react'
 import { useState } from 'react'
 
 import type { AnswerChecks } from '../api/types'
@@ -33,7 +34,9 @@ export function ChecksView(payload: {
 
   return (
     <Stack gap={4}>
-      <Alert color="yellow">⚠️ {warnings[0]}</Alert>
+      <Alert color="warning">
+        <IconAlertTriangle size={16} stroke={1.5} /> {warnings[0]}
+      </Alert>
       {warnings.length > 1 && (
         <>
           <UnstyledButton

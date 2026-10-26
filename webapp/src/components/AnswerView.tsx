@@ -43,7 +43,7 @@ export function AnswerView({ answer }: AnswerViewProps) {
       ) : null}
 
       {answer.base_empty && (
-        <Alert color="blue">
+        <Alert color="info">
           Ответ без ссылок на источники: в базе знаний нет документов или по запросу
           ничего не нашлось. Загрузите документы в разделе «Администрирование».
         </Alert>

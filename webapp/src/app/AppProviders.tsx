@@ -3,10 +3,7 @@
  * чтобы тесты рендерили ровно то же дерево, что видит пользователь.
  */
 
-import {
-  localStorageColorSchemeManager,
-  MantineProvider,
-} from '@mantine/core'
+import { localStorageColorSchemeManager, MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
@@ -38,6 +35,8 @@ export function createQueryClient(): QueryClient {
   })
 }
 
+import { theme } from '../theme'
+
 export function AppProviders({
   children,
   queryClient = createQueryClient(),
@@ -57,6 +56,7 @@ export function AppProviders({
 
   return (
     <MantineProvider
+      theme={theme}
       defaultColorScheme="auto"
       colorSchemeManager={localStorageColorSchemeManager({
         key: 'mantine-color-scheme-value',

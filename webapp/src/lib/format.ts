@@ -57,53 +57,56 @@ export function taskStatusLabel(value: string | null | undefined): string {
   return TASK_STATUS_LABELS[value ?? ''] ?? value ?? '—'
 }
 
-export const STATUS_ICONS: Record<string, string> = {
-  queued: '⏳',
-  running: '🔄',
-  done: '✅',
-  error: '❌',
-  cancelled: '🚫',
-}
-
 /**
  * Даты — в локальной зоне пользователя.
- *
- * Сервер отдаёт UTC (`...Z` или `+00:00`); срез строки показывал UTC-время,
- * то есть в Москве событие «уезжало» на три часа назад.
+ * Полная дата — в `title` (день.месяц.год часы:минуты).
  */
+
+/** «20.10.2026» — только день, локальная зона; пусто, если дата невалидна. */
+export function dayWhen(value: string | null | undefined): string {
+  const d = parseWhen(value)
+  return d ? DAY_WHEN.format(d) : ''
+}
+
+/** «вторник, 20 октября 2026 г. в 15:00:00 GMT+3» — для `title`. */
+export function fullWhen(value: string | null | undefined): string {
+  const d = parseWhen(value)
+  return d ? FULL_WHEN.format(d) : ''
+}
+
+/** «20.10.2026, 15:00» — дата и время в локальной зоне; пусто, если дата невалидна. */
+export function shortWhen(value: string | null | undefined): string {
+  const d = parseWhen(value)
+  return d ? SHORT_WHEN.format(d) : ''
+}
+
+function parseWhen(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 const SHORT_WHEN = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
   timeStyle: 'short',
 })
-// В `title` — та же дата с зоной: по нему видно, что перевод действительно был.
+
+const DAY_WHEN = new Intl.DateTimeFormat('ru-RU', {
+  dateStyle: 'short',
+})
+
 const FULL_WHEN = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'full',
   timeStyle: 'long',
 })
 
-// День без времени — для подписей вида «самые старые от 05.01.2026».
-const DAY_WHEN = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short' })
-
-function parseWhen(iso: string | null | undefined): Date | null {
-  if (!iso) return null
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-/** «20.10.2026, 15:00» в локальной зоне; пусто, если дата невалидна. */
-export function shortWhen(iso: string | null | undefined): string {
-  const date = parseWhen(iso)
-  return date ? SHORT_WHEN.format(date) : ''
-}
-
-/** «20.10.2026» — только день, локальная зона; пусто, если дата невалидна. */
-export function dayWhen(iso: string | null | undefined): string {
-  const date = parseWhen(iso)
-  return date ? DAY_WHEN.format(date) : ''
-}
-
-/** «вторник, 20 октября 2026 г. в 15:00:00 GMT+3» — для `title`. */
-export function fullWhen(iso: string | null | undefined): string {
-  const date = parseWhen(iso)
-  return date ? FULL_WHEN.format(date) : ''
+export function dayLabel(value: string | null | undefined): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }

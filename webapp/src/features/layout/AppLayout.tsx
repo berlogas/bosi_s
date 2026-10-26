@@ -27,6 +27,7 @@ import {
   Title,
   useMantineColorScheme,
 } from '@mantine/core'
+import { IconBook, IconSearch, IconUser } from '@tabler/icons-react'
 import { Suspense, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -37,6 +38,10 @@ import { displayName, roleLabel } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { useCurrentSessionPath } from '../sessions/useCurrentSession'
 import { TaskEventsProvider } from '../tasks/TaskEventsProvider'
+import { TaskIndicator } from './TaskIndicator'
+import { UserMenu } from './UserMenu'
+import { CommandPalette, openCommandPalette } from './CommandPalette'
+import { Kbd } from '@mantine/core'
 
 function SystemStatus() {
   const { data, error, isPending } = useQuery({
@@ -49,7 +54,7 @@ function SystemStatus() {
   if (isPending) return <Text size="xs">Проверяю состояние системы…</Text>
   if (error) {
     return (
-      <Text size="xs" c="red">
+      <Text size="xs" c="error">
         {error instanceof Error ? error.message : 'Состояние системы недоступно'}
       </Text>
     )
@@ -94,6 +99,31 @@ export function isNavItemActive(pathname: string, to: string): boolean {
  * (localStorageColorSchemeManager) сохраняет выбор — тема живёт до F5,
  * а inline-скрипт в index.html применяет её до первого кадра, без вспышки.
  */
+/**
+ * Триггер палитры в шапке: на узких экранах — только иконка, на широких —
+ * с подсказкой хоткея. Открывает того же Spotlight, что Ctrl/Cmd+K.
+ */
+function PaletteTrigger({ visibleFrom }: { visibleFrom?: string }) {
+  return (
+    <Button
+      variant="default"
+      size="compact-sm"
+      visibleFrom={visibleFrom}
+      leftSection={<IconSearch size={14} stroke={1.5} />}
+      onClick={openCommandPalette}
+      aria-label="Поиск по разделам и сессиям (Ctrl+K)"
+    >
+      <Group gap={6} wrap="nowrap">
+        <span>Поиск</span>
+        <Group visibleFrom="md" gap={4} wrap="nowrap">
+          <Kbd size="xs">Ctrl</Kbd>
+          <Kbd size="xs">K</Kbd>
+        </Group>
+      </Group>
+    </Button>
+  )
+}
+
 function ThemeSwitch() {
   const { colorScheme, setColorScheme } = useMantineColorScheme()
   return (
@@ -154,10 +184,11 @@ export function AppLayout() {
 
   return (
     <TaskEventsProvider>
+      <CommandPalette />
       <AppShell
-        // На desktop шапка не нужна: высота 0 и сама шапка скрыта, чтобы не
-        // отнимать 56px у рабочей области.
-        header={{ height: { base: 56, sm: 0 } }}
+        // Тонкая шапка (48px) вмещает триггер палитры, индикатор задач и
+        // меню пользователя — без неё глобальным элементам негде жить.
+        header={{ height: { base: 56, sm: 48 } }}
         navbar={{
           width: 260,
           breakpoint: 'sm',
@@ -166,22 +197,52 @@ export function AppLayout() {
         padding="md"
       >
         <AppShellHeader hiddenFrom="sm">
-          <Group h="100%" px="md" gap="sm">
-            <Burger
-              opened={navOpened}
-              onClick={() => setNavOpened((value) => !value)}
-              aria-label="Меню"
-              aria-expanded={navOpened}
-              aria-controls="main-nav"
-            />
-            <Title order={4}>📚 boasi_s</Title>
+          <Group h="100%" px="md" gap="sm" justify="space-between">
+            <Group gap="sm">
+              <Burger
+                opened={navOpened}
+                onClick={() => setNavOpened((value) => !value)}
+                aria-label="Меню"
+                aria-expanded={navOpened}
+                aria-controls="main-nav"
+              />
+              <Title
+                order={4}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <IconBook size={16} stroke={1.5} />
+                <span>boasi_s</span>
+              </Title>
+            </Group>
             {bootPending && <Loader size="xs" />}
+          </Group>
+        </AppShellHeader>
+
+        <AppShellHeader visibleFrom="sm" h={48} px="md">
+          <Group gap="sm" justify="space-between" w="100%">
+            <Group gap="sm">
+              <Title
+                order={4}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <IconBook size={16} stroke={1.5} />
+                <span>boasi_s</span>
+              </Title>
+              {/* Триггер палитры: Ctrl/Cmd+K тем, кто не в курсе хоткея */}
+              <PaletteTrigger visibleFrom="xs" />
+              {/* Индикатор активных задач — виден с любой страницы */}
+              <TaskIndicator />
+            </Group>
+            <UserMenu />
           </Group>
         </AppShellHeader>
 
         <AppShellNavbar id="main-nav" p="md" component={ScrollArea}>
           <Group gap="xs" mb="xs" justify="space-between">
-            <Title order={4}>📚 boasi_s</Title>
+            <Title order={4} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IconBook size={16} stroke={1.5} />
+              <span>boasi_s</span>
+            </Title>
             {bootPending && <Loader size="xs" />}
           </Group>
 
@@ -233,8 +294,16 @@ export function AppLayout() {
 
               <Divider my="md" />
 
-              <Text size="xs" c="dimmed" mb={4}>
-                👤 {displayName(user)} · {roleLabel(user.role)}
+              <Text
+                size="xs"
+                c="dimmed"
+                mb={4}
+                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <IconUser size={16} stroke={1.5} />
+                <span>
+                  {displayName(user)} · {roleLabel(user.role)}
+                </span>
               </Text>
               <ThemeSwitch />
               <Button

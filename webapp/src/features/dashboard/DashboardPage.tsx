@@ -10,7 +10,7 @@ import {
   Button,
   Card,
   Group,
-  Loader,
+  Paper,
   SimpleGrid,
   Stack,
   Text,
@@ -23,6 +23,9 @@ import { useNavigate } from 'react-router-dom'
 import type { SessionOut } from '../../api/types'
 
 import { TaskPanel } from '../../components/TaskPanel'
+import { EmptyState } from '../../components/EmptyState'
+import { PageHeader } from '../../components/PageHeader'
+import { SkeletonList } from '../../components/SkeletonList'
 import { displayName } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { QuickChat } from './QuickChat'
@@ -92,12 +95,12 @@ function NewSession() {
   }
 
   return (
-    <Card withBorder>
+    <Card withBorder id="new-session">
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">
           <Title order={5}>Новая сессия</Title>
           {create.isError && (
-            <Alert color="red" role="alert">
+            <Alert color="error" role="alert">
               {create.error instanceof Error
                 ? create.error.message
                 : 'Не удалось создать сессию'}
@@ -128,7 +131,7 @@ function ActiveTasks() {
   if (isPending) return null
   if (isError) {
     return (
-      <Alert color="red">
+      <Alert color="error">
         Не удалось получить активные задачи:{' '}
         {error instanceof Error ? error.message : 'неизвестная ошибка'}
       </Alert>
@@ -185,11 +188,21 @@ function SessionGroups({
         </Stack>
       ))}
       {groups.length === 0 && (
-        <Alert color="blue">
-          {isAdmin
-            ? 'Сессий нет — создайте первую.'
-            : 'Активных сессий нет — создайте первую.'}
-        </Alert>
+        <Paper withBorder p="md">
+          <EmptyState
+            title={
+              isAdmin
+                ? 'Сессий нет — создайте первую.'
+                : 'Активных сессий нет — создайте первую.'
+            }
+            description="Создайте сессию — документы, чат и проекты живут внутри неё."
+            action={
+              <Button component="a" href="#new-session" variant="light" size="xs">
+                Создать сессию
+              </Button>
+            }
+          />
+        </Paper>
       )}
     </Stack>
   )
@@ -201,7 +214,7 @@ export function DashboardPage() {
 
   if (sessions.isError) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {sessions.error instanceof Error
           ? sessions.error.message
           : 'Не удалось загрузить сессии'}
@@ -218,12 +231,16 @@ export function DashboardPage() {
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Title order={3}>Информационная панель</Title>
-        {user && (
-          <Text size="sm" c="dimmed">
-            Здравствуйте, {displayName(user)}!
-          </Text>
-        )}
+        <PageHeader
+          title="Информационная панель"
+          actions={
+            user ? (
+              <Text size="sm" c="dimmed">
+                Здравствуйте, {displayName(user)}!
+              </Text>
+            ) : undefined
+          }
+        />
       </Group>
 
       <QuickChat />
@@ -236,7 +253,7 @@ export function DashboardPage() {
         {isAdmin ? 'Сессии всех пользователей' : 'Мои сессии'} ({active.length})
       </Title>
       {sessions.isPending ? (
-        <Loader size="sm" />
+        <SkeletonList count={3} rowHeight="72px" />
       ) : (
         <SessionGroups sessions={active} isAdmin={isAdmin} />
       )}

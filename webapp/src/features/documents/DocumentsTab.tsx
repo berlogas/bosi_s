@@ -151,11 +151,11 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       <Text fw={600}>Документы</Text>
 
       {formError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {formError}
         </Alert>
       )}
-      {uploadResult && <Alert color="green">{uploadResult}</Alert>}
+      {uploadResult && <Alert color="success">{uploadResult}</Alert>}
 
       {/* прогресс индексации: пока задачи живы — панель с этапами */}
       {liveTasks.map((task) => (
@@ -277,7 +277,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       )}
 
       {documents.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {documents.error instanceof Error
             ? documents.error.message
             : 'Не удалось загрузить список документов'}
@@ -312,7 +312,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                         {((document.size_bytes ?? 0) / 1024).toFixed(0)} КБ,{' '}
                         {document.chunk_count ?? 0} чанков
                         {document.status === 'error' && (
-                          <Text component="span" c="red" size="xs">
+                          <Text component="span" c="error" size="xs">
                             {' '}
                             · ошибка индексации
                           </Text>
@@ -332,7 +332,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                       )}
                       <Button
                         size="compact-xs"
-                        color="red"
+                        color="error"
                         variant="subtle"
                         disabled={readOnly}
                         loading={remove.isPending && remove.variables === document.id}

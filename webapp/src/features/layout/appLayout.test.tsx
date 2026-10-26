@@ -6,7 +6,7 @@
  * дашборд. Теперь помнится последняя открытая сессия.
  */
 
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -427,14 +427,10 @@ describe('переключатель темы', () => {
 
     const control = await screen.findByRole('radiogroup', { name: 'Тема интерфейса' })
     // по умолчанию auto: активна «Системная»
-    expect(
-      within(control).getByRole('radio', { name: 'Системная' }),
-    ).toBeChecked()
+    expect(within(control).getByRole('radio', { name: 'Системная' })).toBeChecked()
 
     await user.click(within(control).getByRole('radio', { name: 'Тёмная' }))
-    expect(
-      within(control).getByRole('radio', { name: 'Тёмная' }),
-    ).toBeChecked()
+    expect(within(control).getByRole('radio', { name: 'Тёмная' })).toBeChecked()
     // менеджер провайдера сохранил выбор — тема переживёт F5
     expect(localStorage.getItem('mantine-color-scheme-value')).toBe('dark')
     // и DOM-атрибут переключён: тёмная палитра активна
@@ -452,9 +448,7 @@ describe('переключатель темы', () => {
     renderPath('/')
 
     const control = await screen.findByRole('radiogroup', { name: 'Тема интерфейса' })
-    expect(
-      within(control).getByRole('radio', { name: 'Тёмная' }),
-    ).toBeChecked()
+    expect(within(control).getByRole('radio', { name: 'Тёмная' })).toBeChecked()
 
     await user.click(within(control).getByRole('radio', { name: 'Светлая' }))
     expect(localStorage.getItem('mantine-color-scheme-value')).toBe('light')
@@ -462,5 +456,124 @@ describe('переключатель темы', () => {
       'data-mantine-color-scheme',
       'light',
     )
+  })
+})
+
+describe('командная палитра', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('Ctrl+K открывает палитру; поиск и Enter ведут в раздел', async () => {
+    const user = userEvent.setup()
+    mockLayoutApi()
+    renderPath('/')
+
+    await screen.findByRole('heading', { name: 'Информационная панель' })
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Поиск по разделам и сессиям (Ctrl+K)',
+      }),
+    )
+    const search = await screen.findByPlaceholderText(
+      'Поиск: раздел, сессия, действие…',
+    )
+    expect(search).toHaveFocus()
+
+    await user.type(search, 'база')
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('dialog')).getByText('Общий корпус документов'),
+      ).toBeVisible(),
+    )
+    await user.click(
+      within(screen.getByRole('dialog')).getByText('Общий корпус документов'),
+    )
+
+    await screen.findByRole('heading', { name: 'База знаний' })
+    expect(navItem('База знаний').closest('[aria-current="page"]')).not.toBeNull()
+  })
+
+  it('недавняя сессия ищется и открывается', async () => {
+    const user = userEvent.setup()
+    mockLayoutApi()
+    renderPath('/')
+
+    await screen.findByRole('heading', { name: 'Информационная панель' })
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Поиск по разделам и сессиям (Ctrl+K)',
+      }),
+    )
+    const search = await screen.findByPlaceholderText(
+      'Поиск: раздел, сессия, действие…',
+    )
+    await user.type(search, 'Сессия')
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('dialog')).getByText('Открыть сессию'),
+      ).toBeVisible(),
+    )
+    await user.click(within(screen.getByRole('dialog')).getByText('Открыть сессию'))
+
+    await screen.findByText(/Статус: активная/)
+  })
+
+  it('триггер в шапке открывает палитру без клавиатуры', async () => {
+    const user = userEvent.setup()
+    mockLayoutApi()
+    renderPath('/')
+
+    const trigger = await screen.findByRole('button', {
+      name: 'Поиск по разделам и сессиям (Ctrl+K)',
+    })
+    await user.click(trigger)
+    expect(
+      await screen.findByPlaceholderText('Поиск: раздел, сессия, действие…'),
+    ).toBeVisible()
+  })
+})
+
+describe('индикатор задач в шапке', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('счётчик активных задач виден с любой страницы; отмена уходит на сервер', async () => {
+    const user = userEvent.setup()
+    const RUNNING_TASK = {
+      id: 't-1',
+      kind: 'chat',
+      title: 'Вопрос об Aquaporins',
+      status: 'running',
+      stage: 'retrieval',
+      progress: 40,
+      seconds: 12,
+      stage_seconds: 5,
+      cancel_requested: false,
+    }
+    const routes = mockLayoutApi({
+      'GET /api/tasks': { tasks: [RUNNING_TASK], active: 1 },
+      'POST /api/tasks/t-1/cancel': { cancelled: true },
+    })
+    renderPath('/knowledge')
+
+    //_indicator с числом: виден и на /knowledge, а не только на дашборде
+    const indicatorButton = await screen.findByRole('button', {
+      name: 'Активных задач: 1. Открыть список задач',
+    })
+    await user.click(indicatorButton)
+
+    // список последних задач с отменой
+    const taskButtons = await screen.findAllByRole('button', { name: 'Отменить' })
+    await user.click(taskButtons[0]!)
+    await waitFor(() => {
+      expect(
+        routes.calls.some(
+          (call) =>
+            call.init.method === 'POST' && call.url.includes('/api/tasks/t-1/cancel'),
+        ),
+      ).toBe(true)
+    })
   })
 })

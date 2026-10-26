@@ -177,9 +177,8 @@ describe('База знаний', () => {
     })
     renderPath()
 
-    expect(
-      await screen.findByText('База пока пуста. Наполняет её администратор.'),
-    ).toBeVisible()
+    expect(await screen.findByText('База пока пуста.')).toBeVisible()
+    expect(screen.getByText('Наполняет её администратор.')).toBeVisible()
   })
 
   it('ошибка запроса показывается, а не роняет страницу', async () => {
@@ -191,5 +190,52 @@ describe('База знаний', () => {
 
     expect(await screen.findByText('Не удалось загрузить список')).toBeVisible()
     spy.mockRestore()
+  })
+
+  // план Волны 2, п. 7: состояние фильтров в URL — F5 не сбрасывает, ссылка
+  // shareable. Проверяем оба направления: URL → запрос, фильтр → URL.
+  describe('фильтры в URL (план Волны 2)', () => {
+    it('q и category из адреса уходят в запрос без ввода', async () => {
+      const { calls } = mockKnowledgeApi()
+      renderPath('/knowledge?q=ctd&category=temp_literature')
+
+      expect(await screen.findByText('CTD-зонды')).toBeVisible()
+      expect(
+        calls.some(
+          (call) =>
+            call.url.includes('q=ctd') && call.url.includes('category=temp_literature'),
+        ),
+      ).toBe(true)
+      // поле ввода заполнено из URL
+      expect(screen.getByLabelText('Поиск по базе') as HTMLInputElement).toHaveValue(
+        'ctd',
+      )
+    })
+
+    it('категория переживает последующий ввод поиска (источник истины — URL)', async () => {
+      const { calls } = mockKnowledgeApi()
+      renderPath()
+
+      await screen.findByText('Хлорофилл и фотосинтез')
+      await userEvent.click(screen.getByRole('combobox', { name: 'Категория' }))
+      await userEvent.click(
+        screen.getByRole('option', { name: 'Временная литература', hidden: true }),
+      )
+
+      // категория не в поле ввода, а в URL: последующий поиск по-прежнему
+      // уходит на сервер вместе с ней
+      await userEvent.type(screen.getByLabelText('Поиск по базе'), 'pdf')
+      await waitFor(() => {
+        expect(
+          calls.some((call) => {
+            const url = new URL(call.url, 'http://localhost')
+            return (
+              url.searchParams.get('q') === 'pdf' &&
+              url.searchParams.get('category') === 'temp_literature'
+            )
+          }),
+        ).toBe(true)
+      })
+    })
   })
 })

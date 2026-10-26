@@ -86,7 +86,7 @@ export function useDeleteUser() {
       notifications.show({
         title: 'Пользователь удалён',
         message: userId,
-        color: 'red',
+        color: 'error',
       })
     },
   })

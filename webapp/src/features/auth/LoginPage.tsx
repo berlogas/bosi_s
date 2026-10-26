@@ -51,12 +51,12 @@ export function LoginPage() {
         <form onSubmit={handleSubmit}>
           <Stack>
             {loginError && (
-              <Alert color="red" role="alert">
+              <Alert color="error" role="alert">
                 {loginError}
               </Alert>
             )}
             {missingFields && (
-              <Alert color="yellow" role="alert">
+              <Alert color="warning" role="alert">
                 Заполните оба поля: логин и пароль.
               </Alert>
             )}

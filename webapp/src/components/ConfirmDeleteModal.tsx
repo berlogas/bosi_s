@@ -35,7 +35,7 @@ export function ConfirmDeleteModal({
           Действие необратимо: восстановить из интерфейса будет нельзя.
         </Text>
         {error && (
-          <Text size="sm" c="red" role="alert">
+          <Text size="sm" c="error" role="alert">
             {error}
           </Text>
         )}
@@ -43,7 +43,7 @@ export function ConfirmDeleteModal({
           <Button variant="default" onClick={onCancel} disabled={loading}>
             Отмена
           </Button>
-          <Button color="red" loading={loading} onClick={onConfirm}>
+          <Button color="error" loading={loading} onClick={onConfirm}>
             Удалить
           </Button>
         </Group>

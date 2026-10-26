@@ -141,7 +141,7 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
       <HowToPanel hasProjects={list.length > 0} />
 
       {actionError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {actionError}
         </Alert>
       )}
@@ -176,7 +176,7 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         </Button>
       </Group>
       {chosenStyle && (
-        <Alert color="blue" variant="light" p="xs">
+        <Alert color="info" variant="light" p="xs">
           <Text size="sm">
             Стиль «{chosenStyle.title}»: {chosenStyle.summary}
           </Text>
@@ -195,13 +195,13 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         </Alert>
       )}
       {createError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {createError}
         </Alert>
       )}
 
       {projects.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {projects.error instanceof Error
             ? projects.error.message
             : 'Не удалось загрузить проекты'}
@@ -209,9 +209,21 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
       )}
 
       {list.length === 0 && !projects.isPending && (
-        <Text size="sm" c="dimmed">
-          Проектов нет — создайте первый.
-        </Text>
+        <Paper withBorder p="md" style={{ flex: 1 }}>
+          <Stack align="center" justify="center" gap="xs" style={{ minHeight: 200 }}>
+            <Text size="sm" c="dimmed">
+              Проектов нет — создайте первый.
+            </Text>
+            {!readOnly && (
+              <TextInput
+                placeholder="Название проекта"
+                value={title}
+                onChange={(e) => setTitle(e.currentTarget.value)}
+                style={{ flex: 1 }}
+              />
+            )}
+          </Stack>
+        </Paper>
       )}
 
       {selected && (
@@ -315,12 +327,12 @@ function ExportPanel({
         </Text>
       </Group>
       {message && (
-        <Text size="sm" c="green" role="status" mt={6}>
+        <Text size="sm" c="success" role="status" mt={6}>
           {message}
         </Text>
       )}
       {error && (
-        <Text size="sm" c="red" role="alert" mt={6}>
+        <Text size="sm" c="error" role="alert" mt={6}>
           {error}
         </Text>
       )}
@@ -434,7 +446,7 @@ function ProjectEditor({
           Обновить
         </Button>
         <Button
-          color="red"
+          color="error"
           variant="light"
           onClick={onDelete}
           disabled={readOnly}
@@ -603,7 +615,7 @@ function GeneratePanel({
       </Group>
 
       {panelError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {panelError}
         </Alert>
       )}
@@ -635,7 +647,7 @@ function GenerateResultView({ result }: { result: GenerateResult }) {
           без заглушки падает весь рендер вкладки, а не один блок */}
       <MarkdownText text={result.content_md ?? ''} />
       {!result.citations_ok && (
-        <Text size="sm" c="orange">
+        <Text size="sm" c="warning">
           Проверьте ссылки: часть из них не разрешается в источники.
         </Text>
       )}
@@ -717,7 +729,7 @@ function SectionsList({
 
   if (sections.isError) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {sections.error instanceof Error
           ? sections.error.message
           : 'Не удалось загрузить разделы'}
@@ -731,7 +743,7 @@ function SectionsList({
         Разделы
       </Text>
       {sectionError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {sectionError}
         </Alert>
       )}
@@ -827,7 +839,7 @@ function SectionsList({
                     </Group>
                   </Group>
                   {savedName === section.name && (
-                    <Text size="sm" c="green">
+                    <Text size="sm" c="success">
                       Раздел сохранён.
                     </Text>
                   )}
@@ -873,7 +885,7 @@ function ProjectDocumentsPanel({
         Документы проекта
       </Text>
       {docError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {docError}
         </Alert>
       )}
@@ -884,7 +896,7 @@ function ProjectDocumentsPanel({
           </Text>
           <Button
             size="compact-xs"
-            color="red"
+            color="error"
             variant="subtle"
             disabled={readOnly}
             loading={unbind.isPending && unbind.variables === item.document.id}

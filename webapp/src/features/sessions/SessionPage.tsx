@@ -36,6 +36,7 @@ import { sessionStatusLabel, ttlLabel } from '../../lib/format'
 
 import { TABS, sessionTabPath, tabFromState, tabIdFromPath } from './tabPaths'
 import type { TabId } from './tabPaths'
+import { SessionBreadcrumb } from '../layout/Breadcrumb'
 
 const TAB_LABELS: Record<TabId, string> = {
   documents: 'Документы',
@@ -64,7 +65,7 @@ function Limits({
         {limitMb.toFixed(0)} МБ
       </Text>
       {documents >= documentsLimit && (
-        <Text size="xs" c="orange">
+        <Text size="xs" c="warning">
           Достигнут лимит документов — удалите лишние.
         </Text>
       )}
@@ -109,7 +110,7 @@ export function SessionPage() {
 
   if (detail.isError || !detail.data) {
     return (
-      <Alert color="red" role="alert">
+      <Alert color="error" role="alert">
         {detail.error instanceof Error ? detail.error.message : 'Сессия не найдена'}
         <Group mt="sm">
           <Button size="xs" variant="light" onClick={() => navigate('/')}>
@@ -163,6 +164,13 @@ export function SessionPage() {
 
   return (
     <Stack gap="md">
+      {/* Крошки только здесь: «Панель / Сессия / вкладка» — реальная иерархия.
+          На остальных страницах PageHeader один, крошки дублировали бы его. */}
+      <SessionBreadcrumb
+        sessionId={session.id}
+        sessionTitle={session.title}
+        activeTab={activeTab}
+      />
       <Group justify="space-between" align="flex-start">
         <Stack gap={4}>
           <Title order={3}>{session.title}</Title>
@@ -190,7 +198,7 @@ export function SessionPage() {
           <Button
             size="xs"
             variant="light"
-            color="red"
+            color="error"
             disabled={readOnly}
             onClick={() => setConfirmOpened(true)}
           >
@@ -203,13 +211,13 @@ export function SessionPage() {
       </Group>
 
       {actionError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {actionError}
         </Alert>
       )}
 
       {session.status === 'paused' && (
-        <Alert color="yellow" title="Сессия на паузе">
+        <Alert color="warning" title="Сессия на паузе">
           <Group justify="space-between" align="center" wrap="wrap">
             <Text size="sm">
               Работа приостановлена. Возобновите сессию, чтобы вернуться к сохранённой
@@ -223,7 +231,7 @@ export function SessionPage() {
       )}
 
       {readOnly && (
-        <Alert color="yellow">Сессия в архиве — доступно только чтение.</Alert>
+        <Alert color="warning">Сессия в архиве — доступно только чтение.</Alert>
       )}
 
       <Tabs
@@ -260,7 +268,7 @@ export function SessionPage() {
               Отмена
             </Button>
             <Button
-              color="red"
+              color="error"
               loading={archive.isPending}
               onClick={handleArchiveConfirm}
             >

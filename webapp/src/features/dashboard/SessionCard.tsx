@@ -12,13 +12,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { SessionOut } from '../../api/types'
-import {
-  fullWhen,
-  shortWhen,
-  sessionStatusLabel,
-  STATUS_ICONS,
-  ttlLabel,
-} from '../../lib/format'
+import { fullWhen, shortWhen, ttlLabel } from '../../lib/format'
+import { StatusBadge } from '../../components/StatusBadge'
 import { sessionTabPath, tabFromState } from '../sessions/tabPaths'
 import { useArchiveSession, useResumeSession } from './queries'
 
@@ -43,7 +38,6 @@ export function SessionCard({ session }: { session: SessionOut }) {
   const archived = session.status === 'archived'
   const paused = session.status === 'paused'
   const title = session.title || 'Без названия'
-  const icon = STATUS_ICONS[session.status] ?? ''
   const label = session.last_action_label || 'без действий'
 
   function handleOpen() {
@@ -75,12 +69,15 @@ export function SessionCard({ session }: { session: SessionOut }) {
       <Group align="flex-start" wrap="nowrap">
         <Stack gap={4} style={{ flex: 1 }}>
           <Text fw={600}>{title}</Text>
-          <Text size="xs" c="dimmed">
-            {icon} {sessionStatusLabel(session.status)} · {label} ·{' '}
-            <span title={fullWhen(session.last_action_at)}>
-              {shortWhen(session.last_action_at)}
-            </span>
-          </Text>
+          <Group gap={6} wrap="nowrap">
+            <StatusBadge kind="session" status={session.status} />
+            <Text size="xs" c="dimmed">
+              {label} ·{' '}
+              <span title={fullWhen(session.last_action_at) ?? ''}>
+                {shortWhen(session.last_action_at)}
+              </span>
+            </Text>
+          </Group>
 
           {session.resume_note && (
             <Text size="xs" c="dimmed">
@@ -107,7 +104,7 @@ export function SessionCard({ session }: { session: SessionOut }) {
         <Button
           size="xs"
           variant="light"
-          color="red"
+          color="error"
           // paused архивируется так же, как active: API это разрешает, а
           // «убрать с глаз» не должно требовать сначала возобновлять сессию
           disabled={archived}
@@ -118,7 +115,7 @@ export function SessionCard({ session }: { session: SessionOut }) {
       </Group>
 
       {error && !confirmOpened && (
-        <Text size="xs" c="red" role="alert">
+        <Text size="xs" c="error" role="alert">
           {error}
         </Text>
       )}
@@ -134,7 +131,7 @@ export function SessionCard({ session }: { session: SessionOut }) {
             Сессия станет только для чтения: вернуть её из интерфейса будет нельзя.
           </Text>
           {error && (
-            <Text size="sm" c="red">
+            <Text size="sm" c="error">
               {error}
             </Text>
           )}
@@ -142,7 +139,7 @@ export function SessionCard({ session }: { session: SessionOut }) {
             <Button variant="default" onClick={() => setConfirmOpened(false)}>
               Отмена
             </Button>
-            <Button color="red" loading={archive.isPending} onClick={handleArchive}>
+            <Button color="error" loading={archive.isPending} onClick={handleArchive}>
               Да, в архив
             </Button>
           </Group>

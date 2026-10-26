@@ -82,14 +82,14 @@ export function NotesTab({
           Сохранить заметку
         </Button>
         {saved && save.isSuccess && (
-          <Text size="sm" c="green">
+          <Text size="sm" c="success">
             Заметка сохранена.
           </Text>
         )}
       </Group>
 
       {save.isError && (
-        <Alert color="red" role="alert">
+        <Alert color="error" role="alert">
           {save.error instanceof Error ? save.error.message : 'Не удалось сохранить'}
         </Alert>
       )}

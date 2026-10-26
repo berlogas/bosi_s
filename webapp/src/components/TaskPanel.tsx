@@ -14,7 +14,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Box, Button, Group, Progress, Stack, Text } from '@mantine/core'
 
 import type { Task } from '../api/types'
-import { fmtSeconds, taskStatusLabel, STATUS_ICONS } from '../lib/format'
+import { fmtSeconds, taskStatusLabel } from '../lib/format'
+import { StatusIcon } from './StatusIcon'
 
 export function TaskPanel({
   task,
@@ -27,7 +28,6 @@ export function TaskPanel({
   cancelPending?: boolean
 }) {
   const running = task.status === 'running' || task.status === 'queued'
-  const icon = STATUS_ICONS[task.status] ?? ''
   // Секундомер тикает локально: сервер присылает `seconds`/`stage_seconds`
   // только вместе с событием (SSE/опрос), а между ними прибавляем сами
   // от момента последнего обновления задачи. Дрифт — state, а не расчёт
@@ -62,8 +62,9 @@ export function TaskPanel({
                 aria-label={`${task.title}: ${task.progress}%`}
               />
               <Text size="sm" mt={4}>
+                <StatusIcon status={task.status} />{' '}
                 {[
-                  `${icon} ${task.step ?? ''}`.trim(),
+                  task.step ?? '',
                   stage,
                   `(${task.progress}%)`,
                   total && `всего ${total}`,
@@ -76,7 +77,7 @@ export function TaskPanel({
             <>
               <Text size="sm">
                 <b>
-                  {icon} {task.title}
+                  <StatusIcon status={task.status} /> {task.title}
                 </b>{' '}
                 — {taskStatusLabel(task.status)}
               </Text>
@@ -102,11 +103,11 @@ export function TaskPanel({
       </Group>
 
       {task.status === 'error' && (
-        <Alert color="red">{task.error || 'Задача завершилась с ошибкой'}</Alert>
+        <Alert color="error">{task.error || 'Задача завершилась с ошибкой'}</Alert>
       )}
-      {task.status === 'cancelled' && <Alert color="yellow">Задача отменена</Alert>}
+      {task.status === 'cancelled' && <Alert color="warning">Задача отменена</Alert>}
       {task.status === 'done' && (
-        <Alert color="green">
+        <Alert color="success">
           Готово{task.seconds !== null ? ` за ${task.seconds} с` : ''}
         </Alert>
       )}

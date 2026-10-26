@@ -33,3 +33,9 @@ logs/
 # артефакты выгрузки демо-статьи: пересоздаются из базы, в репозитории
 # им не место (исходники набора — в demo/barents-article/)
 demo/*/out/
+
+# Node
+node_modules/
+webapp/node_modules/
+.vitest-cache/
+webapp/node_modules/.vitest-cache/

@@ -362,7 +362,7 @@ export function AppLayout() {
           </Suspense>
         </AppShell.Main>
       </AppShell>
+      <CommandPalette />
     </TaskEventsProvider>
-    <CommandPalette />
   )
 }

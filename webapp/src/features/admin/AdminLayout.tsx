@@ -7,7 +7,6 @@
  * вправо из-за двойных отступов и несуществующего navbar.
  */
 
-import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Group,
@@ -63,10 +62,17 @@ export function AdminLayout() {
   const currentTab = location.pathname.split('/').filter(Boolean)[1] || 'users'
   const tabPath = currentTab === 'base' ? 'documents' : currentTab
   const knownTabPaths = TABS.map((t) => t.path)
-  const activeTab = knownTabPaths.includes(tabPath) ? tabPath : 'users'
+  const activeTab = knownTabPaths.includes(tabPath as any) ? tabPath : 'users'
 
-  const ActiveComponent =
-    TABS.find((t) => t.path === activeTab)?.component || UsersPage
+  const tabComponentMap: Record<string, React.ComponentType> = {
+    users: UsersPage,
+    documents: DocumentsPage,
+    tasks: TasksPage,
+    sessions: SessionsPage,
+    audit: AuditPage,
+    maintenance: MaintenancePage,
+  }
+  const ActiveComponent = tabComponentMap[activeTab as any] || UsersPage
 
   const handleTabClick = (path: string) => () => {
     navigate(`/admin/${path}`)

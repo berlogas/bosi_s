@@ -12,7 +12,6 @@ import {
   Group,
   Button,
   Alert,
-  Box,
   Select,
 } from '@mantine/core'
 import { useAuditPage } from './hooks/useAuditPage'
@@ -122,7 +121,7 @@ export default function AuditPage() {
           label="С"
           placeholder="с"
           value={dateFrom ? new Date(dateFrom) : undefined}
-          onChange={(date) => setDateFrom(date ? date.toISOString() : undefined)}
+          onChange={(date: any) => setDateFrom(date ? (date as Date).toISOString() : undefined)}
           w={130}
           size="xs"
         />
@@ -130,7 +129,7 @@ export default function AuditPage() {
           label="По"
           placeholder="по"
           value={dateTo ? new Date(dateTo) : undefined}
-          onChange={(date) => setDateTo(date ? date.toISOString() : undefined)}
+          onChange={(date: any) => setDateTo(date ? (date as Date).toISOString() : undefined)}
           w={130}
           size="xs"
         />

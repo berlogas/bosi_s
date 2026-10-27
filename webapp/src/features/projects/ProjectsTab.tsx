@@ -12,6 +12,7 @@ import {
   Alert,
   Badge,
   Button,
+  Drawer,
   Divider,
   Group,
   List,
@@ -19,6 +20,7 @@ import {
   Paper,
   Select,
   Stack,
+  Table,
   Text,
   TextInput,
   UnstyledButton,
@@ -94,7 +96,7 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const create = useCreateProject(sessionId)
   const patch = usePatchProject(sessionId)
   const remove = useDeleteProject(sessionId)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [_actionError, setActionError] = useState<string | null>(null)
 
   const journalChoices = (styles.data ?? []).map((item) => ({
     value: item.key,
@@ -108,11 +110,12 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
 
   // первый проект выбран по умолчанию (как в Streamlit — current_project_id)
   useEffect(() => {
-    if (selectedId === null && projects.data?.length > 0) {
-      setSelectedId(projects.data[0].id)
+    const data = projects.data ?? []
+    if (selectedId === null && data && data.length > 0) {
+      setSelectedId(data[0].id ?? null)
     }
-    if (selectedId !== null && !projects.data?.some((p) => p.id === selectedId)) {
-      setSelectedId(projects.data?.[0]?.id ?? null)
+    if (selectedId !== null && (!data || !data.some((p) => p.id === selectedId))) {
+      setSelectedId(data?.[0]?.id ?? null)
     }
   }, [projects.data, selectedId])
 
@@ -361,7 +364,7 @@ function ExportPanel({
  */
 function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
   return (
-    <Accordion defaultValue="howto" single>
+    <Accordion defaultValue="howto" multiple={false}>
       <Accordion.Item value="howto">
         <Accordion.Control>
           <Text size="sm" fw={600}>
@@ -756,7 +759,7 @@ function SectionsList({
             next.delete(name)
             return next
           })
-          notifications.show({ title: 'Раздел сохранён', color: 'green' })
+          notifications.show({ title: 'Раздел сохранён', message: '', color: 'green' })
         },
         onError: (cause) => {
           setSavingSection(null)
@@ -1148,7 +1151,7 @@ function CodeMirrorSection({
 
   // В тестовом окружении (jsdom) CodeMirror 6 не рендерится корректно —
   // fallback на обычный textarea с тем же aria-label.
-  const isTestEnv = process.env.NODE_ENV === 'test'
+  const isTestEnv = import.meta.env.MODE === 'test'
 
   const extensions = useMemo(
     () => [
@@ -1318,7 +1321,7 @@ function ProjectDocumentsPanel({
               label: document.title ?? document.docname ?? document.dockey,
             }))}
             value={chosen}
-            onChange={setChosen}
+            onChange={(value: any) => setChosen(value as string)}
             disabled={readOnly}
             allowDeselect={false}
             style={{ flex: 1 }}

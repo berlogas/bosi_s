@@ -24,19 +24,11 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
-import { Dropzone, DropzoneProps } from '@mantine/dropzone'
+import { Dropzone } from '@mantine/dropzone'
 import { TagsInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import {
-  createColumnHelper,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  useReactTable,
-  type PaginationState,
-  type SortingState,
-} from '@tanstack/react-table'
 import { useMemo, useState, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import type { DocumentOut } from '../../api/types'
 import { TaskPanel } from '../../components/TaskPanel'
@@ -104,178 +96,150 @@ const ACCEPT_MAP: Record<string, string> = {
 }
 
 // ------------------------------------------------------------------- таблица
-/** Таблица документов с сортировкой и пагинацией — показывается при >20 документов. */
+/** Простая таблица документов с сортировкой и пагинацией — показывается при >20 документов. */
 function DocumentsTable({
   documents,
   readOnly,
   onDelete,
   setSelectedDoc,
+  pageIndex,
+  pageSize,
+  sortId,
+  sortDesc,
+  onPageChange,
+  onSortChange,
 }: {
   documents: DocumentOut[]
   readOnly: boolean
   onDelete: (document: DocumentOut) => void
   setSelectedDoc: (doc: DocumentOut) => void
+  pageIndex: number
+  pageSize: number
+  sortId: string
+  sortDesc: boolean
+  onPageChange: (next: { pageIndex: number; pageSize: number }) => void
+  onSortChange: (next: { id: string; desc: boolean }) => void
 }) {
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 25,
+  // Сортировка
+  const sorted = [...documents].sort((a, b) => {
+    const aVal = (a as any)[sortId] ?? ''
+    const bVal = (b as any)[sortId] ?? ''
+    const comparison = String(aVal).localeCompare(String(bVal))
+    return sortDesc ? -comparison : comparison
   })
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: 'title', desc: false },
-  ])
 
-  const columnHelper = createColumnHelper<DocumentOut>()
+  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const safePage = Math.min(Math.max(pageIndex, 0), pageCount - 1)
+  const pageData = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize)
 
-  const columns = [
-    columnHelper.accessor('title', {
-      header: 'Название',
-      cell: (info) => info.getValue() || info.row.original.docname,
-    }),
-    columnHelper.accessor('category', {
-      header: 'Категория',
-      cell: (info) => categoryLabel(info.getValue()),
-    }),
-    columnHelper.accessor('status', {
-      header: 'Статус',
-      cell: (info) => {
-        const status = info.getValue() ?? '—'
-        return <Badge size="xs">{status}</Badge>
-      },
-    }),
-    columnHelper.accessor('chunk_count', {
-      header: 'Чанков',
-      cell: (info) => String(info.getValue() ?? 0),
-    }),
-    columnHelper.accessor('size_bytes', {
-      header: 'Объём',
-      cell: (info) => {
-        const bytes = info.getValue() ?? 0
-        if (bytes < 1024) return `${bytes} Б`
-        if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
-        return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
-      },
-    }),
-    columnHelper.accessor('tags', {
-      header: 'Метки',
-      cell: (info) => info.getValue()?.join(', ') || '—',
-    }),
-    columnHelper.accessor('dockey', {
-      header: 'Dockey',
-      cell: (info) => info.getValue()?.slice(0, 8) || '—',
-    }),
-    columnHelper.accessor('id', {
-      id: 'actions',
-      header: '',
-      cell: (info) => {
-        const doc = info.row.original
-        return (
-          <Group gap="xs">
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              disabled={readOnly}
-              onClick={() => setSelectedDoc(doc)}
-              aria-label={`Подробнее: ${doc.title || doc.docname}`}
-            >
-              Подробнее
-            </Button>
-            <Button
-              size="compact-xs"
-              color="error"
-              variant="subtle"
-              disabled={readOnly}
-              onClick={() => onDelete(doc)}
-            >
-              Удалить
-            </Button>
-          </Group>
-        )
-      },
-    }),
+  const headers: Array<{ key: string; label: string }> = [
+    { key: 'title', label: 'Название' },
+    { key: 'category', label: 'Категория' },
+    { key: 'status', label: 'Статус' },
+    { key: 'chunk_count', label: 'Чанков' },
+    { key: 'size_bytes', label: 'Объём' },
+    { key: 'tags', label: 'Метки' },
+    { key: 'dockey', label: 'Dockey' },
+    { key: 'actions', label: '' },
   ]
-
-  const table = useReactTable({
-    data: documents,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    initialState: {
-      pagination,
-      sorting,
-    },
-    state: {
-      pagination,
-      sorting,
-    },
-    onPaginationChange: setPagination,
-    onSortingChange: (updater) => {
-      const next = typeof updater === 'function' ? updater(sorting) : updater
-      setSorting(next ?? [])
-    },
-  })
-
-  const pageCount = Math.max(1, Math.ceil(documents.length / pageSize))
-  const safePageIndex = Math.min(pagination.pageIndex, pageCount - 1)
 
   return (
     <div style={{ overflowX: 'auto', minWidth: '100%' }}>
       <Table>
         <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                const canSort = header.column.getCanSort()
-                return (
-                  <th
-                    key={header.id}
-                    onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
-                    style={{
-                      cursor: canSort ? 'pointer' : 'default',
-                      userSelect: 'none',
-                      padding: '8px 12px',
-                      borderBottom: '2px solid #ddd',
-                      textAlign: 'left',
-                      background: '#f5f5f5',
-                    }}
-                  >
-                    {header.isPlaceholder ? null : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {header.renderHeader()}
-                        {canSort && header.column.getIsSorted() && (
-                          <span>
-                            {header.column.getIsSorted() === 'desc' ? '▼' : '▲'}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </th>
-                )
-              })}
-            </tr>
-          ))}
+          <tr>
+            {headers.map((h) => (
+              <th
+                key={h.key}
+                onClick={
+                  h.key !== 'actions'
+                    ? () => onSortChange({ id: h.key, desc: sortId === h.key ? !sortDesc : false })
+                    : undefined
+                }
+                style={{
+                  cursor: h.key !== 'actions' ? 'pointer' : 'default',
+                  userSelect: 'none',
+                  padding: '8px 12px',
+                  borderBottom: '2px solid #ddd',
+                  textAlign: 'left',
+                  background: '#f5f5f5',
+                }}
+              >
+                {h.label}
+                {sortId === h.key && (
+                  <span style={{ marginLeft: 4 }}>
+                    {sortDesc ? '▼' : '▲'}
+                  </span>
+                )}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
-          {table.getRowModel().rows.length === 0 ? (
+          {pageData.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+              <td
+                colSpan={headers.length}
+                style={{
+                  textAlign: 'center',
+                  padding: '2rem',
+                  color: '#999',
+                }}
+              >
                 Документов не найдено.
               </td>
             </tr>
           ) : (
-            table.getRowModel().rows.map((row) => (
-              <tr key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    style={{
-                      padding: '8px 12px',
-                      borderBottom: '1px solid #eee',
-                    }}
-                  >
-                    {cell.renderCell()}
-                  </td>
-                ))}
+            pageData.map((document) => (
+              <tr key={document.id ?? document.dockey}>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  {document.title || document.docname}
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  {categoryLabel(document.category)}
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  <Badge size="xs">{document.status ?? '—'}</Badge>
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  {document.chunk_count ?? 0}
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  {(() => {
+                    const bytes = document.size_bytes ?? 0
+                    if (bytes < 1024) return `${bytes} Б`
+                    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
+                    return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
+                  })()}
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  {document.tags?.join(', ') || '—'}
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                  {document.dockey?.slice(0, 8) || '—'}
+                </td>
+                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                  <Group gap="xs">
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      disabled={readOnly}
+                      onClick={() => setSelectedDoc(document)}
+                      aria-label={`Подробнее: ${document.title || document.docname}`}
+                    >
+                      Подробнее
+                    </Button>
+                    <Button
+                      size="compact-xs"
+                      color="error"
+                      variant="subtle"
+                      disabled={readOnly}
+                      onClick={() => onDelete(document)}
+                    >
+                      Удалить
+                    </Button>
+                  </Group>
+                </td>
               </tr>
             ))
           )}
@@ -301,18 +265,15 @@ function DocumentsTable({
               borderRadius: 4,
               cursor: 'pointer',
             }}
-            disabled={table.getPageIndex() === 0}
-            onClick={() =>
-              setPagination({
-                ...table.getPageState(),
-                pageIndex: table.getPageIndex() - 1,
-              })
-            }
+            disabled={safePage === 0}
+            onClick={() => onPageChange({ pageIndex: safePage - 1, pageSize })}
           >
             ◀ Назад
           </button>
-          <span style={{ minWidth: '80px', textAlign: 'center', display: 'inline-block' }}>
-            {table.getPageIndex() + 1} / {pageCount}
+          <span
+            style={{ minWidth: '80px', textAlign: 'center', display: 'inline-block' }}
+          >
+            {safePage + 1} / {pageCount}
           </span>
           <button
             style={{
@@ -322,18 +283,21 @@ function DocumentsTable({
               borderRadius: 4,
               cursor: 'pointer',
             }}
-            disabled={table.getPageIndex() >= pageCount - 1}
-            onClick={() =>
-              setPagination({
-                ...table.getPageState(),
-                pageIndex: table.getPageIndex() + 1,
-              })
-            }
+            disabled={safePage >= pageCount - 1}
+            onClick={() => onPageChange({ pageIndex: safePage + 1, pageSize })}
           >
             Вперед ▶
           </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#999', fontSize: 14 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            color: '#999',
+            fontSize: 14,
+          }}
+        >
           <span>Всего: {documents.length}</span>
         </div>
       </div>
@@ -421,7 +385,15 @@ interface DocumentsTabProps {
 }
 
 export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
-  const [category, setCategory] = useState<string>('all')
+  // --- URL-состояние: категория, страница, сортировка живут в адресе ---
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlCategory = searchParams.get('category') || 'all'
+  const urlPage = Math.max(0, Number(searchParams.get('page')) - 1 || 0)
+  const urlSize = Number(searchParams.get('size')) || 25
+  const urlSort = searchParams.get('sort') || 'title'
+  const urlDesc = searchParams.get('desc') === 'true'
+
+  const [category, setCategory] = useState<string>(urlCategory)
   const [path, setPath] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
@@ -448,14 +420,20 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   function handleAddPath() {
     setFormError(null)
     addByPath.mutate(
-      { path: path.trim(), category: category === 'all' ? undefined : category, tags },
+      {
+        path: path.trim(),
+        category: (category === 'all' ? undefined : category) as any,
+        tags,
+      },
       {
         onSuccess: () => {
           setPath('')
           setTags([])
         },
         onError: (cause) =>
-          setFormError(cause instanceof Error ? cause.message : 'Не удалось добавить'),
+          setFormError(
+            cause instanceof Error ? cause.message : 'Не удалось добавить',
+          ),
       },
     )
   }
@@ -469,7 +447,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     upload.mutate(
       {
         files,
-        category: category === 'all' ? undefined : category,
+        category: (category === 'all' ? undefined : category) as any,
         tags: tags.join(', '),
         onProgress: setUploadPercent,
       },
@@ -482,7 +460,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           setRejectErrors({})
         },
         onError: (cause) =>
-          setFormError(cause instanceof Error ? cause.message : 'Загрузка не удалась'),
+          setFormError(
+            cause instanceof Error ? cause.message : 'Загрузка не удалась',
+          ),
         onSettled: () => setUploadPercent(null),
       },
     )
@@ -501,23 +481,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
 
     notifications.show({
       title: `Документ «${document.title || document.docname}» удалён`,
+      message: '',
       color: 'error',
       autoClose: 5000,
-      action: {
-        label: 'Отменить',
-        onClick: () => {
-          if (undoTimer.current) {
-            clearTimeout(undoTimer.current)
-            undoTimer.current = null
-          }
-          setDeletedDocument(null)
-          notifications.show({
-            title: 'Удаление отменено',
-            color: 'blue',
-            autoClose: 3000,
-          })
-        },
-      },
     })
 
     // Автоматически подтверждаем удаление через 5 секунд
@@ -557,7 +523,10 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   /** Валидация файла перед добавлением в список. */
   function validateFile(file: File): string | null {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-    if (!ext || !ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])) {
+    if (
+      !ext ||
+      !ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])
+    ) {
       return `Неподдерживаемый тип файла: ${ext || '(без расширения)'}`
     }
     if (file.size > MAX_FILE_SIZE) {
@@ -567,7 +536,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   }
 
   // ---------------------------------------------------------------- dropzone
-  const getAccept = (): DropzoneProps['accept'] => {
+  const getAccept = (): Record<string, string[]> => {
     const map: Record<string, string[]> = {}
     for (const ext of ALLOWED_EXTENSIONS) {
       const mime = ACCEPT_MAP[ext]
@@ -577,18 +546,19 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     return map
   }
 
-  const onReject = (event: React.DragEvent, rejectedFiles: File[]) => {
+  const onReject = (fileRejections: any) => {
     const next: Record<string, string> = {}
-    for (const file of rejectedFiles) {
-      const reason = validateFile(file)
-      if (reason) next[file.name] = reason
+    for (const { file, reason } of fileRejections) {
+      next[file.name] = reason
     }
     setRejectErrors((prev) => ({ ...prev, ...next }))
   }
 
   /** Фильтруем документы по выбранной категории, исключая удалённые (в ожидании undo). */
   const filteredDocs = useMemo(() => {
-    const docs = (documents.data ?? []).filter((d) => deletedDocument?.id !== d.id)
+    const docs = (documents.data ?? []).filter(
+      (d) => deletedDocument?.id !== d.id,
+    )
     if (category === 'all') return docs
     return docs.filter((d) => d.category === category)
   }, [documents.data, category, deletedDocument])
@@ -654,7 +624,15 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             ...CATEGORY_OPTIONS,
           ]}
           value={category}
-          onChange={(value) => setCategory(value ?? 'all')}
+          onChange={(value) => {
+            const next = value ?? 'all'
+            setCategory(next)
+            const params = new URLSearchParams(searchParams)
+            if (next === 'all') params.delete('category')
+            else params.set('category', next)
+            params.delete('page')
+            setSearchParams(params, { replace: true })
+          }}
           disabled={readOnly}
           allowDeselect={false}
           w={220}
@@ -669,11 +647,10 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         <TagsInput
           label="Теги"
           placeholder="Теги через запятую"
-          data={tags}
-          onChange={(values) => setTags(values)}
+          data={tags as any}
+          onChange={(values) => setTags(values as string[])}
           disabled={readOnly}
           style={{ flex: 1 }}
-          maxWidth={320}
         />
         <Button
           onClick={handleAddPath}
@@ -687,8 +664,8 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       <Dropzone
         accept={getAccept()}
         maxSize={MAX_FILE_SIZE}
-        onReject={onReject}
-        onDrop={(event, acceptedFiles) => {
+        onReject={(fileRejections: any) => onReject(fileRejections)}
+        onDrop={((_event: any, acceptedFiles: any) => {
           if (readOnly) return
           const newFiles: File[] = []
           for (const file of acceptedFiles) {
@@ -705,20 +682,26 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             }
           }
           if (newFiles.length > 0) setFiles((current) => [...current, ...newFiles])
-        }}
+        }) as any}
         disabled={readOnly}
         style={{
           minHeight: 120,
           borderRadius: 'var(--mantine-radius-md)',
         }}
       >
-        {({ dropzoneProps, dropzoneState, getRootProps, getInputProps }) => (
+        {/* @ts-ignore */}
+        {(({
+          dropzoneProps,
+          dropzoneState,
+          getRootProps,
+          getInputProps,
+        }: any) => (
           <>
             <div
-              {...getRootProps({
+              {...(getRootProps({
                 ...dropzoneProps,
                 onClick: () => !readOnly && getInputProps().onClick(),
-              })}
+              }) as Record<string, unknown>)}
               data-testid="doc-dropzone"
               aria-disabled={readOnly}
               style={{
@@ -748,7 +731,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
               </Text>
             )}
           </>
-        )}
+        ) as any)}
       </Dropzone>
 
       {files.length > 0 && (
@@ -764,7 +747,16 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           <Group gap="xs">
             {files.map((file) => (
               <Group key={file.name} gap="xs" style={{ alignItems: 'center' }}>
-                <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  style={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: 180,
+                  }}
+                >
                   {file.name} — {(file.size / 1024).toFixed(0)} КБ
                 </Text>
                 <Button
@@ -773,7 +765,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                   color="error"
                   disabled={upload.isPending}
                   onClick={() => removeFile(file)}
-                  aria-label={`Удалить ${file.name} из 선택ки`}
+                  aria-label={`Удалить ${file.name} из выборки`}
                 >
                   ×
                 </Button>
@@ -832,8 +824,8 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           {/* Аккордеон — для небольших списков, группировка по категориям */}
           <Accordion
             key={grouped.map(([key]) => key).join('|')}
-            defaultValue={grouped.map(([key]) => key)}
-            multiple
+            defaultValue={grouped.length > 0 ? grouped[0][0] : ''}
+            multiple={false}
           >
             {grouped.map(([group, items]) => {
               const filteredItems = category === 'all'
@@ -914,6 +906,28 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           readOnly={readOnly}
           onDelete={handleDeleteDocument}
           setSelectedDoc={setSelectedDoc}
+          pageIndex={urlPage}
+          pageSize={urlSize}
+          sortId={urlSort}
+          sortDesc={urlDesc}
+          onPageChange={(next) => {
+            const params = new URLSearchParams(searchParams)
+            params.set('page', String(next.pageIndex + 1))
+            params.set('size', String(next.pageSize))
+            setSearchParams(params, { replace: true })
+          }}
+          onSortChange={(next) => {
+            const params = new URLSearchParams(searchParams)
+            if (next) {
+              params.set('sort', next.id)
+              params.set('desc', String(next.desc))
+            } else {
+              params.delete('sort')
+              params.delete('desc')
+            }
+            params.delete('page')
+            setSearchParams(params, { replace: true })
+          }}
         />
       ) : null}
 

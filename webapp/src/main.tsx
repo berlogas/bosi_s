@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import '@mantine/spotlight/styles.css'
-import '@uiw/react-codemirror/esm/style.css'
+// import '@uiw/react-codemirror/esm/style.css' — стили подключаются через codemirror theme
 
 import { AppProviders } from './app/AppProviders'
 import { useAuth, watchSessionExpiry } from './features/auth/authStore'

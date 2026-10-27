@@ -6,8 +6,6 @@
 import { useRef, useEffect, useMemo } from 'react'
 import {
   Table,
-  Text,
-  Button,
 } from '@mantine/core'
 import { useSearchParams } from 'react-router-dom'
 

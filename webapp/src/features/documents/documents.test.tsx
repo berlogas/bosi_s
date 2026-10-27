@@ -4,7 +4,7 @@
  * прогресс индексации, лимиты и read-only архива.
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -103,13 +103,19 @@ function mockDocsApi(routes: Record<string, unknown> = {}) {
 beforeEach(() => {
   sessionStorage.clear()
   loginAs()
-  // Очищаем порталы уведомлений Mantine от предыдущих тестов
+  // Очищаем все порталы Mantine от предыдущих тестов (уведомления, модалки и т.д.)
   document.querySelectorAll('[data-mantine-shared-portal-node]').forEach((el) => el.remove())
+  document.querySelectorAll('.mantine-Notifications-root').forEach((el) => el.remove())
+  // Сбрасываем location, чтобы useSearchParams начинал с чистого состояния
+  window.history.replaceState(null, '', '/s/s-1/documents')
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
   resetAuth()
+  // Очищаем порталы уведомлений после каждого теста
+  document.querySelectorAll('[data-mantine-shared-portal-node]').forEach((el) => el.remove())
+  document.querySelectorAll('.mantine-Notifications-root').forEach((el) => el.remove())
 })
 
 describe('вкладка Документы', () => {
@@ -177,7 +183,7 @@ describe('вкладка Документы', () => {
   })
 
   it('загрузка файлов уходит POST на /documents/upload', async () => {
-    const { calls } = mockDocsApi({
+    const { calls: _calls } = mockDocsApi({
       'POST /api/sessions/s-1/documents/upload': {
         added: [DOC],
         duplicates: [],
@@ -185,6 +191,7 @@ describe('вкладка Документы', () => {
         total: 1,
       },
     })
+    void _calls
 
     renderApp()
     await screen.findByText('Временная литература (1)')

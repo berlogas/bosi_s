@@ -32,7 +32,6 @@ export function useUsersPage() {
   const usersQuery = useAdminUsers()
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
-  const deleteUser = useDeleteUser()
 
   // --- URL state с префиксом ---
   const pageIndex = Math.max(0, Number(getParam(searchParams, 'page')) - 1 || 0)

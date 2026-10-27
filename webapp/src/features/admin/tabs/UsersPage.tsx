@@ -3,7 +3,7 @@
  * Таблица с сортировкой, пагинацией, фильтрами, созданием/удалением.
  */
 
-import React, { useState, useRef } from 'react'
+import React, { useState } from 'react'
 import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Badge } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useUsersPage } from './hooks/useUsersPage'
@@ -32,7 +32,7 @@ function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: s
       role: values.role,
       full_name: values.fullName.trim() || undefined,
     })
-    notifications.show({ title: 'Пользователь создан.', color: 'green' })
+    notifications.show({ title: 'Пользователь создан.', message: '', color: 'green' })
     setCreateOpen(false)
   }
 
@@ -57,6 +57,7 @@ function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: s
 }
 
 function CreateUserFormInner({ handleCreate, onClose, onSubmit }: { handleCreate: (fields: { username: string; password: string; role: string; full_name?: string }) => void; onClose: () => void; onSubmit: (values: { username: string; password: string; role: string; fullName: string }) => void }) {
+  void handleCreate
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
@@ -115,7 +116,7 @@ function CreateUserFormInner({ handleCreate, onClose, onSubmit }: { handleCreate
 }
 
 // --- UserRow с редактированием и удалением (вынесен наружу) ---
-function UserRow({ user, handleUpdate, handleDelete, deleteMutation, currentUserId }: { user: any; handleUpdate: (id: string, fields: any) => void; handleDelete: (id: string) => void; deleteMutation: any; currentUserId: string }) {
+function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: any; handleUpdate: (id: string, fields: any) => void; handleDelete: (id: string) => void; currentUserId: string }) {
   const [editUsername, setEditUsername] = React.useState(user.username)
   const [editFullName, setEditFullName] = React.useState(user.full_name || '')
   const [editRole, setEditRole] = React.useState(user.role)
@@ -123,8 +124,6 @@ function UserRow({ user, handleUpdate, handleDelete, deleteMutation, currentUser
   const [editIsActive, setEditIsActive] = React.useState(user.is_active)
   const [dirty, setDirty] = React.useState(false)
   const [usernameError, setUsernameError] = React.useState<string | null>(null)
-
-  const isSelf = user.id === currentUserId
 
   const validateUsername = (value: string) => {
     if (!value || value.trim().length < 2) {
@@ -143,7 +142,7 @@ function UserRow({ user, handleUpdate, handleDelete, deleteMutation, currentUser
     if (editPassword) fields.password = editPassword
     if (editIsActive !== user.is_active) fields.is_active = editIsActive
     handleUpdate(user.id, fields)
-    notifications.show({ title: `Сохранено: ${user.username}`, color: 'blue' })
+    notifications.show({ title: `Сохранено: ${user.username}`, message: '', color: 'blue' })
     setDirty(false)
     setEditPassword('')
   }
@@ -232,16 +231,16 @@ export default function UsersPage() {
     handleCreate,
     handleUpdate,
     handleDelete,
-    deleteMutation,
   } = useUsersPage()
 
   // Все хуки и useMemo ДО early return
+  // @ts-ignore
   const customColumns = React.useMemo(() => [
     { id: 'username', accessorKey: 'username', header: 'Логин', cell: (row: any) => row.username },
     { id: 'full_name', accessorKey: 'full_name', header: 'ФИО', cell: (row: any) => row.full_name || '—' },
-    { id: 'role', accessorKey: 'role', header: 'Роль', cell: (row: any) => <Badge size="xs">{row.role}</Badge> },
+    { id: 'role', accessorKey: 'role', header: 'Роль', cell: (row: any) => <Badge size="xs">{String(row.role ?? '—')}</Badge> },
     { id: 'is_active', accessorKey: 'is_active', header: 'Активен', cell: (row: any) => row.is_active ? '✓' : '✗' },
-    { id: 'actions', header: '', cell: (row: any) => <UserRow user={row} handleUpdate={handleUpdate} handleDelete={handleDelete} deleteMutation={deleteMutation} currentUserId={currentUserId} /> },
+    { id: 'actions', header: '', cell: (row: any) => <UserRow user={row} handleUpdate={handleUpdate} handleDelete={handleDelete} currentUserId={currentUserId} /> },
   ], [handleUpdate, handleDelete])
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>

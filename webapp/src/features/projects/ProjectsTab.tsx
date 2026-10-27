@@ -700,6 +700,9 @@ function SectionsList({
     data: GenerateResult
   } | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** История версий раздела (моковые данные — работает без бэкенда). */
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
+  const [versionHistorySection, setVersionHistorySection] = useState<string | null>(null)
 
   // beforeunload — предупреждение при обновлении страницы (F5) или закрытии вкладки
   useEffect(() => {
@@ -855,6 +858,17 @@ function SectionsList({
                     <Group gap="xs">
                       <Button
                         size="xs"
+                        variant="subtle"
+                        onClick={() => {
+                          setVersionHistorySection(section.name)
+                          setVersionHistoryOpen(true)
+                        }}
+                        aria-label={`История версий: ${sectionTitle(section.name)}`}
+                      >
+                        История
+                      </Button>
+                      <Button
+                        size="xs"
                         onClick={() => handleSave(section.name, value)}
                         disabled={readOnly || !isDirty}
                         loading={savingSection === section.name}
@@ -910,6 +924,16 @@ function SectionsList({
           )
         })}
       </Accordion>
+      {versionHistorySection && versionHistoryOpen && (
+        <VersionHistoryDrawer
+          section={versionHistorySection}
+          opened={versionHistoryOpen}
+          onClose={() => {
+            setVersionHistoryOpen(false)
+            setVersionHistorySection(null)
+          }}
+        />
+      )}
       {hasUnsaved && (
         <Text size="xs" c="dimmed">
           Изменения сохраняются автоматически через 2 с после правки. При уходе со
@@ -917,6 +941,191 @@ function SectionsList({
         </Text>
       )}
     </Stack>
+  )
+}
+
+// ------------------------------------------------------------------- история версий (моковая — работает без бэкенда)
+/** Моковые версии раздела — демонстрация интерфейса без бэкенда API. */
+const MOCK_VERSIONS: Record<string, Array<{
+  version_id: string
+  created_at: string
+  author: string
+  words: number
+  change_summary: string
+}>> = {
+  Introduction: [
+    { version_id: 'v-1', created_at: '2026-10-27T09:00:00+00:00', author: 'ivanov', words: 45, change_summary: 'Начальная версия' },
+    { version_id: 'v-2', created_at: '2026-10-27T10:30:00+00:00', author: 'ivanov', words: 120, change_summary: 'Добавлена цель исследования' },
+    { version_id: 'v-3', created_at: '2026-10-27T14:15:00+00:00', author: 'petrov', words: 155, change_summary: 'Правка стиля и сноски' },
+  ],
+  Methods: [
+    { version_id: 'v-1', created_at: '2026-10-27T11:00:00+00:00', author: 'ivanov', words: 200, change_summary: 'Первый черновик методологии' },
+  ],
+  Results: [
+    { version_id: 'v-1', created_at: '2026-10-27T12:00:00+00:00', author: 'ivanov', words: 80, change_summary: 'Черновик результатов' },
+  ],
+}
+
+/** Моковый diff между двумя версиями. */
+function mockDiff(section: string, from: string, to: string): string {
+  const lines = [
+    `--- a/${section}.md (${from})`,
+    `+++ b/${section}.md (${to})`,
+    `@@ -1,3 +1,4 @@`,
+    ` Введение`,
+    `-старая формулировка`,
+    `+новая формулировка`,
+    `+добавлен абзац`,
+    ``,
+    `Раздел подготовлен к отправке.`,
+  ]
+  return lines.join('\n')
+}
+
+/** Drawer с историей версий раздела и diff между выбранными версиями. */
+function VersionHistoryDrawer({
+  section,
+  opened,
+  onClose,
+}: {
+  section: string
+  opened: boolean
+  onClose: () => void
+}) {
+  const versions = MOCK_VERSIONS[section] ?? []
+  const [selectedFrom, setSelectedFrom] = useState<string | null>(null)
+  const [selectedTo, setSelectedTo] = useState<string | null>(null)
+  const [diffText, setDiffText] = useState<string | null>(null)
+
+  const handleSelectFrom = (id: string) => {
+    setSelectedFrom(id)
+    if (selectedTo) {
+      setDiffText(mockDiff(section, id, selectedTo))
+    }
+  }
+
+  const handleSelectTo = (id: string) => {
+    setSelectedTo(id)
+    if (selectedFrom) {
+      setDiffText(mockDiff(section, selectedFrom, id))
+    }
+  }
+
+  return (
+    <Drawer
+      opened={opened}
+      onClose={onClose}
+      title={`История версий: ${sectionTitle(section)}`}
+      size="600px"
+      withCloseButton
+    >
+      <Stack gap="sm">
+        <Text size="sm" fw={500}>
+          Версии раздела (демо-данные, без бэкенда)
+        </Text>
+
+        <Table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Версия</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Дата</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Автор</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Слов</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Описание</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px' }}>Сравнить</th>
+            </tr>
+          </thead>
+          <tbody>
+            {versions.map((v) => (
+              <tr key={v.version_id}>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 'xs' }}>
+                  {v.version_id}
+                </td>
+                <td style={{ padding: '8px 12px', fontSize: 'xs', color: 'dimmed' }}>
+                  {v.created_at}
+                </td>
+                <td style={{ padding: '8px 12px', fontSize: 'xs' }}>
+                  {v.author}
+                </td>
+                <td style={{ padding: '8px 12px', fontSize: 'xs' }}>
+                  {v.words}
+                </td>
+                <td style={{ padding: '8px 12px', fontSize: 'xs' }}>
+                  {v.change_summary}
+                </td>
+                <td style={{ padding: '8px 12px' }}>
+                  <Group gap="xs">
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={() => handleSelectFrom(v.version_id)}
+                      disabled={selectedFrom === v.version_id}
+                    >
+                      от
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={() => handleSelectTo(v.version_id)}
+                      disabled={selectedTo === v.version_id}
+                    >
+                      до
+                    </Button>
+                  </Group>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+
+        {diffText && (
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              Diff между {selectedFrom} и {selectedTo}
+            </Text>
+            <div
+              style={{
+                border: `1px solid var(--mantine-color-default-border)`,
+                borderRadius: 'var(--mantine-radius-sm)',
+                padding: 'var(--mantine-spacing-sm)',
+                background: 'var(--mantine-color-default-bg)',
+                fontFamily: 'monospace',
+                fontSize: 'xs',
+                whiteSpace: 'pre-wrap',
+                maxHeight: 300,
+                overflowY: 'auto',
+                color: 'var(--mantine-color-text)',
+              }}
+            >
+              {diffText.split('\n').map((line, i) => {
+                const isAdded = line.startsWith('+') && !line.startsWith('+++')
+                const isRemoved = line.startsWith('-') && !line.startsWith('---')
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      color: isAdded
+                        ? 'var(--mantine-color-green-filled)'
+                        : isRemoved
+                          ? 'var(--mantine-color-red-filled)'
+                          : 'inherit',
+                    }}
+                  >
+                    {line}
+                  </div>
+                )
+              })}
+            </div>
+          </Stack>
+        )}
+
+        {!diffText && versions.length > 0 && (
+          <Text size="xs" c="dimmed">
+            Выберите две версии для сравнения (кнопки «от» и «до»).
+          </Text>
+        )}
+      </Stack>
+    </Drawer>
   )
 }
 

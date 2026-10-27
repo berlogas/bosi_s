@@ -60,3 +60,15 @@ if (!globalThis.EventSource) {
     withCredentials = false
   } as unknown as typeof EventSource
 }
+
+// react-router-dom useSearchParams не работает в jsdom — мокаем пустыми параметрами.
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return {
+    ...actual,
+    useSearchParams: () => [
+      new URLSearchParams(),
+      () => {},
+    ],
+  }
+})

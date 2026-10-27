@@ -18,8 +18,7 @@ import {
 import { useRef, useState } from 'react'
 
 import { useDocumentsPage } from './hooks/useDocumentsPage'
-import { SimpleTable, DangerZone } from '../components'
-import { InboxPanel } from '../AdminPageLegacy'
+import { SimpleTable, DangerZone, InboxPanel } from '../components'
 
 function errorTextLocal(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback

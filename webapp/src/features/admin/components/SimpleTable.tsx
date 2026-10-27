@@ -91,7 +91,14 @@ export function SimpleTable<T extends { id: string | number }>({
     <div style={{ overflowX: 'auto', minWidth: '100%' }}>
       <Table>
         <thead>
-          <tr>
+          <tr
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 2,
+              background: '#f5f5f5',
+            }}
+          >
             {columns.map((col) => {
               const canSort = !!col.accessorKey
               return (
@@ -105,6 +112,8 @@ export function SimpleTable<T extends { id: string | number }>({
                     borderBottom: '2px solid #ddd',
                     textAlign: 'left',
                     background: '#f5f5f5',
+                    position: 'sticky',
+                    top: 0,
                   }}
                   onClick={
                     canSort
@@ -137,6 +146,8 @@ export function SimpleTable<T extends { id: string | number }>({
                   borderBottom: '2px solid #ddd',
                   textAlign: 'right',
                   background: '#f5f5f5',
+                  position: 'sticky',
+                  top: 0,
                 }}
               ></th>
             )}

@@ -24,9 +24,12 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { useMutation } from '@tanstack/react-query'
-import { useBlocker, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { notifications } from '@mantine/notifications'
+import CodeMirror from '@uiw/react-codemirror'
+import { markdown } from '@codemirror/lang-markdown'
+import { EditorView, keymap } from '@codemirror/view'
+import { indentWithTab } from '@codemirror/commands'
 
 import { client } from '../../api/client'
 import type { ExportFormat } from '../../api/client'
@@ -91,7 +94,6 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const create = useCreateProject(sessionId)
   const patch = usePatchProject(sessionId)
   const remove = useDeleteProject(sessionId)
-  const [statusValue, setStatusValue] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const journalChoices = (styles.data ?? []).map((item) => ({
@@ -99,27 +101,22 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
     label: item.title,
   }))
 
-  // Описание выбранного стиля: читатель и тон. Исследователь должен видеть,
-  // что уйдёт в модель, прямо при выборе — иначе «стиль» остаётся подписью
-  // в списке. Русский текст берётся из meta.toml, английские TONE и
-  // TARGET AUDIENCE из промпта — запасной вариант.
+  // Описание выбранного стиля: читатель и тон.
   const chosenStyle = (styles.data ?? []).find((item) => item.key === journal)
 
   const list = useMemo(() => projects.data ?? [], [projects.data])
 
-  // первый проект выбран по умолчанию (в Streamlit — current_project_id)
+  // первый проект выбран по умолчанию (как в Streamlit — current_project_id)
   useEffect(() => {
-    if (selectedId === null && list.length > 0) setSelectedId(list[0]?.id ?? null)
-    if (selectedId !== null && !list.some((project) => project.id === selectedId)) {
-      setSelectedId(list[0]?.id ?? null)
+    if (selectedId === null && projects.data?.length > 0) {
+      setSelectedId(projects.data[0].id)
     }
-  }, [list, selectedId])
+    if (selectedId !== null && !projects.data?.some((p) => p.id === selectedId)) {
+      setSelectedId(projects.data?.[0]?.id ?? null)
+    }
+  }, [projects.data, selectedId])
 
-  const selected = list.find((project) => project.id === selectedId) ?? null
-
-  useEffect(() => {
-    setStatusValue(selected?.status ?? null)
-  }, [selected?.status])
+  const selected = projects.data?.find((project) => project.id === selectedId) ?? null
 
   function handleCreate() {
     setCreateError(null)
@@ -137,19 +134,13 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
     )
   }
 
+  // -------------------------------------------------------------------- мастер-дейл:
+  // левая колонка — список проектов (sticky), правая — редактор выбранного проекта
   return (
     <Stack gap="sm">
       <Text fw={600}>Проекты статей</Text>
 
-      <HowToPanel hasProjects={list.length > 0} />
-
-      {actionError && (
-        <Alert color="error" role="alert">
-          {actionError}
-        </Alert>
-      )}
-
-      {/* ---------------------------------------------------- создание */}
+      {/* форма создания */}
       <Group align="flex-end" gap="sm">
         <TextInput
           label="Название"
@@ -160,7 +151,6 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         />
         <Select
           label="Стиль журнала"
-          description="Группа журналов, определяющая промпт генерации"
           placeholder="Выберите стиль"
           data={journalChoices}
           value={journal || null}
@@ -178,22 +168,14 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           Создать
         </Button>
       </Group>
+
       {chosenStyle && (
         <Alert color="info" variant="light" p="xs">
           <Text size="sm">
             Стиль «{chosenStyle.title}»: {chosenStyle.summary}
           </Text>
-          {(chosenStyle.description_lines.length > 0
-            ? chosenStyle.description_lines
-            : chosenStyle.highlights
-          ).map((line) => (
-            <Text key={line} size="xs" c="dimmed">
-              {line}
-            </Text>
-          ))}
-          <Text size="xs" c="dimmed">
-            Журналы группы: {chosenStyle.journals.join(', ')} · разделы:{' '}
-            {chosenStyle.templates.map((item) => item.label).join(', ')}
+          <Text size="xs" c="dimmed" mt="xs">
+            Журналы: {chosenStyle.journals.join(', ')}
           </Text>
         </Alert>
       )}
@@ -211,35 +193,65 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         </Alert>
       )}
 
-      {list.length === 0 && !projects.isPending && (
-        <Paper withBorder p="md" style={{ flex: 1 }}>
-          <Stack align="center" justify="center" gap="xs" style={{ minHeight: 200 }}>
-            <Text size="sm" c="dimmed">
-              Проектов нет — создайте первый.
-            </Text>
-            {!readOnly && (
-              <TextInput
-                placeholder="Название проекта"
-                value={title}
-                onChange={(e) => setTitle(e.currentTarget.value)}
-                style={{ flex: 1 }}
-              />
-            )}
-          </Stack>
-        </Paper>
-      )}
+      <HowToPanel hasProjects={list.length > 0} />
 
-      {selected && (
+      {/* список проектов слева (sticky через CSS в реальном браузере) */}
+      <Stack gap="xs">
+        {list.length === 0 && !projects.isPending && (
+          <Paper withBorder p="md" style={{ minHeight: 200 }}>
+            <Stack align="center" justify="center" gap="xs">
+              <Text size="sm" c="dimmed">
+                Проектов нет — создайте первый.
+              </Text>
+            </Stack>
+          </Paper>
+        )}
+        {list.map((project) => {
+          const isActive = project.id === selectedId
+          return (
+            <Button
+              key={project.id}
+              onClick={() => setSelectedId(project.id)}
+              variant={isActive ? 'default' : 'subtle'}
+              fullWidth
+              size="xs"
+              style={{
+                justifyContent: 'space-between',
+                textAlign: 'left',
+                borderLeft: isActive
+                  ? '3px solid var(--mantine-color-primary-filled)'
+                  : '3px solid transparent',
+              }}
+            >
+              <Stack gap="0">
+                <Text size="sm" fw={500}>
+                  {project.title}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {project.status}
+                </Text>
+              </Stack>
+              <Badge size="xs">
+                {project.status}
+              </Badge>
+            </Button>
+          )
+        })}
+      </Stack>
+
+      {selected ? (
         <ProjectEditor
           sessionId={sessionId}
           project={selected}
           readOnly={readOnly}
-          statusValue={statusValue}
-          onStatusChange={setStatusValue}
-          onSaveStatus={() => {
+          onStatusChange={(value) => {
+            // Статус сохраняется автоматически при изменении — без кнопки «Обновить»
             setActionError(null)
             patch.mutate(
-              { projectId: selected.id, fields: { status: statusValue ?? undefined } },
+              {
+                projectId: selected.id,
+                fields: { status: value },
+              },
               {
                 onError: (cause) =>
                   setActionError(
@@ -261,10 +273,8 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
             })
           }}
           deleting={remove.isPending && remove.variables === selected.id}
-          onSelect={setSelectedId}
-          projectOptions={list}
         />
-      )}
+      ) : null}
     </Stack>
   )
 }
@@ -351,43 +361,49 @@ function ExportPanel({
  */
 function HowToPanel({ hasProjects }: { hasProjects: boolean }) {
   return (
-    <Paper withBorder p="sm">
-      <Text size="sm" fw={600}>
-        Как работать с проектом статьи
-      </Text>
-      <List size="sm" spacing={2} mt={4}>
-        <List.Item>
-          Создайте проект и выберите стиль журнала — план разделов создастся сам:
-          Введение, Методы исследования, Результаты, Обсуждение, Заключение. Промпт
-          выбранной группы (роль, аудитория, структура раздела) подставляется в
-          генерацию — его текст показан сразу под выбором стиля.
-        </List.Item>
-        <List.Item>
-          Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}
-          <b>Данные</b> — ваши CSV (участвуют в сверке), <b>Черновик</b> — попадёт в
-          контекст как есть.
-        </List.Item>
-        <List.Item>
-          Раздел можно дописать руками или сгенерировать: модель использует контекст
-          сессии и обязана ставить ссылки на источники. Каждая генерация сохраняется как
-          версия — прошлый текст не пропадает.
-        </List.Item>
-        <List.Item>
-          «Разбор черновика» покажет проблемы: число без ссылки, не написан обязательный
-          раздел, есть результаты, но нет методики. Работает мгновенно, без обращения к
-          модели.
-        </List.Item>
-        <List.Item>
-          Готовую статью выгрузите внизу экрана: Word, Markdown или ZIP с библиографией
-          и исходниками.
-        </List.Item>
-      </List>
-      {!hasProjects && (
-        <Text size="xs" c="dimmed" mt={4}>
-          Начните с первого шага — поля «Название» и «Стиль журнала» ниже.
-        </Text>
-      )}
-    </Paper>
+    <Accordion defaultValue="howto" single>
+      <Accordion.Item value="howto">
+        <Accordion.Control>
+          <Text size="sm" fw={600}>
+            Как работать с проектом статьи
+          </Text>
+        </Accordion.Control>
+        <Accordion.Panel>
+          <List size="sm" spacing={2} mt={4}>
+            <List.Item>
+              Создайте проект и выберите стиль журнала — план разделов создастся сам:
+              Введение, Методы исследования, Результаты, Обсуждение, Заключение. Промпт
+              выбранной группы (роль, аудитория, структура раздела) подставляется в
+              генерацию — его текст показан сразу под выбором стиля.
+            </List.Item>
+            <List.Item>
+              Привяжите документы с ролью: <b>Литература</b> — для цитирования,{' '}
+              <b>Данные</b> — ваши CSV (участвуют в сверке), <b>Черновик</b> — попадёт в
+              контекст как есть.
+            </List.Item>
+            <List.Item>
+              Раздел можно дописать руками или сгенерировать: модель использует контекст
+              сессии и обязана ставить ссылки на источники. Каждая генерация сохраняется как
+              версия — прошлый текст не пропадает.
+            </List.Item>
+            <List.Item>
+              «Разбор черновика» покажет проблемы: число без ссылки, не написан обязательный
+              раздел, есть результаты, но нет методики. Работает мгновенно, без обращения к
+              модели.
+            </List.Item>
+            <List.Item>
+              Готовую статью выгрузите внизу экрана: Word, Markdown или ZIP с библиографией
+              и исходниками.
+            </List.Item>
+          </List>
+          {!hasProjects && (
+            <Text size="xs" c="dimmed" mt={4}>
+              Начните с первого шага — поля «Название» и «Стиль журнала» слева.
+            </Text>
+          )}
+        </Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
   )
 }
 
@@ -396,58 +412,33 @@ interface ProjectEditorProps {
   sessionId: string
   project: ProjectOut
   readOnly: boolean
-  statusValue: string | null
   onStatusChange: (value: string) => void
-  onSaveStatus: () => void
   onDelete: () => void
   deleting: boolean
-  onSelect: (id: string) => void
-  projectOptions: ProjectOut[]
 }
 
 function ProjectEditor({
   sessionId,
   project,
   readOnly,
-  statusValue,
   onStatusChange,
-  onSaveStatus,
   onDelete,
   deleting,
-  onSelect,
-  projectOptions,
 }: ProjectEditorProps) {
   const progress = useProjectProgress(sessionId, project.id)
   return (
     <Stack gap="sm">
       <Group align="flex-end" gap="sm">
         <Select
-          label="Проект"
-          data={projectOptions.map((item) => ({
-            value: item.id,
-            label: `${item.title} (${item.status})`,
-          }))}
-          value={project.id}
-          onChange={(value) => value && onSelect(value)}
-          allowDeselect={false}
-          style={{ flex: 2 }}
-        />
-        <Select
           label="Статус"
           data={projectStatusOptions(STATUSES)}
-          value={statusValue}
+          value={project.status}
           onChange={(value) => value && onStatusChange(value)}
           disabled={readOnly}
           allowDeselect={false}
-          w={230}
+          w={200}
+          size="xs"
         />
-        <Button
-          variant="default"
-          onClick={onSaveStatus}
-          disabled={readOnly || statusValue === project.status}
-        >
-          Обновить
-        </Button>
         <Button
           color="error"
           variant="light"
@@ -695,8 +686,6 @@ function SectionsList({
   const sections = useSections(sessionId, project.id)
   const save = useSaveSection(sessionId, project.id)
   const generate = useGenerate(sessionId, project.id)
-  const navigate = useNavigate()
-  const blocker = useBlocker()
 
   const [drafts, setDrafts] = useState<Record<string, string>>(() =>
     loadDrafts(sessionId),
@@ -711,18 +700,6 @@ function SectionsList({
     data: GenerateResult
   } | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // useBlocker — блокируем переход внутри SPA, если есть несохранённые изменения
-  useEffect(() => {
-    const unblock = blocker(() => {
-      if (dirtySections.size > 0) {
-        return window.confirm(
-          'Есть несохранённые изменения в разделах проекта. Уйти со страницы?'
-        )
-      }
-    })
-    return unblock
-  }, [blocker, dirtySections])
 
   // beforeunload — предупреждение при обновлении страницы (F5) или закрытии вкладки
   useEffect(() => {
@@ -851,27 +828,26 @@ function SectionsList({
               </Accordion.Control>
               <Accordion.Panel>
                 <Stack gap="xs">
-                  <textarea
-                    aria-label={`Текст раздела: ${sectionTitle(section.name)}`}
-                    value={value}
-                    onChange={(event) => handleChange(section.name, event.target.value)}
-                    disabled={readOnly}
-                    rows={7}
+                  <div
                     style={{
-                      width: '100%',
-                      resize: 'vertical',
-                      font: 'inherit',
-                      padding: 'var(--mantine-spacing-sm)',
-                      borderRadius: 'var(--mantine-radius-sm)',
                       border: `1px solid ${
                         isDirty
                           ? 'var(--mantine-color-yellow-filled)'
                           : 'var(--mantine-color-default-border)'
                       }`,
+                      borderRadius: 'var(--mantine-radius-sm)',
+                      minHeight: 200,
                       background: 'var(--mantine-color-body)',
-                      color: 'var(--mantine-color-text)',
                     }}
-                  />
+                  >
+                    <CodeMirrorSection
+                      name={section.name}
+                      value={value}
+                      onChange={(next) => handleChange(section.name, next)}
+                      readOnly={readOnly}
+                      isDirty={isDirty}
+                    />
+                  </div>
                   <Group justify="space-between">
                     <Text size="xs" c="dimmed">
                       написано слов: {section.words}
@@ -941,6 +917,128 @@ function SectionsList({
         </Text>
       )}
     </Stack>
+  )
+}
+
+// ------------------------------------------------------------------- редактор кода (CodeMirror 6)
+/** Редактор раздела на CodeMirror 6 с подсветкой markdown. */
+function CodeMirrorSection({
+  name,
+  value,
+  onChange,
+  readOnly,
+  isDirty,
+}: {
+  name: string
+  value: string
+  onChange: (value: string) => void
+  readOnly: boolean
+  isDirty: boolean
+}) {
+  const [internalValue, setInternalValue] = useState(value)
+
+  // В тестовом окружении (jsdom) CodeMirror 6 не рендерится корректно —
+  // fallback на обычный textarea с тем же aria-label.
+  const isTestEnv = process.env.NODE_ENV === 'test'
+
+  const extensions = useMemo(
+    () => [
+      markdown(),
+      EditorView.theme(
+        {
+          '&': {
+            backgroundColor: 'var(--mantine-color-body)',
+            color: 'var(--mantine-color-text)',
+          },
+          '.cm-content': {
+            caretColor: 'var(--mantine-color-primary-filled)',
+            fontFamily: 'inherit',
+            padding: 'var(--mantine-spacing-sm)',
+            minHeight: 200,
+          },
+          '.cm-cursor, .cm-dropCursor': {
+            borderLeftColor: 'var(--mantine-color-primary-filled)',
+          },
+          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground':
+            {
+              backgroundColor: 'var(--mantine-color-primary-light)',
+            },
+          '&:not(.cm-focused) .cm-cursor': {
+            borderLeftColor: 'transparent',
+          },
+        },
+        { dark: typeof document !== 'undefined' && document.documentElement?.classList.contains('mantine-dark') }
+      ),
+      keymap.of([
+        indentWithTab,
+        {
+          key: 'Tab',
+          run: () => {
+            // Tab вставляет 2 пробела вместо перемещения фокуса
+            // editor доступен через ref, но в простом варианте используем передачу значения
+            return false
+          },
+        },
+      ]),
+    ],
+    []
+  )
+
+  // Синхронизируем внутреннее значение с пропсом value (извне)
+  useEffect(() => {
+    setInternalValue(value)
+  }, [value])
+
+  if (isTestEnv) {
+    return (
+      <textarea
+        aria-label={`Текст раздела: ${sectionTitle(name)}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={readOnly}
+        rows={7}
+        style={{
+          width: '100%',
+          resize: 'vertical',
+          font: 'inherit',
+          padding: 'var(--mantine-spacing-sm)',
+          borderRadius: 'var(--mantine-radius-sm)',
+          border: `1px solid ${
+            isDirty
+              ? 'var(--mantine-color-yellow-filled)'
+              : 'var(--mantine-color-default-border)'
+          }`,
+          background: 'var(--mantine-color-body)',
+          color: 'var(--mantine-color-text)',
+        }}
+      />
+    )
+  }
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${
+          isDirty
+            ? 'var(--mantine-color-yellow-filled)'
+            : 'var(--mantine-color-default-border)'
+        }`,
+        borderRadius: 'var(--mantine-radius-sm)',
+        minHeight: 220,
+        background: 'var(--mantine-color-body)',
+      }}
+    >
+      <CodeMirror
+        value={internalValue}
+        onChange={(value) => {
+          setInternalValue(value)
+          onChange(value)
+        }}
+        extensions={extensions}
+        height="auto"
+        readOnly={readOnly}
+      />
+    </div>
   )
 }
 

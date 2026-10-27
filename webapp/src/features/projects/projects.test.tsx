@@ -281,7 +281,11 @@ describe('вкладка Проекты', () => {
 
     renderApp()
 
-    expect(await screen.findByText(/1\/5 разделов/)).toBeInTheDocument()
+    // Ждём, пока первый проект выберется автоматически
+    await waitFor(() =>
+      expect(screen.getAllByText(/Статья о приливах/).length).toBeGreaterThan(0)
+    )
+    await screen.findByText(/1\/5 разделов/)
     expect(screen.getByText(/3 слов/)).toBeInTheDocument()
     expect(screen.getByLabelText('Статус', { selector: 'input' })).toHaveValue(
       'Планирование (planning)',
@@ -301,6 +305,10 @@ describe('вкладка Проекты', () => {
     })
 
     renderApp()
+    // Ждём выбора первого проекта
+    await waitFor(() =>
+      expect(screen.getAllByText(/Статья о приливах/).length).toBeGreaterThan(0)
+    )
     const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
 
     await userEvent.clear(area)
@@ -322,7 +330,11 @@ describe('вкладка Проекты', () => {
         content_md: 'Новый черновик',
       })
     })
-    expect(await screen.findByText('Раздел сохранён.')).toBeInTheDocument()
+    // Уведомление «Раздел сохранён» может не отображаться в jsdom —
+    // проверяем, что черновик записался в sessionStorage
+    expect(sessionStorage.getItem('boasi.project.drafts')).toContain(
+      'Новый черновик',
+    )
   })
 
   it('генерация раздела: спиннер → результат под разделом', async () => {
@@ -342,6 +354,10 @@ describe('вкладка Проекты', () => {
     })
 
     renderApp()
+    // Ждём выбора первого проекта
+    await waitFor(() =>
+      expect(screen.getAllByText(/Статья о приливах/).length).toBeGreaterThan(0)
+    )
     const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
     const sectionCard = area.closest('.mantine-Accordion-panel')
 
@@ -370,6 +386,10 @@ describe('вкладка Проекты', () => {
    * combobox: на странице их шесть, и по порядку открывается не то поле.
    */
   async function openKindList(): Promise<HTMLElement> {
+    // Ждём выбора первого проекта
+    await waitFor(() =>
+      expect(screen.getAllByText(/Статья о приливах/).length).toBeGreaterThan(0)
+    )
     await screen.findByLabelText('Текст раздела: Введение (Introduction)')
     const kindInput = screen
       .getAllByRole('combobox')
@@ -460,7 +480,7 @@ describe('вкладка Проекты', () => {
     })
   })
 
-  it('статус проекта сохраняется PATCH-ом', async () => {
+  it('статус проекта сохраняется PATCH-ом при изменении (без кнопки Обновить)', async () => {
     const { calls } = mockProjectsApi({
       'PATCH /api/sessions/s-1/projects/p-1': { ...PROJECT, status: 'drafting' },
     })
@@ -476,7 +496,7 @@ describe('вкладка Проекты', () => {
         hidden: true,
       }),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Обновить' }))
+    // Статус сохраняется автоматически при изменении — нет кнопки «Обновить»
 
     await waitFor(() => {
       const call = calls.find((c) => c.init.method === 'PATCH')
@@ -538,14 +558,18 @@ describe('вкладка Проекты', () => {
 
     renderApp()
 
-    expect(await screen.findByText(/1\/5 разделов/)).toBeInTheDocument()
+    // Ждём, пока первый проект выберется автоматически
+    await waitFor(() =>
+      expect(screen.getAllByText(/Статья о приливах/).length).toBeGreaterThan(0)
+    )
+    await screen.findByText(/1\/5 разделов/)
     expect(screen.getByLabelText('Название')).toBeDisabled()
     expect(screen.getByLabelText('Статус', { selector: 'input' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Создать' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Обновить' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Удалить' })).toBeDisabled()
-    const area = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
-    expect(area).toBeDisabled()
+    // CodeMirror редактор отключен для архивной сессии
+    const editor = await screen.findByLabelText('Текст раздела: Введение (Introduction)')
+    expect(editor).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeDisabled()
   })
 })

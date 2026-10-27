@@ -81,14 +81,16 @@ export function AdminLayout() {
   return (
     <Stack>
       {/* Навигация по вкладкам (заменяет st.tabs / Mantine Tabs) —
-          липкая при скролле, чтобы меню всегда оставалось в поле зрения */}
+          фиксирована вверху экрана, чтобы меню всегда оставалось в поле зрения */}
       <Box
         px="md"
         py="sm"
         style={{
-          position: 'sticky',
+          position: 'fixed',
           top: 0,
-          zIndex: 50,
+          left: 260, // ширина сайдбара AppShellNavbar
+          right: 0,
+          zIndex: 100,
           backgroundColor: 'var(--mantine-color-body)',
           borderBottom: '1px solid var(--mantine-color-default-border)',
         }}
@@ -123,8 +125,9 @@ export function AdminLayout() {
         </Group>
       </Box>
 
-      {/* Контент вкладки — без AppShell, чтобы не было двойных отступов */}
-      <Stack p="md">
+      {/* Контент вкладки — без AppShell, чтобы не было двойных отступов.
+          padding-top компенсирует фиксированное меню. */}
+      <Stack p="md" style={{ paddingTop: '60px' }}>
         <ActiveComponent />
       </Stack>
     </Stack>

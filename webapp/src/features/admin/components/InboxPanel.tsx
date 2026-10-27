@@ -24,7 +24,11 @@ import {
   useInboxStatus,
 } from '../queries'
 import type { InboxRun } from '../../../api/client'
-import { errorText, shortWhen } from '../../../lib/format'
+import { shortWhen } from '../../../lib/format'
+
+function errorText(cause: unknown, fallback: string): string {
+  return cause instanceof Error ? cause.message : fallback
+}
 
 const INBOX_STATUS_LABEL: Record<string, string> = {
   discovered: 'обнаружен',

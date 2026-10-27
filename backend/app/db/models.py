@@ -316,6 +316,7 @@ class ProjectVersion(Base):
         Enum(GenerationKind, native_enum=False), default=GenerationKind.section)
     content_md: Mapped[str] = mapped_column(Text, default="")
     word_count: Mapped[int] = mapped_column(Integer, default=0)
+    seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     citation_map: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     stats: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_by: Mapped[str | None] = mapped_column(

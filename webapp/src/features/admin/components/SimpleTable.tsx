@@ -4,9 +4,7 @@
  */
 
 import { useRef, useEffect, useMemo } from 'react'
-import {
-  Table,
-} from '@mantine/core'
+import { Table } from '@mantine/core'
 import { useSearchParams } from 'react-router-dom'
 
 export interface SimpleColumn<T> {
@@ -156,7 +154,13 @@ export function SimpleTable<T extends { id: string | number }>({
             </tr>
           ) : (
             pageData.map((row) => (
-              <tr key={String(row.id) || JSON.stringify(row)}>
+              <tr
+                key={String(row.id) || JSON.stringify(row)}
+                style={{
+                  contentVisibility: 'auto',
+                  containIntrinsicSize: '100px 60px',
+                }}
+              >
                 {columns.map((col) => (
                   <td
                     key={col.id}

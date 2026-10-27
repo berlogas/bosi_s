@@ -299,7 +299,7 @@ task-oriented UX**. Паритет был правильной стратеги�
 - ✅ 5. Формы с `@mantine/form` + `zod` — `CreateUserForm` в `UsersPage` переписана
 - ✅ 1. A11y-автоматизация — `vitest-axe` в unit (4 теста для AsyncBoundary), `@axe-core/playwright` установлен
 - ⬜ 2. Visual regression — Playwright скриншоты light/dark
-- ⬜ 3. Bundle budget — `rollup-plugin-visualizer`, React.lazy для тяжёлых страниц
+- ✅ 3. Bundle budget — `rollup-plugin-visualizer` установлен, React.lazy для тяжёлых страниц (AdminLayout, KnowledgePage, tabs)
 - ⬜ 6. Производительность — `content-visibility`, `keepPreviousData`, мемоизация
 
 **Критерии приёмки**

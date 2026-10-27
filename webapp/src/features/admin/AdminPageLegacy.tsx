@@ -201,8 +201,9 @@ function DeleteUserButton({ user }: { user: User }) {
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
-        title="Подтвердите удаление"
+        title={`Удалить пользователя ${user.username}`}
         centered
+        size="sm"
       >
         <Stack gap="sm">
           <Text size="sm">

@@ -63,7 +63,7 @@ export function DangerZone({
   return (
     <>
       {trigger}
-      <Modal opened={opened} onClose={() => { setOpened(false); setInput('') }} title={label} centered>
+      <Modal opened={opened} onClose={() => { setOpened(false); setInput('') }} title={label} centered size="sm">
         <Stack gap="md">
           <Alert color="red" title="Действие необратимо">
             Введите <b>{confirmText}</b> для подтверждения.

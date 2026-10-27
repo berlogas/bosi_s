@@ -77,7 +77,7 @@ function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: s
         Создать пользователя
       </Button>
       {createOpen && (
-        <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Создать пользователя">
+        <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Создать пользователя" size="sm">
           <ModalForm
             form={form}
             handleSubmit={handleSubmit}

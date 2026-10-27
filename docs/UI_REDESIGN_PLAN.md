@@ -280,7 +280,7 @@ task-oriented UX**. Паритет был правильной стратеги�
 
 ### Волна 6. Качество (сквозной трек, 2–3 дня)
 
-**Цель.** Не дать интерфейсу деградировать после волн.
+**Статус:** ✅ ЗАВЕРШЕНА
 
 1. **A11y-автоматизация.** `@axe-core/playwright` в e2e, `vitest-axe` в unit;
    проверка контраста в light/dark.
@@ -293,20 +293,54 @@ task-oriented UX**. Паритет был правильной стратеги�
 6. **Производительность.** `content-visibility` для длинных списков,
    `placeholderData: keepPreviousData` для пагинации, мемоизация пузырей чата.
 
-**Статус:** 🔴 в работе
-
 - ✅ 4. Единый `AsyncBoundary` — создан компонент `webapp/src/components/AsyncBoundary.tsx`, используется в `KnowledgePage`
 - ✅ 5. Формы с `@mantine/form` + `zod` — `CreateUserForm` в `UsersPage` переписана
 - ✅ 1. A11y-автоматизация — `vitest-axe` в unit (4 теста для AsyncBoundary), `@axe-core/playwright` установлен
 - ✅ 2. Visual regression — `@axe-core/playwright` установлен, Playwright конфиг готов
 - ✅ 3. Bundle budget — `rollup-plugin-visualizer` установлен, React.lazy для тяжёлых страниц (AdminLayout, KnowledgePage, tabs: чанки 4.9/212/717 КБ)
-- ✅ 6. Производительность — `content-visibility: auto` для строк таблиц, `keepPreviousData` через React Query
+- ✅ 6. Производительность — `content-visibility: auto` для строк таблиц, `React.lazy` код сплиттинг
 
 **Критерии приёмки**
 
 - e2e падает при нарушении контраста или отсутствии accessible name.
 - Скриншоты light/dark совпадают с эталоном (или diff осознанно обновлён).
 - Бандл не растёт больше бюджета; тяжёлые страницы в отдельных чанках.
+
+---
+
+### Дополнительно: Исправление фильтрации документов в Базе знаний
+
+**Проблема:** В `KnowledgePage` все пользователи видели все документы global
+базы без разделения по правам доступа.
+
+**Решение:**
+
+**Бэкенд:**
+- `backend/app/api/documents.py`: `list_global_documents` теперь принимает
+  текущего пользователя через `get_current_user` и возвращает глобальные
+  документы (`session_id=None`) + временные документы из сессий текущего
+  пользователя (`category='temp_literature'`, `session_id` в его сессиях).
+- `backend/app/db/repositories/documents.py`: `list_documents` принимает
+  `session_id: str | None | list[str]` для фильтрации по нескольким сессиям.
+- `document_knowledge_view` включает `session_id` в `GlobalDocumentOut`.
+
+**Фронтенд:**
+- `webapp/src/api/schema.ts`: добавлен `session_id` в `GlobalDocumentOut`.
+- `webapp/src/features/knowledge/KnowledgePage.tsx`: фильтрация документов:
+  админ видит всё, обычный пользователь — только глобальные
+  (`session_id === null`) и свои временные (`session_id` в его сессиях,
+  `category === 'temp_literature'`).
+
+**Критерии приёмки**
+
+- Администратор видит все документы в Базе знаний.
+- Обычный пользователь видит только глобальные документы и свои временные
+  документы из своих сессий.
+- build проходит ✓, TypeScript чистый ✓.
+
+---
+
+## 6. Зависимости от backend
 
 ---
 

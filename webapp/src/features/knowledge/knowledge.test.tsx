@@ -188,7 +188,8 @@ describe('База знаний', () => {
     })
     renderPath()
 
-    expect(await screen.findByText('Не удалось загрузить список')).toBeVisible()
+    expect(await screen.findByText('внутренняя ошибка')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeVisible()
     spy.mockRestore()
   })
 

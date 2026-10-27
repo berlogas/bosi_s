@@ -4,7 +4,9 @@
  */
 
 import React, { useState } from 'react'
-import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Badge } from '@mantine/core'
+import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Badge, Modal } from '@mantine/core'
+import { useForm } from '@mantine/form'
+import { z } from 'zod'
 import { notifications } from '@mantine/notifications'
 import { useUsersPage } from './hooks/useUsersPage'
 import { SimpleTable, DangerZone } from '../components'
@@ -15,25 +17,53 @@ function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
 }
 
-// --- CreateUser form (вынесен наружу) ---
+// --- CreateUser form с @mantine/form + zod (Волна 6, п.5: формы) ---
+type CreateUserFormValues = {
+  username: string
+  password: string
+  fullName?: string
+  role: string
+}
+
+const createUserSchema = z.object({
+  username: z.string().min(2, 'Логин должен быть минимум 2 символа'),
+  password: z.string().min(8, 'Пароль должен быть минимум 8 символов'),
+  fullName: z.string().optional(),
+  role: z.string().min(1, 'Выберите роль'),
+})
+
 function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: string; password: string; role: string; full_name?: string }) => void }) {
-  const [formKey, setFormKey] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
 
-  const handleOpen = () => {
-    setFormKey((k) => k + 1)
-    setCreateOpen(true)
-  }
+  const form = useForm<CreateUserFormValues>({
+    initialValues: { username: '', password: '', fullName: '', role: 'researcher' },
+    validate: (values) => {
+      const parsed = createUserSchema.safeParse(values)
+      if (!parsed.success) {
+        const errors: Partial<CreateUserFormValues> = {}
+        for (const [key, err] of Object.entries(parsed.error.flatten().fieldErrors)) {
+          errors[key as keyof CreateUserFormValues] = err[0] as string
+        }
+        return errors
+      }
+      return {}
+    },
+  }) as any
 
-  const handleSubmit = (values: { username: string; password: string; role: string; fullName: string }) => {
+  const handleSubmit = (values: CreateUserFormValues) => {
     handleCreate({
       username: values.username.trim(),
       password: values.password,
       role: values.role,
-      full_name: values.fullName.trim() || undefined,
+      full_name: values.fullName?.trim() || undefined,
     })
     notifications.show({ title: 'Пользователь создан.', message: '', color: 'green' })
     setCreateOpen(false)
+    form.reset()
+  }
+
+  const handleOpen = () => {
+    setCreateOpen(true)
   }
 
   return (
@@ -45,40 +75,27 @@ function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: s
         Создать пользователя
       </Button>
       {createOpen && (
-        <CreateUserFormInner
-          key={formKey}
-          handleCreate={handleCreate}
-          onClose={() => setCreateOpen(false)}
-          onSubmit={handleSubmit}
-        />
+        <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Создать пользователя">
+          <ModalForm
+            form={form}
+            handleSubmit={handleSubmit}
+            onClose={() => setCreateOpen(false)}
+          />
+        </Modal>
       )}
     </Stack>
   )
 }
 
-function CreateUserFormInner({ handleCreate, onClose, onSubmit }: { handleCreate: (fields: { username: string; password: string; role: string; full_name?: string }) => void; onClose: () => void; onSubmit: (values: { username: string; password: string; role: string; fullName: string }) => void }) {
-  void handleCreate
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState('researcher')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSubmit({ username, password, role, fullName })
-    onClose()
-  }
-
+function ModalForm({ form, handleSubmit, onClose }: { form: ReturnType<typeof useForm<CreateUserFormValues>>; handleSubmit: (values: CreateUserFormValues) => void; onClose: () => void }) {
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={form.onSubmit(handleSubmit)}>
       <Stack gap="sm">
         <Group align="flex-end" wrap="nowrap" gap="xs">
           <TextInput
             label="Логин"
             aria-label="Логин"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={{ flex: 1 }}
+            {...form.getInputProps('username')}
             required
             autoComplete="off"
           />
@@ -86,29 +103,24 @@ function CreateUserFormInner({ handleCreate, onClose, onSubmit }: { handleCreate
             label="Пароль"
             type="password"
             aria-label="Пароль"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ flex: 1 }}
+            {...form.getInputProps('password')}
             required
             autoComplete="new-password"
           />
           <TextInput
             label="ФИО"
             aria-label="ФИО"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            style={{ flex: 1 }}
+            {...form.getInputProps('fullName')}
           />
           <Select
             label="Роль"
             aria-label="Роль"
             data={roleOptions(['researcher', 'admin'])}
-            value={role}
-            onChange={(v) => v && setRole(v)}
+            {...form.getInputProps('role')}
             allowDeselect={false}
             w={150}
           />
-          <Button type="submit" disabled={!username || password.length < 8}>Создать</Button>
+          <Button type="submit" disabled={!form.isValid}>Создать</Button>
         </Group>
       </Stack>
     </form>

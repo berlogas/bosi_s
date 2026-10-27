@@ -13,7 +13,6 @@
 
 import { useDeferredValue } from 'react'
 import {
-  Alert,
   Badge,
   Button,
   Group,
@@ -29,9 +28,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { categoryLabel } from '../../lib/format'
 import { useAuth } from '../auth/authStore'
 import { useKnowledgeDocuments, useKnowledgeStats } from './queries'
-import { EmptyState } from '../../components/EmptyState'
+import { AsyncBoundary } from '../../components/AsyncBoundary'
 import { PageHeader } from '../../components/PageHeader'
-import { SkeletonList } from '../../components/SkeletonList'
 import { StatusBadge } from '../../components/StatusBadge'
 
 /** Категории глобальной базы: те же, что и в админском списке. */
@@ -121,43 +119,34 @@ export function KnowledgePage() {
         />
       </Group>
 
-      {documents.isError && (
-        <Alert color="error" role="alert" title="Не удалось загрузить список">
-          {documents.error instanceof Error
-            ? documents.error.message
-            : 'Неизвестная ошибка запроса'}
-        </Alert>
-      )}
-
-      {documents.isPending ? (
-        <SkeletonList count={6} />
-      ) : documents.data && documents.data.length === 0 ? (
-        <EmptyState
-          title={
-            deferredSearch || category
-              ? 'Ничего не нашлось.'
-              : 'База пока пуста.'
-          }
-          description={
-            deferredSearch || category
-              ? 'Попробуйте другое слово или снимите фильтр.'
-              : 'Наполняет её администратор.'
-          }
-          action={
-            deferredSearch || category ? (
-              <Button
-                variant="subtle"
-                size="xs"
-                onClick={() => setSearchParams({}, { replace: true })}
-              >
-                Сбросить фильтр
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : null}
-
-      {documents.data && documents.data.length > 0 && (
+      <AsyncBoundary
+        data={documents.data ?? []}
+        isLoading={documents.isPending}
+        error={documents.error}
+        onRetry={() => void documents.refetch()}
+        emptyTitle={
+          deferredSearch || category
+            ? 'Ничего не нашлось.'
+            : 'База пока пуста.'
+        }
+        emptyDescription={
+          deferredSearch || category
+            ? 'Попробуйте другое слово или снимите фильтр.'
+            : 'Наполняет её администратор.'
+        }
+        emptyAction={
+          deferredSearch || category ? (
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => setSearchParams({}, { replace: true })}
+            >
+              Сбросить фильтр
+            </Button>
+          ) : undefined
+        }
+        skeletonCount={6}
+      >
         <Table.ScrollContainer minWidth={640} type="native">
           <Table highlightOnHover>
             <Table.Thead>
@@ -202,7 +191,7 @@ export function KnowledgePage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
-      )}
+      </AsyncBoundary>
     </Stack>
   )
 }

@@ -36,10 +36,9 @@ import {
   type PaginationState,
   type SortingState,
 } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 
 import type { DocumentOut } from '../../api/types'
-import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal'
 import { TaskPanel } from '../../components/TaskPanel'
 import { categoryLabel } from '../../lib/format'
 import {
@@ -432,9 +431,10 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
   /** Построчные ошибки при приёме файлов в dropzone: имя файла → причина. */
   const [rejectErrors, setRejectErrors] = useState<Record<string, string>>({})
-  /** Документ, удаление которого подтверждаем. */
-  const [deleteAsk, setDeleteAsk] = useState<DocumentOut | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  /** Документ, который был оптимистично удалён и ждёт undo-тост. */
+  const [deletedDocument, setDeletedDocument] = useState<DocumentOut | null>(null)
+  /** Таймер undo-тоста (5 секунд). */
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** Документ, детали которого показываются в Drawer справа. */
   const [selectedDoc, setSelectedDoc] = useState<DocumentOut | null>(null)
 
@@ -488,6 +488,62 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     )
   }
 
+  // ---------------------------------------------------------------- удаление с undo-тостом
+  /** Оптимистично удаляет документ из списка и показывает тост с кнопкой «Отменить». */
+  function handleDeleteDocument(document: DocumentOut) {
+    // Если есть предыдущий неотменённый undo — отменяем его таймер
+    if (undoTimer.current) {
+      clearTimeout(undoTimer.current)
+      undoTimer.current = null
+    }
+
+    setDeletedDocument(document)
+
+    notifications.show({
+      title: `Документ «${document.title || document.docname}» удалён`,
+      color: 'error',
+      autoClose: 5000,
+      action: {
+        label: 'Отменить',
+        onClick: () => {
+          if (undoTimer.current) {
+            clearTimeout(undoTimer.current)
+            undoTimer.current = null
+          }
+          setDeletedDocument(null)
+          notifications.show({
+            title: 'Удаление отменено',
+            color: 'blue',
+            autoClose: 3000,
+          })
+        },
+      },
+    })
+
+    // Автоматически подтверждаем удаление через 5 секунд
+    undoTimer.current = setTimeout(() => {
+      setDeletedDocument(null)
+      undoTimer.current = null
+    }, 5000)
+
+    // Реальный запрос на сервер
+    if (!document.id) return
+    remove.mutate(document.id, {
+      onSuccess: () => {
+        if (deletedDocument?.id === document.id) {
+          setDeletedDocument(null)
+        }
+      },
+      onError: (cause) => {
+        // При ошибке сервера возвращаем документ в список
+        setDeletedDocument(null)
+        setFormError(
+          cause instanceof Error ? cause.message : 'Не удалось удалить документ',
+        )
+      },
+    })
+  }
+
   /** Удалить файл из выбранных перед загрузкой. */
   function removeFile(file: File) {
     setFiles((current) => current.filter((f) => f !== file))
@@ -530,12 +586,12 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     setRejectErrors((prev) => ({ ...prev, ...next }))
   }
 
-  /** Фильтруем документы по выбранной категории. */
+  /** Фильтруем документы по выбранной категории, исключая удалённые (в ожидании undo). */
   const filteredDocs = useMemo(() => {
-    const docs = documents.data ?? []
+    const docs = (documents.data ?? []).filter((d) => deletedDocument?.id !== d.id)
     if (category === 'all') return docs
     return docs.filter((d) => d.category === category)
-  }, [documents.data, category])
+  }, [documents.data, category, deletedDocument])
 
   /** Группировка по категориям для аккордеона. */
   const grouped = useMemo(() => {
@@ -598,7 +654,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             ...CATEGORY_OPTIONS,
           ]}
           value={category}
-          onChange={(value) => setCategory(value ?? 'temp_literature')}
+          onChange={(value) => setCategory(value ?? 'all')}
           disabled={readOnly}
           allowDeselect={false}
           w={220}
@@ -836,11 +892,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                               color="error"
                               variant="subtle"
                               disabled={readOnly}
-                              loading={remove.isPending && remove.variables === document.id}
-                              onClick={() => {
-                                setDeleteError(null)
-                                setDeleteAsk(document)
-                              }}
+                              onClick={() => handleDeleteDocument(document)}
                             >
                               Удалить
                             </Button>
@@ -860,10 +912,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         <DocumentsTable
           documents={filteredDocs}
           readOnly={readOnly}
-          onDelete={(document) => {
-            setDeleteError(null)
-            setDeleteAsk(document)
-          }}
+          onDelete={handleDeleteDocument}
           setSelectedDoc={setSelectedDoc}
         />
       ) : null}
@@ -874,31 +923,6 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         onClose={() => setSelectedDoc(null)}
       />
 
-      <ConfirmDeleteModal
-        opened={deleteAsk !== null}
-        title="Удалить документ?"
-        subject={
-          <>
-            Документ <b>«{deleteAsk?.title || deleteAsk?.docname}»</b> будет удалён из
-            сессии вместе с чанками.
-          </>
-        }
-        error={deleteError}
-        loading={remove.isPending && remove.variables === deleteAsk?.id}
-        onCancel={() => {
-          if (!remove.isPending) setDeleteAsk(null)
-        }}
-        onConfirm={() => {
-          if (!deleteAsk?.id) return
-          remove.mutate(deleteAsk.id, {
-            onSuccess: () => setDeleteAsk(null),
-            onError: (cause) =>
-              setDeleteError(
-                cause instanceof Error ? cause.message : 'Не удалось удалить документ',
-              ),
-          })
-        }}
-      />
     </Stack>
   )
 }

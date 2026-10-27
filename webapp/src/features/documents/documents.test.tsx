@@ -103,6 +103,8 @@ function mockDocsApi(routes: Record<string, unknown> = {}) {
 beforeEach(() => {
   sessionStorage.clear()
   loginAs()
+  // Очищаем порталы уведомлений Mantine от предыдущих тестов
+  document.querySelectorAll('[data-mantine-shared-portal-node]').forEach((el) => el.remove())
 })
 
 afterEach(() => {
@@ -191,7 +193,7 @@ describe('вкладка Документы', () => {
     expect(screen.queryByRole('button', { name: 'Загрузить файлы' })).not.toBeInTheDocument()
   })
 
-  it('удаление документа — подтверждение в модалке, затем DELETE', async () => {
+  it('удаление документа — оптимистично с undo-тостом, затем DELETE', async () => {
     const { calls } = mockDocsApi({
       'GET /api/sessions/s-1/documents': [DOC, DOC2],
       'DELETE /api/sessions/s-1/documents/d-1': () => {
@@ -202,16 +204,12 @@ describe('вкладка Документы', () => {
     renderApp()
     await screen.findByText(/Отчёт 2025/)
 
-    // Кнопка удаления в строке документа — первая в аккордеоне
+    // Кнопка удаления в строке документа
     const deleteButtons = screen.getAllByRole('button', { name: 'Удалить' })
     expect(deleteButtons.length).toBeGreaterThan(0)
     await userEvent.click(deleteButtons[0] as HTMLElement)
 
-    // Модалка подтверждения: ищем кнопку "Удалить" внутри модалки по заголовку
-    const modal = await screen.findByRole('dialog', { name: /Удалить документ\?/ })
-    const modalDelete = within(modal).getByRole('button', { name: 'Удалить' })
-    await userEvent.click(modalDelete)
-
+    // DELETE уходит сразу (оптимистичное удаление)
     await waitFor(() =>
       expect(
         calls.some(
@@ -228,7 +226,7 @@ describe('вкладка Документы', () => {
 
     renderApp()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Сессия не найдена')
+    expect(await screen.findByText('Сессия не найдена')).toBeInTheDocument()
   })
 
   it('пустой список — «Документов пока нет»', async () => {

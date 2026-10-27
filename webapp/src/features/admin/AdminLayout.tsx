@@ -157,3 +157,4 @@ function ColorSchemeToggle() {
     </button>
   )
 }
+export default AdminLayout

@@ -125,7 +125,6 @@ export function CommandPalette() {
     <Spotlight
       opened={opened}
       onClose={() => setOpened(false)}
-      closeOnBlur={false}
       withinPortal
       withOverlay
       zIndex={1000}

@@ -28,12 +28,12 @@ import {
   IconAdjustments,
 } from '@tabler/icons-react'
 
-const UsersPage = lazy(() => import('./tabs/UsersPage').then((m) => ({ default: m.UsersPage })))
-const DocumentsPage = lazy(() => import('./tabs/DocumentsPage').then((m) => ({ default: m.DocumentsPage })))
-const TasksPage = lazy(() => import('./tabs/TasksPage').then((m) => ({ default: m.TasksPage })))
-const SessionsPage = lazy(() => import('./tabs/SessionsPage').then((m) => ({ default: m.SessionsPage })))
-const AuditPage = lazy(() => import('./tabs/AuditPage').then((m) => ({ default: m.AuditPage })))
-const MaintenancePage = lazy(() => import('./tabs/MaintenancePage').then((m) => ({ default: m.MaintenancePage })))
+const UsersPage = lazy(() => import('./tabs/UsersPage'))
+const DocumentsPage = lazy(() => import('./tabs/DocumentsPage'))
+const TasksPage = lazy(() => import('./tabs/TasksPage'))
+const SessionsPage = lazy(() => import('./tabs/SessionsPage'))
+const AuditPage = lazy(() => import('./tabs/AuditPage'))
+const MaintenancePage = lazy(() => import('./tabs/MaintenancePage'))
 
 const TABS = [
   { path: 'users', label: 'Пользователи', icon: IconUsers, component: UsersPage },

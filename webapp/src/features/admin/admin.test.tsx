@@ -485,7 +485,7 @@ describe('админка', () => {
     await screen.findByLabelText('Логин: ivanov')
 
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
-    await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+    await userEvent.click(within(row).getByRole('button', { name: 'Удалить' }))
 
     // предупреждение про каскад видно до отправки запроса
     expect(await screen.findByText(/Действие необратимо/)).toBeInTheDocument()
@@ -521,7 +521,7 @@ describe('админка', () => {
     await screen.findByLabelText('Логин: ivanov')
 
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
-    await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+    await userEvent.click(within(row).getByRole('button', { name: 'Удалить' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Отмена' }))
 
     await waitFor(() => {
@@ -542,9 +542,11 @@ describe('админка', () => {
     await screen.findByLabelText('Логин: ivanov')
 
     // строка самого администратора (TEST_ADMIN.id === u-admin)
-    expect(screen.getByRole('button', { name: 'Удалить: admin' })).toBeDisabled()
+    const adminRow = screen.getByLabelText('Логин: admin').closest('tr') as HTMLElement
+    expect(within(adminRow).getByRole('button', { name: 'Удалить' })).toBeDisabled()
     // чужие — доступны
-    expect(screen.getByRole('button', { name: 'Удалить: ivanov' })).toBeEnabled()
+    const ivanovRow = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
+    expect(within(ivanovRow).getByRole('button', { name: 'Удалить' })).toBeEnabled()
   })
 
   it('удаление: ошибка 409 показывается в модалке', async () => {
@@ -562,7 +564,7 @@ describe('админка', () => {
     await screen.findByLabelText('Логин: ivanov')
 
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
-    await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+    await userEvent.click(within(row).getByRole('button', { name: 'Удалить' }))
     await userEvent.type(
       screen.getByLabelText(/Введите "ivanov"/),
       'ivanov',

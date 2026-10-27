@@ -192,7 +192,7 @@ function DeleteUserButton({ user }: { user: User }) {
         variant="light"
         disabled={isSelf}
         title={isSelf ? 'Нельзя удалить самого себя' : undefined}
-        aria-label={`Удалить: ${user.username}`}
+        aria-label="Удалить"
         onClick={() => setOpened(true)}
       >
         Удалить

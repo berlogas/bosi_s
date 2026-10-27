@@ -213,7 +213,7 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: an
       {usernameError && <Text size="xs" c="red">{usernameError}</Text>}
       <DangerZone
         confirmText={user.username}
-        label={`Удалить: ${user.username}`}
+        label="Удалить"
         onConfirm={() => handleDelete(user.id)}
         warning={
           'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, '

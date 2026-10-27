@@ -218,7 +218,7 @@ export function AppLayout() {
           </Group>
         </AppShellHeader>
 
-        <AppShellHeader visibleFrom="sm" h={60} px="xl">
+        <AppShellHeader visibleFrom="sm" h={60} px="md" pt="md">
           <Group gap="sm" justify="space-between" w="100%">
             <Group gap="sm">
               <Title

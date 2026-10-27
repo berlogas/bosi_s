@@ -19,11 +19,21 @@ import {
   Progress,
   Select,
   Stack,
+  Table,
   Text,
   TextInput,
 } from '@mantine/core'
 import { Dropzone, DropzoneProps } from '@mantine/dropzone'
 import { TagsInput } from '@mantine/core'
+import {
+  createColumnHelper,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  useReactTable,
+  type PaginationState,
+  type SortingState,
+} from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
 
 import type { DocumentOut } from '../../api/types'
@@ -92,13 +102,235 @@ const ACCEPT_MAP: Record<string, string> = {
   '.py': 'text/x-python',
 }
 
+// ------------------------------------------------------------------- таблица
+/** Таблица документов с сортировкой и пагинацией — показывается при >20 документов. */
+function DocumentsTable({
+  documents,
+  readOnly,
+  onDelete,
+}: {
+  documents: DocumentOut[]
+  readOnly: boolean
+  onDelete: (document: DocumentOut) => void
+}) {
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  })
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'title', desc: false },
+  ])
+
+  const columnHelper = createColumnHelper<DocumentOut>()
+
+  const columns = [
+    columnHelper.accessor('title', {
+      header: 'Название',
+      cell: (info) => info.getValue() || info.row.original.docname,
+    }),
+    columnHelper.accessor('category', {
+      header: 'Категория',
+      cell: (info) => categoryLabel(info.getValue()),
+    }),
+    columnHelper.accessor('status', {
+      header: 'Статус',
+      cell: (info) => {
+        const status = info.getValue() ?? '—'
+        return <Badge size="xs">{status}</Badge>
+      },
+    }),
+    columnHelper.accessor('chunk_count', {
+      header: 'Чанков',
+      cell: (info) => String(info.getValue() ?? 0),
+    }),
+    columnHelper.accessor('size_bytes', {
+      header: 'Объём',
+      cell: (info) => {
+        const bytes = info.getValue() ?? 0
+        if (bytes < 1024) return `${bytes} Б`
+        if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
+        return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
+      },
+    }),
+    columnHelper.accessor('tags', {
+      header: 'Метки',
+      cell: (info) => info.getValue()?.join(', ') || '—',
+    }),
+    columnHelper.accessor('dockey', {
+      header: 'Dockey',
+      cell: (info) => info.getValue()?.slice(0, 8) || '—',
+    }),
+    columnHelper.accessor('id', {
+      id: 'actions',
+      header: '',
+      cell: (info) => (
+        <Button
+          size="compact-xs"
+          color="error"
+          variant="subtle"
+          disabled={readOnly}
+          onClick={() => onDelete(info.row.original)}
+        >
+          Удалить
+        </Button>
+      ),
+    }),
+  ]
+
+  const table = useReactTable({
+    data: documents,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    initialState: {
+      pagination,
+      sorting,
+    },
+    state: {
+      pagination,
+      sorting,
+    },
+    onPaginationChange: setPagination,
+    onSortingChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(sorting) : updater
+      setSorting(next ?? [])
+    },
+  })
+
+  const pageCount = Math.max(1, Math.ceil(documents.length / pageSize))
+  const safePageIndex = Math.min(pagination.pageIndex, pageCount - 1)
+
+  return (
+    <div style={{ overflowX: 'auto', minWidth: '100%' }}>
+      <Table>
+        <thead>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map((header) => {
+                const canSort = header.column.getCanSort()
+                return (
+                  <th
+                    key={header.id}
+                    onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                    style={{
+                      cursor: canSort ? 'pointer' : 'default',
+                      userSelect: 'none',
+                      padding: '8px 12px',
+                      borderBottom: '2px solid #ddd',
+                      textAlign: 'left',
+                      background: '#f5f5f5',
+                    }}
+                  >
+                    {header.isPlaceholder ? null : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {header.renderHeader()}
+                        {canSort && header.column.getIsSorted() && (
+                          <span>
+                            {header.column.getIsSorted() === 'desc' ? '▼' : '▲'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </th>
+                )
+              })}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                Документов не найдено.
+              </td>
+            </tr>
+          ) : (
+            table.getRowModel().rows.map((row) => (
+              <tr key={row.id}>
+                {row.getVisibleCells().map((cell) => (
+                  <td
+                    key={cell.id}
+                    style={{
+                      padding: '8px 12px',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {cell.renderCell()}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </Table>
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '1rem',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #ddd',
+              background: 'white',
+              borderRadius: 4,
+              cursor: 'pointer',
+            }}
+            disabled={table.getPageIndex() === 0}
+            onClick={() =>
+              setPagination({
+                ...table.getPageState(),
+                pageIndex: table.getPageIndex() - 1,
+              })
+            }
+          >
+            ◀ Назад
+          </button>
+          <span style={{ minWidth: '80px', textAlign: 'center', display: 'inline-block' }}>
+            {table.getPageIndex() + 1} / {pageCount}
+          </span>
+          <button
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #ddd',
+              background: 'white',
+              borderRadius: 4,
+              cursor: 'pointer',
+            }}
+            disabled={table.getPageIndex() >= pageCount - 1}
+            onClick={() =>
+              setPagination({
+                ...table.getPageState(),
+                pageIndex: table.getPageIndex() + 1,
+              })
+            }
+          >
+            Вперед ▶
+          </button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#999', fontSize: 14 }}>
+          <span>Всего: {documents.length}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface DocumentsTabProps {
   sessionId: string
   readOnly: boolean
 }
 
 export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
-  const [category, setCategory] = useState<string>('temp_literature')
+  const [category, setCategory] = useState<string>('all')
   const [path, setPath] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
@@ -122,7 +354,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   function handleAddPath() {
     setFormError(null)
     addByPath.mutate(
-      { path: path.trim(), category, tags },
+      { path: path.trim(), category: category === 'all' ? undefined : category, tags },
       {
         onSuccess: () => {
           setPath('')
@@ -143,7 +375,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     upload.mutate(
       {
         files,
-        category,
+        category: category === 'all' ? undefined : category,
         tags: tags.join(', '),
         onProgress: setUploadPercent,
       },
@@ -204,21 +436,32 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     setRejectErrors((prev) => ({ ...prev, ...next }))
   }
 
-  // ---------------------------------------------------------------- список
+  /** Фильтруем документы по выбранной категории. */
+  const filteredDocs = useMemo(() => {
+    const docs = documents.data ?? []
+    if (category === 'all') return docs
+    return docs.filter((d) => d.category === category)
+  }, [documents.data, category])
+
+  /** Группировка по категориям для аккордеона. */
   const grouped = useMemo(() => {
     const groups = new Map<string, DocumentOut[]>()
-    for (const document of documents.data ?? []) {
+    for (const document of filteredDocs) {
       const key = document.category || 'notes'
       const bucket = groups.get(key)
       if (bucket) bucket.push(document)
       else groups.set(key, [document])
     }
     return [...groups.entries()]
-  }, [documents.data])
+  }, [filteredDocs])
 
   const liveTasks = (tasks.data ?? []).filter(
     (task) => task.status === 'running' || task.status === 'queued',
   )
+
+  const showEmpty = filteredDocs.length === 0 && documents.isSuccess
+  const showAccordion = filteredDocs.length > 0 && filteredDocs.length <= 20
+  const showTable = filteredDocs.length > 20
 
   return (
     <Stack gap="sm">
@@ -228,6 +471,11 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         <Alert color="error" role="alert">
           {formError}
         </Alert>
+      )}
+      {showEmpty && (
+        <Text size="sm" c="dimmed">
+          Документов пока нет.
+        </Text>
       )}
       {uploadResult && <Alert color="success">{uploadResult}</Alert>}
 
@@ -251,7 +499,10 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       <Group align="flex-end" gap="sm">
         <Select
           label="Категория"
-          data={CATEGORY_OPTIONS}
+          data={[
+            { value: 'all', label: 'Все категории' },
+            ...CATEGORY_OPTIONS,
+          ]}
           value={category}
           onChange={(value) => setCategory(value ?? 'temp_literature')}
           disabled={readOnly}
@@ -420,73 +671,96 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         </Alert>
       )}
 
-      {grouped.length === 0 && !documents.isPending && (
+      {filteredDocs.length === 0 && !documents.isPending && (
         <Text size="sm" c="dimmed">
           Документов пока нет.
         </Text>
       )}
 
-      {/* key: defaultValue читается при монтировании — без него панели
-          остаются закрытыми, когда список приходит асинхронно */}
-      <Accordion
-        key={grouped.map(([key]) => key).join('|')}
-        defaultValue={grouped.map(([key]) => key)}
-        multiple
-      >
-        {grouped.map(([group, items]) => (
-          <Accordion.Item key={group} value={group}>
-            <Accordion.Control>
-              {categoryLabel(group)} ({items.length})
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Stack gap="xs">
-                {items.map((document) => (
-                  <Group key={document.id ?? document.dockey} justify="space-between">
-                    <Stack gap={2}>
-                      <Text size="sm">
-                        {document.title || document.docname} —{' '}
-                        {((document.size_bytes ?? 0) / 1024).toFixed(0)} КБ,{' '}
-                        {document.chunk_count ?? 0} чанков
-                        {document.status === 'error' && (
-                          <Text component="span" c="error" size="xs">
-                            {' '}
-                            · ошибка индексации
-                          </Text>
-                        )}
-                      </Text>
-                      {document.tags && document.tags.length > 0 && (
-                        <Text size="xs" c="dimmed">
-                          теги: {document.tags.join(', ')}
-                        </Text>
-                      )}
+      {showAccordion ? (
+        <>
+          {/* Аккордеон — для небольших списков, группировка по категориям */}
+          <Accordion
+            key={grouped.map(([key]) => key).join('|')}
+            defaultValue={grouped.map(([key]) => key)}
+            multiple
+          >
+            {grouped.map(([group, items]) => {
+              const filteredItems = category === 'all'
+                ? items
+                : items.filter((d) => d.category === category)
+              if (filteredItems.length === 0) return null
+              return (
+                <Accordion.Item key={group} value={group}>
+                  <Accordion.Control>
+                    {categoryLabel(group)} ({filteredItems.length})
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap="xs">
+                      {filteredItems.map((document) => (
+                        <Group
+                          key={document.id ?? document.dockey}
+                          justify="space-between"
+                        >
+                          <Stack gap={2}>
+                            <Text size="sm">
+                              {document.title || document.docname} —{' '}
+                              {((document.size_bytes ?? 0) / 1024).toFixed(0)} КБ,{' '}
+                              {document.chunk_count ?? 0} чанков
+                              {document.status === 'error' && (
+                                <Text component="span" c="error" size="xs">
+                                  {' '}
+                                  · ошибка индексации
+                                </Text>
+                              )}
+                            </Text>
+                            {document.tags && document.tags.length > 0 && (
+                              <Text size="xs" c="dimmed">
+                                теги: {document.tags.join(', ')}
+                              </Text>
+                            )}
+                          </Stack>
+                          <Group gap="md">
+                            {document.dockey && (
+                              <Text size="xs" c="dimmed" ff="monospace">
+                                {document.dockey.slice(0, 8)}
+                              </Text>
+                            )}
+                            <Button
+                              size="compact-xs"
+                              color="error"
+                              variant="subtle"
+                              disabled={readOnly}
+                              loading={remove.isPending && remove.variables === document.id}
+                              onClick={() => {
+                                setDeleteError(null)
+                                setDeleteAsk(document)
+                              }}
+                            >
+                              Удалить
+                            </Button>
+                          </Group>
+                        </Group>
+                      ))}
                     </Stack>
-                    <Group gap="md">
-                      {document.dockey && (
-                        <Text size="xs" c="dimmed" ff="monospace">
-                          {document.dockey.slice(0, 8)}
-                        </Text>
-                      )}
-                      <Button
-                        size="compact-xs"
-                        color="error"
-                        variant="subtle"
-                        disabled={readOnly}
-                        loading={remove.isPending && remove.variables === document.id}
-                        onClick={() => {
-                          setDeleteError(null)
-                          setDeleteAsk(document)
-                        }}
-                      >
-                        Удалить
-                      </Button>
-                    </Group>
-                  </Group>
-                ))}
-              </Stack>
-            </Accordion.Panel>
-          </Accordion.Item>
-        ))}
-      </Accordion>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              )
+            })}
+          </Accordion>
+        </>
+      ) : null}
+
+      {showTable ? (
+        <DocumentsTable
+          documents={filteredDocs}
+          readOnly={readOnly}
+          onDelete={(document) => {
+            setDeleteError(null)
+            setDeleteAsk(document)
+          }}
+        />
+      ) : null}
 
       <ConfirmDeleteModal
         opened={deleteAsk !== null}

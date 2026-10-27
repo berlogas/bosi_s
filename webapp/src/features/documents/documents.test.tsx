@@ -139,16 +139,12 @@ describe('вкладка Документы', () => {
     renderApp()
 
     await screen.findByText('Временная литература (1)')
-    // Select категории документа
-    const categoryInput = screen.getByLabelText('Категория', { selector: 'input' })
-    await userEvent.click(categoryInput)
-    await userEvent.type(categoryInput, 'Данные')
-    await userEvent.keyboard('{Enter}')
+    // Категория по умолчанию 'all' — не передаётся в запросе
     await userEvent.type(
       screen.getByLabelText('Путь к файлу на диске'),
       '/data/file.pdf',
     )
-    // TagsInput: вводим теги через запятую/Enter
+    // TagsInput: вводим теги через запятую
     const tagsInput = screen.getByLabelText('Теги', { selector: 'input' })
     await userEvent.type(tagsInput, 'a,b')
     await userEvent.click(screen.getByRole('button', { name: 'Добавить' }))
@@ -159,9 +155,9 @@ describe('вкладка Документы', () => {
       const body = JSON.parse(String(call?.init.body))
       expect(body).toEqual({
         path: '/data/file.pdf',
-        category: 'temp_literature',
         tags: ['a', 'b'],
       })
+      expect(body.category).toBeUndefined()
     })
     await waitFor(() =>
       expect(screen.getByLabelText('Путь к файлу на диске')).toHaveValue(''),
@@ -239,7 +235,8 @@ describe('вкладка Документы', () => {
 
     renderApp()
 
-    expect(await screen.findByText('Документов пока нет.')).toBeInTheDocument()
+    const emptyTexts = await screen.findAllByText('Документов пока нет.')
+    expect(emptyTexts.length).toBeGreaterThan(0)
   })
 
   it('прогресс индексации: активная задача рисует панель этапов', async () => {

@@ -1,16 +1,19 @@
 /**
  * Вкладка «Документы» — паритет `documents_tab` из workspace.py.
  *
- * Верх: добавление по пути (категория, путь, теги) и drag&drop-зона
- * (в Streamlit это file_uploader + кнопка «Загрузить файлы»). Низ: список,
- * сгруппированный по категориям в expander'ах — размер, чанки, теги,
- * dockey, удаление. Пока идёт индексация — панели активных задач сессии
- * (план: «список с прогрессом индексации»).
+ * Верх: добавление по пути (категория, путь, теги) и dropzone
+ * (@mantine/dropzone с валидацией форматов и размера). Низ: список,
+ * сгруппированный по категориям в аккордеонах — размер, чанки, теги,
+ * dockey, удаление. Пока идёт индексация — панели активных задач сессии.
+ *
+ * Допустимые форматы и лимиты совпадают с backend (config.py:
+ * allowed_extensions, upload_max_mb).
  */
 
 import {
   Accordion,
   Alert,
+  Badge,
   Button,
   Group,
   Progress,
@@ -18,9 +21,10 @@ import {
   Stack,
   Text,
   TextInput,
-  UnstyledButton,
 } from '@mantine/core'
-import { useMemo, useRef, useState } from 'react'
+import { Dropzone, DropzoneProps } from '@mantine/dropzone'
+import { TagsInput } from '@mantine/core'
+import { useMemo, useState } from 'react'
 
 import type { DocumentOut } from '../../api/types'
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal'
@@ -46,7 +50,47 @@ export const CATEGORIES = [
 const CATEGORY_OPTIONS = CATEGORIES.map((value) => ({
   value,
   label: categoryLabel(value),
-}))
+}));
+
+/** Допустимые расширения — синхронно с backend config.py allowed_extensions. */
+const ALLOWED_EXTENSIONS = [
+  '.pdf',
+  '.txt',
+  '.md',
+  '.html',
+  '.htm',
+  '.docx',
+  '.xlsx',
+  '.pptx',
+  '.csv',
+  '.tsv',
+  '.json',
+  '.yaml',
+  '.yml',
+  '.py',
+] as const
+
+/** Максимальный размер одного файла — синхронно с backend upload_max_mb (200 МБ). */
+const MAX_FILE_SIZE_MB = 200
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
+
+/** MIME-типы для атрибута accept dropzone. */
+const ACCEPT_MAP: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.csv': 'text/csv',
+  '.tsv': 'text/tab-separated-values',
+  '.json': 'application/json',
+  '.yaml': 'application/yaml',
+  '.yml': 'application/yaml',
+  '.py': 'text/x-python',
+}
 
 interface DocumentsTabProps {
   sessionId: string
@@ -56,17 +100,17 @@ interface DocumentsTabProps {
 export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   const [category, setCategory] = useState<string>('temp_literature')
   const [path, setPath] = useState('')
-  const [tags, setTags] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
-  const [dragOver, setDragOver] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
   /** % отправленных байтов при загрузке (XHR onprogress); null — не идёт. */
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
-  /** Документ, удаление которого подтверждаем; запрос — только после «Удалить». */
+  /** Построчные ошибки при приёме файлов в dropzone: имя файла → причина. */
+  const [rejectErrors, setRejectErrors] = useState<Record<string, string>>({})
+  /** Документ, удаление которого подтверждаем. */
   const [deleteAsk, setDeleteAsk] = useState<DocumentOut | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const fileInput = useRef<HTMLInputElement>(null)
 
   const documents = useSessionDocuments(sessionId)
   const tasks = useSessionIndexingTasks(sessionId)
@@ -74,24 +118,15 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   const upload = useUploadDocuments(sessionId)
   const remove = useDeleteDocument(sessionId)
 
-  const tagList = useMemo(
-    () =>
-      tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    [tags],
-  )
-
   // ---------------------------------------------------------------- добавить по пути
   function handleAddPath() {
     setFormError(null)
     addByPath.mutate(
-      { path: path.trim(), category, tags: tagList },
+      { path: path.trim(), category, tags },
       {
         onSuccess: () => {
           setPath('')
-          setTags('')
+          setTags([])
         },
         onError: (cause) =>
           setFormError(cause instanceof Error ? cause.message : 'Не удалось добавить'),
@@ -100,19 +135,25 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   }
 
   // ---------------------------------------------------------------- загрузка файлов
-  function handleUpload(accepted: File[]) {
-    if (accepted.length === 0) return
+  function handleUpload() {
+    if (files.length === 0) return
     setFormError(null)
     setUploadResult(null)
     setUploadPercent(0)
     upload.mutate(
-      { files: accepted, category, tags, onProgress: setUploadPercent },
+      {
+        files,
+        category,
+        tags: tags.join(', '),
+        onProgress: setUploadPercent,
+      },
       {
         onSuccess: (result) => {
           setUploadResult(
             `Добавлено: ${result.added?.length ?? 0}, ошибок: ${result.failed?.length ?? 0}`,
           )
           setFiles([])
+          setRejectErrors({})
         },
         onError: (cause) =>
           setFormError(cause instanceof Error ? cause.message : 'Загрузка не удалась'),
@@ -121,13 +162,46 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     )
   }
 
-  // паритет st.file_uploader: показываем выбранные файлы до нажатия кнопки
-  function onDrop(event: React.DragEvent) {
-    event.preventDefault()
-    setDragOver(false)
-    if (readOnly) return
-    const dropped = Array.from(event.dataTransfer.files)
-    if (dropped.length > 0) setFiles((current) => [...current, ...dropped])
+  /** Удалить файл из выбранных перед загрузкой. */
+  function removeFile(file: File) {
+    setFiles((current) => current.filter((f) => f !== file))
+    setRejectErrors((prev) => {
+      const next = { ...prev }
+      delete next[file.name]
+      return next
+    })
+  }
+
+  /** Валидация файла перед добавлением в список. */
+  function validateFile(file: File): string | null {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])) {
+      return `Неподдерживаемый тип файла: ${ext || '(без расширения)'}`
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return `Превышен размер ${MAX_FILE_SIZE_MB} МБ`
+    }
+    return null
+  }
+
+  // ---------------------------------------------------------------- dropzone
+  const getAccept = (): DropzoneProps['accept'] => {
+    const map: Record<string, string[]> = {}
+    for (const ext of ALLOWED_EXTENSIONS) {
+      const mime = ACCEPT_MAP[ext]
+      if (!map[mime]) map[mime] = []
+      map[mime].push(ext)
+    }
+    return map
+  }
+
+  const onReject = (event: React.DragEvent, rejectedFiles: File[]) => {
+    const next: Record<string, string> = {}
+    for (const file of rejectedFiles) {
+      const reason = validateFile(file)
+      if (reason) next[file.name] = reason
+    }
+    setRejectErrors((prev) => ({ ...prev, ...next }))
   }
 
   // ---------------------------------------------------------------- список
@@ -157,6 +231,18 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       )}
       {uploadResult && <Alert color="success">{uploadResult}</Alert>}
 
+      {Object.values(rejectErrors).length > 0 && (
+        <Alert color="yellow" role="alert">
+          <Stack gap="xs">
+            {Object.entries(rejectErrors).map(([name, reason]) => (
+              <Text key={name} size="sm" c="dimmed">
+                {name}: {reason}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      )}
+
       {/* прогресс индексации: пока задачи живы — панель с этапами */}
       {liveTasks.map((task) => (
         <TaskPanel key={task.id} task={task} />
@@ -179,12 +265,14 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           disabled={readOnly}
           style={{ flex: 1 }}
         />
-        <TextInput
-          label="Теги через запятую"
-          value={tags}
-          onChange={(event) => setTags(event.currentTarget.value)}
+        <TagsInput
+          label="Теги"
+          placeholder="Теги через запятую"
+          data={tags}
+          onChange={(values) => setTags(values)}
           disabled={readOnly}
           style={{ flex: 1 }}
+          maxWidth={320}
         />
         <Button
           onClick={handleAddPath}
@@ -195,65 +283,113 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         </Button>
       </Group>
 
-      {/* dropzone вместо file_uploader: файлы копятся, грузятся кнопкой */}
-      <UnstyledButton
-        component="div"
-        onClick={() => !readOnly && fileInput.current?.click()}
-        onDragOver={(event) => {
-          event.preventDefault()
-          if (!readOnly) setDragOver(true)
+      <Dropzone
+        accept={getAccept()}
+        maxSize={MAX_FILE_SIZE}
+        onReject={onReject}
+        onDrop={(event, acceptedFiles) => {
+          if (readOnly) return
+          const newFiles: File[] = []
+          for (const file of acceptedFiles) {
+            const reason = validateFile(file)
+            if (reason) {
+              setRejectErrors((prev) => ({ ...prev, [file.name]: reason }))
+            } else {
+              newFiles.push(file)
+              setRejectErrors((prev) => {
+                const next = { ...prev }
+                delete next[file.name]
+                return next
+              })
+            }
+          }
+          if (newFiles.length > 0) setFiles((current) => [...current, ...newFiles])
         }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        data-testid="doc-dropzone"
-        aria-disabled={readOnly}
+        disabled={readOnly}
         style={{
-          border: `2px dashed ${dragOver ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-default-border)'}`,
+          minHeight: 120,
           borderRadius: 'var(--mantine-radius-md)',
-          padding: 'var(--mantine-spacing-md)',
-          textAlign: 'center',
-          cursor: readOnly ? 'not-allowed' : 'pointer',
-          background: dragOver ? 'var(--mantine-color-blue-light)' : undefined, // светло-синяя подложка, темнеет в dark
-          opacity: readOnly ? 0.6 : 1,
         }}
       >
-        <Text size="sm" c="dimmed">
-          Перетащите файлы сюда или нажмите, чтобы выбрать
-        </Text>
-      </UnstyledButton>
-      <input
-        ref={fileInput}
-        type="file"
-        multiple
-        hidden
-        onChange={(event) => {
-          const selected = Array.from(event.target.files ?? [])
-          if (selected.length > 0) setFiles((current) => [...current, ...selected])
-          event.target.value = ''
-        }}
-      />
+        {({ dropzoneProps, dropzoneState, getRootProps, getInputProps }) => (
+          <>
+            <div
+              {...getRootProps({
+                ...dropzoneProps,
+                onClick: () => !readOnly && getInputProps().onClick(),
+              })}
+              data-testid="doc-dropzone"
+              aria-disabled={readOnly}
+              style={{
+                border: `2px dashed ${
+                  dropzoneState.dragOver
+                    ? 'var(--mantine-color-blue-filled)'
+                    : 'var(--mantine-color-default-border)'
+                }`,
+                borderRadius: 'var(--mantine-radius-md)',
+                padding: 'var(--mantine-spacing-md)',
+                textAlign: 'center',
+                cursor: readOnly ? 'not-allowed' : 'pointer',
+                background: dropzoneState.dragOver
+                  ? 'var(--mantine-color-blue-light)'
+                  : undefined,
+                opacity: readOnly ? 0.6 : 1,
+              }}
+            >
+              <Text size="sm" c="dimmed">
+                Перетащите файлы сюда или нажмите, чтобы выбрать
+              </Text>
+              <input {...getInputProps()} data-testid="doc-file-input" />
+            </div>
+            {dropzoneState.dragOver && (
+              <Text size="xs" c="blue" mt="xs">
+                Отпустите, чтобы добавить файлы
+              </Text>
+            )}
+          </>
+        )}
+      </Dropzone>
 
       {files.length > 0 && (
-        <Group justify="space-between">
-          <Text size="sm">
-            Выбрано файлов: {files.length}{' '}
+        <Group justify="space-between" wrap="wrap">
+          <Stack gap="xs">
+            <Text size="sm">
+              Выбрано файлов: {files.length}
+            </Text>
             <Text component="span" c="dimmed" size="xs">
               ({files.map((file) => file.name).join(', ')})
             </Text>
-          </Text>
+          </Stack>
           <Group gap="xs">
+            {files.map((file) => (
+              <Group key={file.name} gap="xs" style={{ alignItems: 'center' }}>
+                <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
+                  {file.name} — {(file.size / 1024).toFixed(0)} КБ
+                </Text>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="error"
+                  disabled={upload.isPending}
+                  onClick={() => removeFile(file)}
+                  aria-label={`Удалить ${file.name} из 선택ки`}
+                >
+                  ×
+                </Button>
+              </Group>
+            ))}
             <Button
               variant="subtle"
               size="xs"
               onClick={() => setFiles([])}
               disabled={upload.isPending}
             >
-              Очистить
+              Очистить всё
             </Button>
             <Button
-              onClick={() => handleUpload(files)}
+              onClick={handleUpload}
               loading={upload.isPending}
-              disabled={readOnly}
+              disabled={readOnly || files.length === 0}
             >
               Загрузить файлы
             </Button>

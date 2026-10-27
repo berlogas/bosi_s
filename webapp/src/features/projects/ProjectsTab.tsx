@@ -10,6 +10,7 @@
 import {
   Accordion,
   Alert,
+  Badge,
   Button,
   Divider,
   Group,
@@ -23,7 +24,9 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useBlocker, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { notifications } from '@mantine/notifications'
 
 import { client } from '../../api/client'
 import type { ExportFormat } from '../../api/client'
@@ -692,39 +695,105 @@ function SectionsList({
   const sections = useSections(sessionId, project.id)
   const save = useSaveSection(sessionId, project.id)
   const generate = useGenerate(sessionId, project.id)
+  const navigate = useNavigate()
+  const blocker = useBlocker()
+
   const [drafts, setDrafts] = useState<Record<string, string>>(() =>
     loadDrafts(sessionId),
   )
   const [savedName, setSavedName] = useState<string | null>(null)
+  const [savingSection, setSavingSection] = useState<string | null>(null)
   const [sectionError, setSectionError] = useState<string | null>(null)
-  /** Результат генерации — под своим разделом (как в _generate). */
+  /** Разделы с несохранёнными на сервере изменениями. */
+  const [dirtySections, setDirtySections] = useState<Set<string>>(new Set())
   const [genResult, setGenResult] = useState<{
     name: string
     data: GenerateResult
   } | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // useBlocker — блокируем переход внутри SPA, если есть несохранённые изменения
+  useEffect(() => {
+    const unblock = blocker(() => {
+      if (dirtySections.size > 0) {
+        return window.confirm(
+          'Есть несохранённые изменения в разделах проекта. Уйти со страницы?'
+        )
+      }
+    })
+    return unblock
+  }, [blocker, dirtySections])
+
+  // beforeunload — предупреждение при обновлении страницы (F5) или закрытии вкладки
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirtySections.size > 0) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirtySections])
 
   function valueOf(name: string, serverValue: string): string {
     return drafts[name] ?? serverValue
+  }
+
+  function sectionDirty(name: string, value: string): boolean {
+    const section = sections.data?.find((s) => s.name === name)
+    return value !== (section?.content_md ?? '')
   }
 
   function handleChange(name: string, value: string) {
     setDrafts((current) => ({ ...current, [name]: value }))
     saveDraft(sessionId, name, value)
     setSavedName(null)
+    setDirtySections((prev) => {
+      const next = new Set(prev)
+      if (sectionDirty(name, value)) next.add(name)
+      else next.delete(name)
+      return next
+    })
+
+    // Автосейв с debounce 2 секунды
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      handleAutoSave(name, value)
+    }, 2000)
   }
 
-  function handleSave(name: string, value: string) {
-    setSectionError(null)
+  function handleAutoSave(name: string, value: string) {
+    if (!sectionDirty(name, value)) return
+    setSavingSection(name)
     save.mutate(
       { name, contentMd: value },
       {
-        onSuccess: () => setSavedName(name),
-        onError: (cause) =>
+        onSuccess: () => {
+          setSavingSection(null)
+          setDirtySections((prev) => {
+            const next = new Set(prev)
+            next.delete(name)
+            return next
+          })
+          notifications.show({ title: 'Раздел сохранён', color: 'green' })
+        },
+        onError: (cause) => {
+          setSavingSection(null)
           setSectionError(
             cause instanceof Error ? cause.message : 'Не удалось сохранить раздел',
-          ),
+          )
+        },
       },
     )
+  }
+
+  function handleSave(name: string, value: string) {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    handleAutoSave(name, value)
   }
 
   if (sections.isError) {
@@ -737,11 +806,20 @@ function SectionsList({
     )
   }
 
+  const hasUnsaved = dirtySections.size > 0
+
   return (
     <Stack gap="xs">
-      <Text size="sm" fw={600}>
-        Разделы
-      </Text>
+      <Group align="flex-end" gap="sm">
+        <Text size="sm" fw={600}>
+          Разделы
+        </Text>
+        {hasUnsaved && (
+          <Badge color="yellow" size="xs">
+            Есть несохранённые изменения
+          </Badge>
+        )}
+      </Group>
       {sectionError && (
         <Alert color="error" role="alert">
           {sectionError}
@@ -764,10 +842,12 @@ function SectionsList({
       >
         {(sections.data ?? []).map((section) => {
           const value = valueOf(section.name, section.content_md)
+          const isDirty = dirtySections.has(section.name)
           return (
             <Accordion.Item key={section.name} value={section.name}>
               <Accordion.Control>
                 {sectionTitle(section.name)} — {section.word_target} слов
+                {isDirty && <Badge size="xs">не сохранено</Badge>}
               </Accordion.Control>
               <Accordion.Panel>
                 <Stack gap="xs">
@@ -783,7 +863,11 @@ function SectionsList({
                       font: 'inherit',
                       padding: 'var(--mantine-spacing-sm)',
                       borderRadius: 'var(--mantine-radius-sm)',
-                      border: '1px solid var(--mantine-color-default-border)',
+                      border: `1px solid ${
+                        isDirty
+                          ? 'var(--mantine-color-yellow-filled)'
+                          : 'var(--mantine-color-default-border)'
+                      }`,
                       background: 'var(--mantine-color-body)',
                       color: 'var(--mantine-color-text)',
                     }}
@@ -796,10 +880,8 @@ function SectionsList({
                       <Button
                         size="xs"
                         onClick={() => handleSave(section.name, value)}
-                        disabled={readOnly}
-                        loading={
-                          save.isPending && save.variables?.name === section.name
-                        }
+                        disabled={readOnly || !isDirty}
+                        loading={savingSection === section.name}
                       >
                         Сохранить
                       </Button>
@@ -852,6 +934,12 @@ function SectionsList({
           )
         })}
       </Accordion>
+      {hasUnsaved && (
+        <Text size="xs" c="dimmed">
+          Изменения сохраняются автоматически через 2 с после правки. При уходе со
+          страницы вы получите предупреждение.
+        </Text>
+      )}
     </Stack>
   )
 }

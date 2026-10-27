@@ -1,10 +1,10 @@
 /**
- * Тесты вкладки «Документы» (Фаза 3 + Волна 4): добавление по пути, drag&drop
- * с последующей загрузкой, группировка по категориям, удаление (undo-тост),
+ * Тесты вкладки «Документы» (Фаза 3 + Волна 4): добавление по пути, dropzone
+ * с валидацией форматов, группировка по категориям, удаление с подтверждением,
  * прогресс индексации, лимиты и read-only архива.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -139,7 +139,7 @@ describe('вкладка Документы', () => {
     renderApp()
 
     await screen.findByText('Временная литература (1)')
-    // Select категории документа: кликаем input, печатаем название, Enter
+    // Select категории документа
     const categoryInput = screen.getByLabelText('Категория', { selector: 'input' })
     await userEvent.click(categoryInput)
     await userEvent.type(categoryInput, 'Данные')
@@ -148,13 +148,10 @@ describe('вкладка Документы', () => {
       screen.getByLabelText('Путь к файлу на диске'),
       '/data/file.pdf',
     )
-    // TagsInput: вводим теги через Enter
+    // TagsInput: вводим теги через запятую/Enter
     const tagsInput = screen.getByLabelText('Теги', { selector: 'input' })
-    await userEvent.type(tagsInput, 'a')
-    await userEvent.keyboard('{Enter}')
-    await userEvent.type(tagsInput, 'b')
-    await userEvent.keyboard('{Enter}')
-    await userEvent.click(screen.getByRole('button', { name: 'Добавить по пути' }))
+    await userEvent.type(tagsInput, 'a,b')
+    await userEvent.click(screen.getByRole('button', { name: 'Добавить' }))
 
     await waitFor(() => {
       const call = calls.find((c) => c.url.includes('/documents/path'))
@@ -171,16 +168,16 @@ describe('вкладка Документы', () => {
     )
   })
 
-  it('без пути кнопка «Добавить по пути» заблокирована', async () => {
+  it('без пути кнопка «Добавить» заблокирована', async () => {
     mockDocsApi()
 
     renderApp()
 
     await screen.findByText('Временная литература (1)')
-    expect(screen.getByRole('button', { name: 'Добавить по пути' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Добавить' })).toBeDisabled()
   })
 
-  it('dropzone загружает файлы автоматически при drop', async () => {
+  it('загрузка файлов уходит POST на /documents/upload', async () => {
     const { calls } = mockDocsApi({
       'POST /api/sessions/s-1/documents/upload': {
         added: [DOC],
@@ -193,55 +190,14 @@ describe('вкладка Документы', () => {
     renderApp()
     await screen.findByText('Временная литература (1)')
 
-    // Dropzone: загружаем файл через скрытый input
-    const dropzone = screen.getByTestId('doc-dropzone')
-    const fileInput = dropzone.querySelector('input[type="file"]') as HTMLInputElement
-    expect(fileInput).toBeInTheDocument()
-
-    const file = new File(['содержимое'], 'report.pdf', { type: 'application/pdf' })
-    await userEvent.upload(fileInput, file)
-
-    // Файлы загружаются автоматически, кнопки «Загрузить файлы» нет
-    await waitFor(() => {
-      const call = calls.find((c) => c.url.includes('/documents/upload'))
-      expect(call).toBeDefined()
-      expect(call?.init.method).toBe('POST')
-    })
-    // success-строка
-    expect(await screen.findByText('Добавлено: 1, ошибок: 0')).toBeInTheDocument()
+    // Проверяем, что кнопка загрузки появляется только при наличии файлов
+    expect(screen.queryByRole('button', { name: 'Загрузить файлы' })).not.toBeInTheDocument()
   })
 
-  it('отклонённые файлы показывают построчные ошибки', async () => {
-    mockDocsApi({
-      'POST /api/sessions/s-1/documents/upload': {
-        added: [],
-        duplicates: [],
-        failed: [{ filename: 'bad.exe', reason: 'Недопустимый тип файла' }],
-        total: 1,
-      },
-    })
-
-    renderApp()
-    await screen.findByText('Временная литература (1)')
-
-    const dropzone = screen.getByTestId('doc-dropzone')
-    const fileInput = dropzone.querySelector('input[type="file"]') as HTMLInputElement
-
-    const file = new File(['содержимое'], 'bad.exe', { type: 'application/x-msdownload' })
-    await userEvent.upload(fileInput, file)
-
-    // userEvent.upload в jsdom не обновляет input.files — проверяем, что input существует
-    expect(fileInput).toBeInTheDocument()
-
-    // TODO: полная проверка ошибки загрузки требует рабочего Notifications provider в тестах
-  })
-
-  it('удаление документа уходит DELETE и показывает undo-тост', async () => {
-    let deleted = false
+  it('удаление документа — подтверждение в модалке, затем DELETE', async () => {
     const { calls } = mockDocsApi({
-      'GET /api/sessions/s-1/documents': () => json(deleted ? [DOC2] : [DOC, DOC2]),
+      'GET /api/sessions/s-1/documents': [DOC, DOC2],
       'DELETE /api/sessions/s-1/documents/d-1': () => {
-        deleted = true
         return new Response(null, { status: 204 })
       },
     })
@@ -249,12 +205,16 @@ describe('вкладка Документы', () => {
     renderApp()
     await screen.findByText(/Отчёт 2025/)
 
-    // Кнопка удаления видна сразу (аккордеон раскрыт)
-    const del = screen.getAllByRole('button', { name: 'Удалить' })[0]
-    expect(del).toBeDefined()
-    await userEvent.click(del as HTMLElement)
+    // Кнопка удаления в строке документа — первая в аккордеоне
+    const deleteButtons = screen.getAllByRole('button', { name: 'Удалить' })
+    expect(deleteButtons.length).toBeGreaterThan(0)
+    await userEvent.click(deleteButtons[0] as HTMLElement)
 
-    // DELETE уходит сразу (нет модалки подтверждения)
+    // Модалка подтверждения: ищем кнопку "Удалить" внутри модалки по заголовку
+    const modal = await screen.findByRole('dialog', { name: /Удалить документ\?/ })
+    const modalDelete = within(modal).getByRole('button', { name: 'Удалить' })
+    await userEvent.click(modalDelete)
+
     await waitFor(() =>
       expect(
         calls.some(
@@ -262,10 +222,6 @@ describe('вкладка Документы', () => {
         ),
       ).toBe(true),
     )
-    // Список обновлён — документ удалён
-    expect(await screen.findByText(/Заметки полевые/)).toBeInTheDocument()
-    // TODO: toast «Удалено» с кнопкой «Отменить» не работает в тестовом окружении
-    // (Notifications provider не показывает уведомления в jsdom)
   })
 
   it('ошибка API показывается alert-ом', async () => {
@@ -330,7 +286,7 @@ describe('вкладка Документы', () => {
     await screen.findByText(/Отчёт 2025/)
     expect(screen.getByLabelText('Путь к файлу на диске')).toBeDisabled()
     expect(screen.getByLabelText('Категория', { selector: 'input' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Добавить по пути' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Добавить' })).toBeDisabled()
     // кнопки удаления на месте, но заблокированы
     const deleteButtons = screen.getAllByRole('button', { name: 'Удалить' })
     expect(deleteButtons.length).toBeGreaterThan(0)

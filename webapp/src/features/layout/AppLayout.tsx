@@ -40,7 +40,7 @@ import { useCurrentSessionPath } from '../sessions/useCurrentSession'
 import { TaskEventsProvider } from '../tasks/TaskEventsProvider'
 import { TaskIndicator } from './TaskIndicator'
 import { UserMenu } from './UserMenu'
-import { CommandPalette, openCommandPalette } from './CommandPalette'
+import { CommandPalette, openCommandPalette } from '../../components/CommandPalette'
 import { Kbd } from '@mantine/core'
 
 function SystemStatus() {

@@ -749,11 +749,11 @@ class PaperQA2Service:
 
         # litellm.acompletion с stream=True возвращает async генератор чанков.
         # Каждый чанк — объект с choices[].delta.content (новый текст).
-        async for chunk in await llm.acompletion(
+        async for chunk in llm.acompletion(
             messages=[Message(content=prompt)],
             stream=True,
         ):
-            choices = getattr(chunk, "choices", None) or getattr(chunk, "data", None)
+            choices = getattr(chunk, "choices", None)
             if choices:
                 for choice in choices:
                     delta = getattr(choice, "delta", None)

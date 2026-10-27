@@ -19,6 +19,8 @@ export interface DangerZoneProps {
   confirmColor?: 'red' | 'orange' | 'blue'
   /** Дополнительное предупреждение */
   warning?: string
+  /** Блокирует триггер и открытие модалки (например, нельзя удалить себя) */
+  disabled?: boolean
 }
 
 export function DangerZone({
@@ -28,6 +30,7 @@ export function DangerZone({
   children,
   confirmColor = 'red',
   warning,
+  disabled = false,
 }: DangerZoneProps) {
   const [opened, setOpened] = useState(false)
   const [input, setInput] = useState('')
@@ -35,6 +38,7 @@ export function DangerZone({
   const canConfirm = input === confirmText
 
   const handleOpen = () => {
+    if (disabled) return
     setInput('')
     setOpened(true)
   }
@@ -46,7 +50,12 @@ export function DangerZone({
   }
 
   const trigger = children || (
-    <Button variant="subtle" color={confirmColor} onClick={handleOpen}>
+    <Button
+      variant="subtle"
+      color={confirmColor}
+      onClick={handleOpen}
+      disabled={disabled}
+    >
       {label}
     </Button>
   )

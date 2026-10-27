@@ -4,10 +4,10 @@
  */
 
 import React, { useState, useRef } from 'react'
-import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Badge, Modal } from '@mantine/core'
+import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Badge } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useUsersPage } from './hooks/useUsersPage'
-import { SimpleTable } from '../components'
+import { SimpleTable, DangerZone } from '../components'
 import { roleOptions } from '../../../lib/roles'
 import { useAuth } from '../../auth/authStore'
 
@@ -122,11 +122,21 @@ function UserRow({ user, handleUpdate, handleDelete, deleteMutation, currentUser
   const [editPassword, setEditPassword] = React.useState('')
   const [editIsActive, setEditIsActive] = React.useState(user.is_active)
   const [dirty, setDirty] = React.useState(false)
-  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [usernameError, setUsernameError] = React.useState<string | null>(null)
 
   const isSelf = user.id === currentUserId
 
+  const validateUsername = (value: string) => {
+    if (!value || value.trim().length < 2) {
+      setUsernameError('Логин должен быть минимум 2 символа')
+      return false
+    }
+    setUsernameError(null)
+    return true
+  }
+
   const handleSave = () => {
+    if (!validateUsername(editUsername)) return
     const fields: any = { role: editRole }
     if (editUsername !== user.username) fields.username = editUsername
     if (editFullName !== user.full_name) fields.full_name = editFullName
@@ -138,22 +148,9 @@ function UserRow({ user, handleUpdate, handleDelete, deleteMutation, currentUser
     setEditPassword('')
   }
 
-  const handleChange = () => setDirty(true)
-
-  const isDeleting = deleteMutation.isPending
-  const deleteError = deleteMutation.isError
-    ? (deleteMutation.error?.detail || deleteMutation.error?.message || String(deleteMutation.error))
-    : ''
-
-  React.useEffect(() => {
-    if (deleteMutation.isSuccess) {
-      setDeleteOpen(false)
-    }
-  }, [deleteMutation.isSuccess])
-
-  const handleConfirmDelete = () => {
-    handleDelete(user.id)
-    // Не закрываем модалку сразу — ждём результат мутации
+  const handleChange = () => {
+    setDirty(true)
+    validateUsername(editUsername)
   }
 
   return (
@@ -196,49 +193,24 @@ function UserRow({ user, handleUpdate, handleDelete, deleteMutation, currentUser
           onChange={(e) => {
             setEditIsActive(e.target.checked)
             handleChange()
-            handleUpdate(user.id, { is_active: e.target.checked })
+            handleUpdate(user.id, { role: editRole, is_active: e.target.checked })
           }}
           aria-label={`Активен: ${user.username}`}
         />
       </span>
-      <Button size="xs" variant="default" disabled={!dirty} onClick={handleSave}>Сохранить</Button>
-      <Button
-        size="xs"
-        variant="subtle"
-        color="red"
-        aria-label={`Удалить: ${user.username}`}
-        onClick={() => setDeleteOpen(true)}
+      <Button size="xs" variant="default" disabled={!dirty || !!usernameError} onClick={handleSave}>Сохранить</Button>
+      {usernameError && <Text size="xs" c="red">{usernameError}</Text>}
+      <DangerZone
+        confirmText={user.username}
+        label={`Удалить: ${user.username}`}
+        onConfirm={() => handleDelete(user.id)}
+        warning={
+          'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, '
+          + 'сообщения, документы и проекты. Восстановление возможно только из резервной копии. '
+          + 'Если достаточно закрыть доступ — снимите галочку активности вместо удаления.'
+        }
         disabled={user.id === currentUserId}
-      >
-        Удалить
-      </Button>
-      <Modal
-        opened={deleteOpen}
-        onClose={() => { setDeleteOpen(false); setDeleteError(''); }}
-        title="Подтвердите удаление"
-        centered
-      >
-        <Stack gap="sm">
-          <Text size="sm">
-            Удалить пользователя <b>{user.username}</b>?
-          </Text>
-          <Alert color="error" role="alert">
-            Действие необратимо. Вместе с учётной записью каскадно удалятся его сессии,
-            сообщения, документы и проекты. Восстановление возможно только из резервной
-            копии. Если достаточно закрыть доступ — используйте снятие галочки
-            активности.
-          </Alert>
-          {deleteError && <Alert color="error" role="alert">{deleteError}</Alert>}
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setDeleteOpen(false)}>
-              Отмена
-            </Button>
-            <Button color="red" disabled={isDeleting} onClick={handleConfirmDelete}>
-              {isDeleting ? 'Удаление...' : 'Удалить безвозвратно'}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+      />
     </Group>
   )
 }

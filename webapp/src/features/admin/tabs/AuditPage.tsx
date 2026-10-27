@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { DatePickerInput } from '@mantine/dates'
 import {
   Stack,
   Title,
@@ -115,7 +116,23 @@ export default function AuditPage() {
             }
           }}
           allowDeselect={false}
-          w={160}
+          w={150}
+        />
+        <DatePickerInput
+          label="С"
+          placeholder="с"
+          value={dateFrom ? new Date(dateFrom) : undefined}
+          onChange={(date) => setDateFrom(date ? date.toISOString() : undefined)}
+          w={130}
+          size="xs"
+        />
+        <DatePickerInput
+          label="По"
+          placeholder="по"
+          value={dateTo ? new Date(dateTo) : undefined}
+          onChange={(date) => setDateTo(date ? date.toISOString() : undefined)}
+          w={130}
+          size="xs"
         />
         <Button
           size="xs"

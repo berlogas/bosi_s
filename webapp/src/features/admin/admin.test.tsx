@@ -494,7 +494,11 @@ describe('админка', () => {
     ).toBeInTheDocument()
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Удалить безвозвратно' }))
+    await userEvent.type(
+      screen.getByLabelText(/Введите "ivanov"/),
+      'ivanov',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Подтвердить' }))
 
     await waitFor(() => {
       expect(
@@ -559,8 +563,12 @@ describe('админка', () => {
 
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Удалить: ivanov' }))
+    await userEvent.type(
+      screen.getByLabelText(/Введите "ivanov"/),
+      'ivanov',
+    )
     await userEvent.click(
-      await screen.findByRole('button', { name: 'Удалить безвозвратно' }),
+      await screen.findByRole('button', { name: 'Подтвердить' }),
     )
 
     expect(await screen.findByText('Нельзя удалить самого себя')).toBeInTheDocument()

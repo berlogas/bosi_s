@@ -40,8 +40,7 @@ export function SimpleTable<T extends { id: string | number }>({
   sorting,
   onSortingChange,
   filters,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onFiltersChange: _onFiltersChange,
+  onFiltersChange,
   rowActions,
   isLoading = false,
   emptyMessage = 'Нет данных',
@@ -74,6 +73,11 @@ export function SimpleTable<T extends { id: string | number }>({
       setSearchParams(params, { replace: true })
     }
   }, [pagination, sorting, filters, setSearchParams])
+
+  // Сообщаем хуку (и URL) об изменении фильтров извне (например, при вводе в поле поиска)
+  useEffect(() => {
+    onFiltersChange?.(filters)
+  }, [filters, onFiltersChange])
 
   // Пагинация — используем переданные данные напрямую (хуки уже сделали фильтрацию/сортировку)
   const pageCount = Math.max(1, pagination.pageCount || 1)

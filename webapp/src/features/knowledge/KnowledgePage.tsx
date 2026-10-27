@@ -11,6 +11,7 @@
  * список с возможностью наполнения, чтобы не искать его по меню.
  */
 
+import { useDeferredValue } from 'react'
 import {
   Alert,
   Badge,
@@ -71,6 +72,9 @@ export function KnowledgePage() {
   }
 
   const [debouncedSearch] = useDebouncedValue(search.trim(), 300)
+  // useDeferredValue — отложенное отображение результатов, чтобы поле ввода
+  // оставалось отзывчивым, пока рендерится/загружается список документов.
+  const deferredSearch = useDeferredValue(search.trim())
   const documents = useKnowledgeDocuments(debouncedSearch, category || null)
   const stats = useKnowledgeStats()
 
@@ -129,14 +133,18 @@ export function KnowledgePage() {
         <SkeletonList count={6} />
       ) : documents.data && documents.data.length === 0 ? (
         <EmptyState
-          title={search || category ? 'Ничего не нашлось.' : 'База пока пуста.'}
+          title={
+            deferredSearch || category
+              ? 'Ничего не нашлось.'
+              : 'База пока пуста.'
+          }
           description={
-            search || category
+            deferredSearch || category
               ? 'Попробуйте другое слово или снимите фильтр.'
               : 'Наполняет её администратор.'
           }
           action={
-            search || category ? (
+            deferredSearch || category ? (
               <Button
                 variant="subtle"
                 size="xs"

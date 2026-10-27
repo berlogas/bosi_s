@@ -64,13 +64,18 @@ export function AsyncBoundary<T>({
   // 1. Ошибка — приоритет высший: показываем Alert с возможностью повтора
   if (error) {
     return (
-      <Alert color="error" role="alert" withCloseButton>
+      <Alert color="error" role="alert">
         <Text size="sm">
           {error instanceof Error ? error.message : String(error)}
         </Text>
         {onRetry && (
           <Group justify="flex-end" mt="xs">
-            <Button size="xs" variant="default" onClick={onRetry}>
+            <Button
+              size="xs"
+              variant="default"
+              onClick={onRetry}
+              aria-label="Повторить"
+            >
               Повторить
             </Button>
           </Group>

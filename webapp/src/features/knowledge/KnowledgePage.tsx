@@ -13,6 +13,7 @@
 
 import { useDeferredValue } from 'react'
 import {
+  Alert,
   Badge,
   Button,
   Group,
@@ -22,14 +23,13 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
-import { useDebouncedValue } from '@mantine/hooks'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { categoryLabel } from '../../lib/format'
 import { useAuth } from '../auth/authStore'
 import { useKnowledgeDocuments, useKnowledgeStats } from './queries'
-import { AsyncBoundary } from '../../components/AsyncBoundary'
 import { PageHeader } from '../../components/PageHeader'
+import { SkeletonList } from '../../components/SkeletonList'
 import { StatusBadge } from '../../components/StatusBadge'
 
 /** Категории глобальной базы: те же, что и в админском списке. */
@@ -57,7 +57,7 @@ export function KnowledgePage() {
   const navigate = useNavigate()
 
   // Фильтры живут в URL (план Волны 2, п. 7): ссылка shareable, F5 ничего
-  // не сбрасывает. Debounce остаётся — URL меняется сразу, запрос через 300 мс.
+  // не сбрасывает.
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('q') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -69,11 +69,7 @@ export function KnowledgePage() {
     setSearchParams(next, { replace: true })
   }
 
-  const [debouncedSearch] = useDebouncedValue(search.trim(), 300)
-  // useDeferredValue — отложенное отображение результатов, чтобы поле ввода
-  // оставалось отзывчивым, пока рендерится/загружается список документов.
-  const deferredSearch = useDeferredValue(search.trim())
-  const documents = useKnowledgeDocuments(debouncedSearch, category || null)
+  const documents = useKnowledgeDocuments(search, category || null)
   const stats = useKnowledgeStats()
 
   return (
@@ -119,34 +115,15 @@ export function KnowledgePage() {
         />
       </Group>
 
-      <AsyncBoundary
-        data={documents.data ?? []}
-        isLoading={documents.isPending}
-        error={documents.error}
-        onRetry={() => void documents.refetch()}
-        emptyTitle={
-          deferredSearch || category
-            ? 'Ничего не нашлось.'
-            : 'База пока пуста.'
-        }
-        emptyDescription={
-          deferredSearch || category
-            ? 'Попробуйте другое слово или снимите фильтр.'
-            : 'Наполняет её администратор.'
-        }
-        emptyAction={
-          deferredSearch || category ? (
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={() => setSearchParams({}, { replace: true })}
-            >
-              Сбросить фильтр
-            </Button>
-          ) : undefined
-        }
-        skeletonCount={6}
-      >
+      {documents.isPending && !documents.data ? (
+        <SkeletonList count={6} />
+      ) : documents.isError ? (
+        <Alert color="error" role="alert" title="Не удалось загрузить список">
+          {documents.error instanceof Error
+            ? documents.error.message
+            : 'Неизвестная ошибка запроса'}
+        </Alert>
+      ) : (
         <Table.ScrollContainer minWidth={640} type="native">
           <Table highlightOnHover>
             <Table.Thead>
@@ -160,7 +137,7 @@ export function KnowledgePage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {documents.data.map((document) => (
+              {(documents.data ?? []).map((document) => (
                 <Table.Tr key={document.id ?? document.dockey}>
                   <Table.Td>
                     <Text size="sm">{document.title || document.filename}</Text>
@@ -191,7 +168,7 @@ export function KnowledgePage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
-      </AsyncBoundary>
+      )}
     </Stack>
   )
 }

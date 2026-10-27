@@ -13,7 +13,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 import { AppProviders } from '../../app/AppProviders'
 import { AppRoutes } from '../../routes'
@@ -68,9 +68,6 @@ function renderPath(
   user: typeof TEST_USER | typeof TEST_ADMIN = TEST_USER,
 ) {
   loginAs(user)
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  })
   return render(
     <AppProviders initialPath={path} queryClient={queryClient}>
       <AppRoutes />
@@ -86,6 +83,19 @@ function mockKnowledgeApi(routes: Record<string, unknown> = {}) {
     ...routes,
   })
 }
+
+let queryClient: QueryClient
+
+beforeEach(() => {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  })
+  queryClient.clear()
+})
+
+afterEach(() => {
+  queryClient.clear()
+})
 
 describe('База знаний', () => {
   it('исследователь видит список глобальной базы и сводку', async () => {

@@ -89,6 +89,7 @@ export function InboxPanel() {
   const runs = useInboxRuns()
   const scan = useInboxScan()
   const clearRejected = useClearRejected()
+  const clearJournal = useClearJournal()
   const [message, setMessage] = useState<string | null>(null)
 
   const usable = status.data?.usable_files ?? 0

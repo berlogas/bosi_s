@@ -15,6 +15,7 @@ import {
   Alert,
   Badge,
   Button,
+  Drawer,
   Group,
   Progress,
   Select,
@@ -25,6 +26,7 @@ import {
 } from '@mantine/core'
 import { Dropzone, DropzoneProps } from '@mantine/dropzone'
 import { TagsInput } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -108,10 +110,12 @@ function DocumentsTable({
   documents,
   readOnly,
   onDelete,
+  setSelectedDoc,
 }: {
   documents: DocumentOut[]
   readOnly: boolean
   onDelete: (document: DocumentOut) => void
+  setSelectedDoc: (doc: DocumentOut) => void
 }) {
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -163,17 +167,31 @@ function DocumentsTable({
     columnHelper.accessor('id', {
       id: 'actions',
       header: '',
-      cell: (info) => (
-        <Button
-          size="compact-xs"
-          color="error"
-          variant="subtle"
-          disabled={readOnly}
-          onClick={() => onDelete(info.row.original)}
-        >
-          Удалить
-        </Button>
-      ),
+      cell: (info) => {
+        const doc = info.row.original
+        return (
+          <Group gap="xs">
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              disabled={readOnly}
+              onClick={() => setSelectedDoc(doc)}
+              aria-label={`Подробнее: ${doc.title || doc.docname}`}
+            >
+              Подробнее
+            </Button>
+            <Button
+              size="compact-xs"
+              color="error"
+              variant="subtle"
+              disabled={readOnly}
+              onClick={() => onDelete(doc)}
+            >
+              Удалить
+            </Button>
+          </Group>
+        )
+      },
     }),
   ]
 
@@ -324,6 +342,80 @@ function DocumentsTable({
   )
 }
 
+// ------------------------------------------------------------------- детали документа
+/** Drawer справа с деталями документа: показать вместо раскрытия строки. */
+function DocumentDetailDrawer({
+  opened,
+  document,
+  onClose,
+}: {
+  opened: boolean
+  document: DocumentOut | null
+  onClose: () => void
+}) {
+  if (!document || !opened) return null
+
+  return (
+    <Drawer
+      opened={opened}
+      onClose={onClose}
+      title={`Документ: ${document.title || document.docname}`}
+      size="500px"
+      withCloseButton
+    >
+      <Stack gap="sm">
+        <Group>
+          <Text size="sm" fw={500}>Название:</Text>
+          <Text size="sm">{document.title || document.docname}</Text>
+        </Group>
+        <Group>
+          <Text size="sm" fw={500}>Категория:</Text>
+          <Badge size="xs">{categoryLabel(document.category ?? '—')}</Badge>
+        </Group>
+        <Group>
+          <Text size="sm" fw={500}>Статус:</Text>
+          <Badge size="xs">{document.status ?? '—'}</Badge>
+        </Group>
+        <Group>
+          <Text size="sm" fw={500}>Чанков:</Text>
+          <Text size="sm">{document.chunk_count ?? 0}</Text>
+        </Group>
+        <Group>
+          <Text size="sm" fw={500}>Объём:</Text>
+          <Text size="sm">
+            {(() => {
+              const bytes = document.size_bytes ?? 0
+              if (bytes < 1024) return `${bytes} Б`
+              if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
+              return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
+            })()}
+          </Text>
+        </Group>
+        {document.dockey && (
+          <Group>
+            <Text size="sm" fw={500}>Dockey:</Text>
+            <Text size="xs" c="dimmed" ff="monospace">
+              {document.dockey}
+            </Text>
+          </Group>
+        )}
+        {document.tags && document.tags.length > 0 && (
+          <Group>
+            <Text size="sm" fw={500}>Теги:</Text>
+            <Text size="sm">{document.tags.join(', ')}</Text>
+          </Group>
+        )}
+        {document.citation && (
+          <Group>
+            <Text size="sm" fw={500}>Цитата:</Text>
+            <Text size="xs" c="dimmed">{document.citation}</Text>
+          </Group>
+        )}
+      </Stack>
+    </Drawer>
+  )
+}
+
 interface DocumentsTabProps {
   sessionId: string
   readOnly: boolean
@@ -343,6 +435,8 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   /** Документ, удаление которого подтверждаем. */
   const [deleteAsk, setDeleteAsk] = useState<DocumentOut | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  /** Документ, детали которого показываются в Drawer справа. */
+  const [selectedDoc, setSelectedDoc] = useState<DocumentOut | null>(null)
 
   const documents = useSessionDocuments(sessionId)
   const tasks = useSessionIndexingTasks(sessionId)
@@ -693,7 +787,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
               return (
                 <Accordion.Item key={group} value={group}>
                   <Accordion.Control>
-                    {categoryLabel(group)} ({filteredItems.length})
+                    <Text size="sm">
+                      {categoryLabel(group)} ({filteredItems.length})
+                    </Text>
                   </Accordion.Control>
                   <Accordion.Panel>
                     <Stack gap="xs">
@@ -720,12 +816,21 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                               </Text>
                             )}
                           </Stack>
-                          <Group gap="md">
+                          <Group gap="xs">
                             {document.dockey && (
                               <Text size="xs" c="dimmed" ff="monospace">
                                 {document.dockey.slice(0, 8)}
                               </Text>
                             )}
+                            <Button
+                              size="compact-xs"
+                              variant="subtle"
+                              disabled={readOnly}
+                              onClick={() => setSelectedDoc(document)}
+                              aria-label={`Подробнее: ${document.title || document.docname}`}
+                            >
+                              Подробнее
+                            </Button>
                             <Button
                               size="compact-xs"
                               color="error"
@@ -759,8 +864,15 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             setDeleteError(null)
             setDeleteAsk(document)
           }}
+          setSelectedDoc={setSelectedDoc}
         />
       ) : null}
+
+      <DocumentDetailDrawer
+        opened={selectedDoc !== null}
+        document={selectedDoc!}
+        onClose={() => setSelectedDoc(null)}
+      />
 
       <ConfirmDeleteModal
         opened={deleteAsk !== null}

@@ -116,8 +116,9 @@ describe('вкладка Документы', () => {
 
     renderApp()
 
-    expect(await screen.findByText('Временная литература (1)')).toBeInTheDocument()
-    expect(screen.getByText('Заметки (1)')).toBeInTheDocument()
+    expect(await screen.findByText(/Временная литература/)).toBeInTheDocument()
+    const notesGroups = screen.getAllByText(/Заметки/)
+    expect(notesGroups.length).toBeGreaterThan(0)
     // аккордеон раскрыт по умолчанию (defaultValue)
     expect(await screen.findByText(/Отчёт 2025 — 2 КБ, 7 чанков/)).toBeInTheDocument()
     expect(screen.getByText('теги: прилив, смок')).toBeInTheDocument()

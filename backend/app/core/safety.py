@@ -59,29 +59,49 @@ def resolve_import_path(raw: str | Path, roots: Iterable[Path], *,
     if not text:
         raise ForbiddenError("Путь к файлу не указан")
 
+    # Сначала пробуем прямое разрешение (как было раньше)
     candidate = Path(text).expanduser()
     try:
         resolved = candidate.resolve()
-    except OSError as exc:  # битые симлинки, сетевые пути
+    except OSError as exc:  # битые_symlinks, сетевые пути
         raise ForbiddenError(f"Не удалось разобрать путь: {text}") from exc
 
+    # Проверяем, разрешено ли это путь внутри корней
     allowed = _within(resolved, list(roots))
-    if allowed is None:
-        raise ForbiddenError(
-            f"Путь вне разрешённых каталогов: {resolved}. "
-            f"Разрешено: {', '.join(str(r) for r in roots)}",
-            meta={"path": str(resolved)},
-        )
+    if allowed is not None:
+        # Путь разрешен внутри одного из корней — возвращаем разрешенный путь
+        if must_exist:
+            if not resolved.exists():
+                raise NotFoundError(f"Файл не найден: {resolved.name}")
+            if not resolved.is_file():
+                raise ForbiddenError(f"Это не файл: {resolved.name}")
+        return resolved
 
-    if must_exist:
-        if not resolved.exists():
-            # Путь разрешён — файла просто нет: это 404, а не 403.
-            raise NotFoundError(f"Файл не найден: {resolved.name}")
-        if not resolved.is_file():
-            raise ForbiddenError(f"Это не файл: {resolved.name}")
-        if not _within(resolved, list(roots)):  # симлинк нацелен наружу
-            raise ForbiddenError(f"Файл вне разрешённых каталогов: {resolved.name}")
-    return resolved
+    # Если прямое разрешение не сработало (путь, скорее всего, относительный),
+    # пробуем разрешить относительно каждого из корней
+    for root in roots:
+        root_resolved = root.resolve()
+        # Пытаемся добавить путь как относительный к этому корню
+        try:
+            test_path = root_resolved / text
+            test_resolved = test_path.resolve()
+            if _within(test_resolved, [root]):
+                # Путь разрешен внутри этого корня
+                if must_exist:
+                    if not test_resolved.exists():
+                        raise NotFoundError(f"Файл не найден: {test_resolved.name}")
+                    if not test_resolved.is_file():
+                        raise ForbiddenError(f"Это не файл: {test_resolved.name}")
+                return test_resolved
+        except OSError:
+            continue
+
+    # Если ни один корень не подошёл, возвращаем ошибку
+    raise ForbiddenError(
+        f"Путь вне разрешённых каталогов: {text}. "
+        f"Разрешено: {', '.join(str(r) for r in roots)}",
+        meta={"path": text},
+    )
 
 
 def validate_session_import(session_id: str, raw: str | Path,

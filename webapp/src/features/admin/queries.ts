@@ -164,6 +164,7 @@ export function useBulkUpload() {
       client.bulkUpload(files, tags),
     onSuccess: invalidate,
   })
+}
 
 export function useAdminDeleteDocument() {
   const invalidate = useInvalidateGlobalDocs()

@@ -57,7 +57,7 @@ export function AppProviders({
   return (
     <MantineProvider
       theme={theme}
-      defaultColorScheme="auto"
+      defaultColorScheme="dark"
       colorSchemeManager={localStorageColorSchemeManager({
         key: 'mantine-color-scheme-value',
       })}

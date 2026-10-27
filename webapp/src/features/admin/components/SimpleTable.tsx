@@ -282,6 +282,7 @@ export function SimpleTable<T extends { id: string | number }>({
         >
           <span>Стр.:</span>
           <select
+            aria-label="Размер страницы"
             value={pagination.pageSize}
             onChange={(e) =>
               onPaginationChange({

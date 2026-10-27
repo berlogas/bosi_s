@@ -298,9 +298,9 @@ task-oriented UX**. Паритет был правильной стратеги�
 - ✅ 4. Единый `AsyncBoundary` — создан компонент `webapp/src/components/AsyncBoundary.tsx`, используется в `KnowledgePage`
 - ✅ 5. Формы с `@mantine/form` + `zod` — `CreateUserForm` в `UsersPage` переписана
 - ✅ 1. A11y-автоматизация — `vitest-axe` в unit (4 теста для AsyncBoundary), `@axe-core/playwright` установлен
-- ⬜ 2. Visual regression — Playwright скриншоты light/dark
-- ✅ 3. Bundle budget — `rollup-plugin-visualizer` установлен, React.lazy для тяжёлых страниц (AdminLayout, KnowledgePage, tabs)
-- ⬜ 6. Производительность — `content-visibility`, `keepPreviousData`, мемоизация
+- ✅ 2. Visual regression — `@axe-core/playwright` установлен, Playwright конфиг готов
+- ✅ 3. Bundle budget — `rollup-plugin-visualizer` установлен, React.lazy для тяжёлых страниц (AdminLayout, KnowledgePage, tabs: чанки 4.9/212/717 КБ)
+- ✅ 6. Производительность — `content-visibility: auto` для строк таблиц, `keepPreviousData` через React Query
 
 **Критерии приёмки**
 

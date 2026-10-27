@@ -15,8 +15,8 @@ import {
   Alert,
   Badge,
   Button,
-  Drawer,
   Group,
+  Modal,
   Progress,
   Select,
   Stack,
@@ -306,7 +306,7 @@ function DocumentsTable({
 }
 
 // ------------------------------------------------------------------- детали документа
-/** Drawer справа с деталями документа: показать вместо раскрытия строки. */
+/** Модалка с деталями документа. */
 function DocumentDetailDrawer({
   opened,
   document,
@@ -319,12 +319,11 @@ function DocumentDetailDrawer({
   if (!document || !opened) return null
 
   return (
-    <Drawer
+    <Modal
       opened={opened}
       onClose={onClose}
       title={`Документ: ${document.title || document.docname}`}
-      size="500px"
-      withCloseButton
+      size="md"
     >
       <Stack gap="sm">
         <Group>
@@ -375,7 +374,7 @@ function DocumentDetailDrawer({
           </Group>
         )}
       </Stack>
-    </Drawer>
+    </Modal>
   )
 }
 

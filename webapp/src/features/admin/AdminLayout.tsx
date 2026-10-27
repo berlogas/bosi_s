@@ -81,8 +81,18 @@ export function AdminLayout() {
   return (
     <Stack>
       {/* Навигация по вкладкам (заменяет st.tabs / Mantine Tabs) —
-          не sticky, чтобы не накладываться на общую шапку AppLayout при скролле */}
-      <Box px="md" py="sm">
+          липкая при скролле, чтобы меню всегда оставалось в поле зрения */}
+      <Box
+        px="md"
+        py="sm"
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          backgroundColor: 'var(--mantine-color-body)',
+          borderBottom: '1px solid var(--mantine-color-default-border)',
+        }}
+      >
         <Group justify="space-between" align="center" wrap="nowrap" style={{ minWidth: 0 }}>
           <Group gap="sm" style={{ minWidth: 0, flex: 1 }}>
             {TABS.map((tab) => {

@@ -734,6 +734,33 @@ class PaperQA2Service:
         result = await llm.call_single(messages=[Message(content=prompt)], name=name)
         return (getattr(result, "text", "") or "").strip()
 
+    async def stream_complete(
+        self,
+        prompt: str,
+        *,
+        name: str = "completion",
+    ):
+        """Потоковый вызов LLM с произвольным промптом.
+
+        Yield'ит текстовые фрагменты по мере генерации модели.
+        Используется для SSE-стриминга ответа в чате.
+        """
+        llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
+
+        # litellm.acompletion с stream=True возвращает async генератор чанков.
+        # Каждый чанк — объект с delta.content (новый текст).
+        async for chunk in await llm.acompletion(
+            messages=[Message(content=prompt)],
+            stream=True,
+            name=name,
+        ):
+            delta = getattr(chunk, "choices", None)
+            if delta:
+                for choice in delta:
+                    content_delta = getattr(choice, "delta", None)
+                    if content_delta and getattr(content_delta, "content", None):
+                        yield content_delta.content
+
     async def _read_upload(self, uploaded: Any) -> bytes:
         read = getattr(uploaded, "read", None)
         if read is None:

@@ -536,6 +536,81 @@ class ApiClient {
     })
   }
 
+  /** Стриминг ответа по токенам через SSE.
+   *
+   * Вызывает callback `onToken` для каждого фрагмента текста.
+   * Возвращает полный ответ, когда поток завершится.
+   */
+  async chatStream(
+    sessionId: string,
+    query: string,
+    mode: SearchMode = 'hybrid',
+    onToken: (token: string) => void,
+    onError?: (error: string) => void,
+    onDone?: () => void,
+  ): Promise<void> {
+    const access = tokens.getAccess()
+    const headers: Record<string, string> = {}
+    if (access) headers['Authorization'] = `Bearer ${access}`
+
+    const response = await fetch(buildUrl('/api/chat/stream', {
+      method: 'POST',
+      json: { session_id: sessionId, query, mode, k: 10, max_sources: 5 },
+    }), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        session_id: sessionId,
+        query,
+        mode,
+        k: 10,
+        max_sources: 5,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Ошибка стриминга: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('Нет тела ответа')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const payload = line.slice('data: '.length).trim()
+        if (payload === '[DONE]') {
+          onDone?.()
+          return
+        }
+        try {
+          const data = JSON.parse(payload)
+          if (data.token) {
+            onToken(data.token)
+          }
+          if (data.error) {
+            onError?.(data.error)
+            return
+          }
+        } catch {
+          // игнорируем битые фрагменты
+        }
+      }
+    }
+  }
+
   /** «Точка возврата»: снапшот UI + заметка (автосохранение смены вкладки). */
   saveState(
     sessionId: string,

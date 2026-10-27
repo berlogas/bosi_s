@@ -19,6 +19,7 @@ import {
   Modal,
   SegmentedControl,
   Stack,
+  Switch,
   Text,
   Textarea,
 } from '@mantine/core'
@@ -86,6 +87,8 @@ export function ChatTab({
 
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState<SearchMode>('hybrid')
+  const [streaming, setStreaming] = useState(false)
+  const [streamingAnswer, setStreamingAnswer] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [clearAsk, setClearAsk] = useState(false)
@@ -179,6 +182,14 @@ export function ChatTab({
     setFollow(null)
   }, [follow, items.length, last, reduceMotion])
 
+  // Автоскролл к потоковому ответу по мере прихода токенов
+  useEffect(() => {
+    if (!streaming || !streamingAnswer) return
+    requestAnimationFrame(() => {
+      answerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [streamingAnswer, reduceMotion])
+
   // отслеживаем скролл: ушёл от низа → кнопка «вниз» + счётчик непрочитанных
   useEffect(() => {
     const el = scrollRef.current
@@ -201,11 +212,40 @@ export function ChatTab({
     setQuery('')
 
     try {
-      const { task_id } = await client.chatQueryAsync(sessionId, question, mode)
-      saveChatTask({ sessionId, taskId: task_id, question })
-      setTaskId(task_id)
-      setPending(question)
-      setFollow(items.length)
+      if (streaming) {
+        setStreamingAnswer('')
+        await client.chatStream(
+          sessionId,
+          question,
+          mode,
+          (token) => setStreamingAnswer((prev) => prev + token),
+          (err) => setSendError(err),
+          () => {
+            // поток завершён — добавляем ответ в историю
+            if (streamingAnswer.trim()) {
+              const newLast: LastExchange = {
+                q: question,
+                answer: {
+                  answer: streamingAnswer,
+                  sources: [],
+                  references: [],
+                  from_cache: false,
+                  base_empty: false,
+                },
+              }
+              setLast(newLast)
+              setFollow(items.length + 1)
+            }
+            setStreaming(false)
+          },
+        )
+      } else {
+        const { task_id } = await client.chatQueryAsync(sessionId, question, mode)
+        saveChatTask({ sessionId, taskId: task_id, question })
+        setTaskId(task_id)
+        setPending(question)
+        setFollow(items.length)
+      }
     } catch (cause) {
       setSendError(
         cause instanceof Error ? cause.message : 'Не удалось отправить вопрос',
@@ -489,6 +529,15 @@ export function ChatTab({
               </>
             )}
 
+            {/* Стриминговый ответ по токенам */}
+            {streaming && streamingAnswer && !asked(items, streamingAnswer) && (
+              <ChatBubble role="assistant" ref={answerRef}>
+                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                  {streamingAnswer}
+                </Text>
+              </ChatBubble>
+            )}
+
             {/* Синхронный/кэшированный ответ, которого ещё нет в истории */}
             {last && !asked(items, last.q) && (
               <>
@@ -550,6 +599,13 @@ export function ChatTab({
                 data={MODE_OPTIONS}
                 value={mode}
                 onChange={(value) => setMode((value as SearchMode) ?? 'hybrid')}
+                disabled={readOnly || sending}
+              />
+              <Switch
+                label="Стриминг"
+                checked={streaming}
+                onChange={(checked) => setStreaming(checked)}
+                size="xs"
                 disabled={readOnly || sending}
               />
               <Button

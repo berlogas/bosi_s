@@ -84,7 +84,11 @@ export function SimpleTable<T extends { id: string | number }>({
   }, [data, safePageIndex, pagination.pageSize])
 
   if (isLoading) {
-    return <div style={{ padding: 16, textAlign: 'center', color: '#666' }}>Загрузка...</div>
+    return (
+      <div style={{ padding: 'var(--mantine-spacing-md)', textAlign: 'center', color: 'var(--mantine-color-dimmed)' }}>
+        Загрузка…
+      </div>
+    )
   }
 
   return (
@@ -96,7 +100,7 @@ export function SimpleTable<T extends { id: string | number }>({
               position: 'sticky',
               top: 0,
               zIndex: 2,
-              background: '#f5f5f5',
+              background: 'var(--mantine-color-gray-0)',
             }}
           >
             {columns.map((col) => {
@@ -108,10 +112,10 @@ export function SimpleTable<T extends { id: string | number }>({
                     cursor: canSort ? 'pointer' : 'default',
                     userSelect: 'none',
                     whiteSpace: 'nowrap',
-                    padding: '8px 12px',
-                    borderBottom: '2px solid #ddd',
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '2px solid var(--mantine-color-default-border)',
                     textAlign: 'left',
-                    background: '#f5f5f5',
+                    background: 'var(--mantine-color-gray-0)',
                     position: 'sticky',
                     top: 0,
                   }}
@@ -132,7 +136,7 @@ export function SimpleTable<T extends { id: string | number }>({
                   {col.header}
                   {canSort &&
                     sorting[0]?.id === col.accessorKey && (
-                      <span style={{ marginLeft: 4 }}>
+                      <span style={{ marginLeft: 'var(--mantine-spacing-xs)' }}>
                         {sorting[0]?.desc ? '▼' : '▲'}
                       </span>
                     )}
@@ -142,10 +146,10 @@ export function SimpleTable<T extends { id: string | number }>({
             {rowActions && (
               <th
                 style={{
-                  padding: '8px 12px',
-                  borderBottom: '2px solid #ddd',
+                  padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                  borderBottom: '2px solid var(--mantine-color-default-border)',
                   textAlign: 'right',
-                  background: '#f5f5f5',
+                  background: 'var(--mantine-color-gray-0)',
                   position: 'sticky',
                   top: 0,
                 }}
@@ -158,7 +162,7 @@ export function SimpleTable<T extends { id: string | number }>({
             <tr>
               <td
                 colSpan={columns.length + (rowActions ? 1 : 0)}
-                style={{ textAlign: 'center', padding: '2rem', color: '#999' }}
+                style={{ textAlign: 'center', padding: 'var(--mantine-spacing-xl)', color: 'var(--mantine-color-dimmed)' }}
               >
                 {emptyMessage}
               </td>
@@ -176,8 +180,8 @@ export function SimpleTable<T extends { id: string | number }>({
                   <td
                     key={col.id}
                     style={{
-                      padding: '8px 12px',
-                      borderBottom: '1px solid #eee',
+                      padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                      borderBottom: '1px solid var(--mantine-color-default-border)',
                     }}
                   >
                     {col.cell
@@ -194,7 +198,7 @@ export function SimpleTable<T extends { id: string | number }>({
                     style={{
                       whiteSpace: 'nowrap',
                       textAlign: 'right',
-                      padding: '8px 12px',
+                      padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
                     }}
                   >
                     {rowActions({ original: row })}
@@ -211,18 +215,18 @@ export function SimpleTable<T extends { id: string | number }>({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginTop: '1rem',
+          marginTop: 'var(--mantine-spacing-md)',
           flexWrap: 'wrap',
-          gap: '0.5rem',
+          gap: 'var(--mantine-spacing-xs)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}>
           <button
             style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              background: 'white',
-              borderRadius: 4,
+              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              border: '1px solid var(--mantine-color-default-border)',
+              background: 'var(--mantine-color-white)',
+              borderRadius: 'var(--mantine-radius-xs)',
               cursor: 'pointer',
             }}
             disabled={pagination.pageIndex === 0}
@@ -247,10 +251,10 @@ export function SimpleTable<T extends { id: string | number }>({
           </span>
           <button
             style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              background: 'white',
-              borderRadius: 4,
+              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              border: '1px solid var(--mantine-color-default-border)',
+              background: 'var(--mantine-color-white)',
+              borderRadius: 'var(--mantine-radius-xs)',
               cursor: 'pointer',
             }}
             disabled={
@@ -271,9 +275,9 @@ export function SimpleTable<T extends { id: string | number }>({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
-            color: '#999',
-            fontSize: 14,
+            gap: 'var(--mantine-spacing-xs)',
+            color: 'var(--mantine-color-dimmed)',
+            fontSize: 'var(--mantine-font-size-sm)',
           }}
         >
           <span>Стр.:</span>
@@ -287,9 +291,9 @@ export function SimpleTable<T extends { id: string | number }>({
               })
             }
             style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              borderRadius: 4,
+              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              border: '1px solid var(--mantine-color-default-border)',
+              borderRadius: 'var(--mantine-radius-xs)',
             }}
           >
             <option value={10}>10</option>

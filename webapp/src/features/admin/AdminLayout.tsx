@@ -93,6 +93,7 @@ export function AdminLayout() {
           zIndex: 100,
           backgroundColor: 'var(--mantine-color-body)',
           borderBottom: '1px solid var(--mantine-color-default-border)',
+          borderRadius: `0 0 var(--mantine-radius-md) var(--mantine-radius-md)`,
         }}
       >
         <Group justify="space-between" align="center" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -127,7 +128,7 @@ export function AdminLayout() {
 
       {/* Контент вкладки — без AppShell, чтобы не было двойных отступов.
           padding-top компенсирует фиксированное меню. */}
-      <Stack p="md" style={{ paddingTop: '60px' }}>
+      <Stack p="md" style={{ paddingTop: 'var(--mantine-spacing-xl)' }}>
         <ActiveComponent />
       </Stack>
     </Stack>
@@ -147,9 +148,9 @@ function ColorSchemeToggle() {
         border: 'none',
         background: 'transparent',
         cursor: 'pointer',
-        padding: '4px 8px',
-        borderRadius: 6,
-        fontSize: 16,
+        padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+        borderRadius: 'var(--mantine-radius-sm)',
+        fontSize: 'var(--mantine-font-size-md)',
       }}
     >
       {icon}

@@ -530,7 +530,7 @@ function GlobalBaseTab() {
           padding: 'var(--mantine-spacing-md)',
           textAlign: 'center',
           cursor: 'pointer',
-          background: dragOver ? 'var(--mantine-color-blue-light)' : undefined,
+          background: dragOver ? 'var(--mantine-color-blue-light)' : 'transparent',
         }}
       >
         <Text size="sm" c="dimmed">

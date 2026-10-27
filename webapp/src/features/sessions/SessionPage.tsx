@@ -14,7 +14,6 @@ import {
   Alert,
   Button,
   Group,
-  Loader,
   Modal,
   Progress,
   Stack,
@@ -26,6 +25,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { client } from '../../api/client'
+import { SkeletonList } from '../../components/SkeletonList'
 import {
   useArchiveSession,
   useResumeSession,
@@ -105,7 +105,7 @@ export function SessionPage() {
   }, [activeTab, sessionId])
 
   if (detail.isPending) {
-    return <Loader size="sm" />
+    return <SkeletonList count={3} />
   }
 
   if (detail.isError || !detail.data) {

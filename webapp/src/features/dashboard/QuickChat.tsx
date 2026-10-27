@@ -18,7 +18,6 @@ import {
   Button,
   Card,
   Group,
-  Loader,
   Modal,
   Stack,
   Text,
@@ -33,6 +32,7 @@ import { client } from '../../api/client'
 import { AnswerView } from '../../components/AnswerView'
 import { TaskPanel } from '../../components/TaskPanel'
 import type { AnswerSource, MessageOut, QuickQueryResult } from '../../api/types'
+import { SkeletonList } from '../../components/SkeletonList'
 import { useTask } from '../chat/queries'
 import { queryKeys, useClearQuickHistory, useQuickHistory } from './queries'
 
@@ -308,7 +308,7 @@ export function QuickChat() {
             )}
             {sending && (
               <Group gap="xs">
-                <Loader size="xs" />
+                <SkeletonList count={1} />
                 <Text size="sm" c="dimmed">
                   Отправляю вопрос…
                 </Text>

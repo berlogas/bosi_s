@@ -16,7 +16,6 @@ import {
   Divider,
   Group,
   List,
-  Loader,
   Paper,
   Select,
   Stack,
@@ -28,6 +27,7 @@ import {
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { notifications } from '@mantine/notifications'
+import { SkeletonList } from '../../components/SkeletonList'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorView, keymap } from '@codemirror/view'
@@ -813,7 +813,7 @@ function SectionsList({
           Генерирую раздел — это может занять минуты…
         </Text>
       )}
-      {sections.isPending && <Loader size="sm" />}
+      {sections.isPending && <SkeletonList count={3} />}
       {/* key: defaultValue читается при монтировании, а разделы грузятся
           асинхронно — без него панели останутся закрытыми */}
       <Accordion

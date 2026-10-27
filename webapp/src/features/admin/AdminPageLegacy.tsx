@@ -985,7 +985,7 @@ function SessionsTab() {
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [sessions.data, users.data])
 
-  if (sessions.isPending || users.isPending) return <Loader size="sm" />
+  if (sessions.isPending || users.isPending) return <SkeletonList count={3} />
   if (sessions.isError) {
     return (
       <Alert color="error" role="alert">
@@ -1102,7 +1102,7 @@ function AuditTab() {
   const pages = Math.max(1, Math.ceil(rows.length / AUDIT_PAGE_SIZE))
   const visible = rows.slice((page - 1) * AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE)
 
-  if (audit.isPending) return <Loader size="sm" />
+  if (audit.isPending) return <SkeletonList count={3} />
   if (audit.isError) {
     return (
       <Alert color="error" role="alert">
@@ -1267,7 +1267,7 @@ function ResetSection() {
         onChange={(event) => setIncludeModels(event.currentTarget.checked)}
       />
 
-      {plan.isPending && <Loader size="sm" />}
+      {plan.isPending && <SkeletonList count={3} />}
       {plan.isError && (
         <Alert color="error" role="alert">
           {errorText(plan.error, 'Ошибка запроса')}
@@ -1437,7 +1437,7 @@ function BackupsSection() {
         </Button>
       </Group>
 
-      {backups.isPending && <Loader size="sm" />}
+      {backups.isPending && <SkeletonList count={3} />}
       {backups.isError && (
         <Alert color="error" role="alert">
           {errorText(backups.error, 'Ошибка запроса')}

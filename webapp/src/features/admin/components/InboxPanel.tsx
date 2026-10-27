@@ -16,7 +16,7 @@ import {
   Stack,
   Text,
 } from '@mantine/core'
-import { Loader } from '@mantine/core'
+import { SkeletonList } from '../../../components/SkeletonList'
 import {
   useClearJournal,
   useClearRejected,
@@ -187,7 +187,7 @@ export function InboxPanel() {
           {`Удалено файлов: ${clearRejected.data.removed}`}
         </Text>
       )}
-      {runs.isPending && <Loader size="sm" />}
+      {runs.isPending && <SkeletonList count={3} />}
       {runs.isError && (
         <Alert color="error" role="alert">
           {errorText(runs.error, 'Не удалось загрузить журнал')}

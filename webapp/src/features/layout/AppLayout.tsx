@@ -17,7 +17,6 @@ import {
   Center,
   Divider,
   Group,
-  Loader,
   NavLink,
   Popover,
   ScrollArea,
@@ -41,6 +40,7 @@ import { TaskEventsProvider } from '../tasks/TaskEventsProvider'
 import { TaskIndicator } from './TaskIndicator'
 import { UserMenu } from './UserMenu'
 import { CommandPalette, openCommandPalette } from '../../components/CommandPalette'
+import { SkeletonList } from '../../components/SkeletonList'
 import { Kbd } from '@mantine/core'
 
 function SystemStatus() {
@@ -213,7 +213,7 @@ export function AppLayout() {
                 <span>boasi_s</span>
               </Title>
             </Group>
-            {bootPending && <Loader size="xs" />}
+            {bootPending && <SkeletonList count={1} />}
           </Group>
         </AppShellHeader>
 
@@ -250,7 +250,7 @@ export function AppLayout() {
               <IconBook size={16} stroke={1.5} />
               <span>boasi_s</span>
             </Title>
-            {bootPending && <Loader size="xs" />}
+            {bootPending && <SkeletonList count={1} />}
           </Group>
 
           {!user ? (
@@ -352,7 +352,7 @@ export function AppLayout() {
           <Suspense
             fallback={
               <Center mih="40vh">
-                <Loader />
+                <SkeletonList count={3} />
               </Center>
             }
           >

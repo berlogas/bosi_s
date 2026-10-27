@@ -83,32 +83,32 @@ export function AdminLayout() {
       {/* Навигация по вкладкам (заменяет st.tabs / Mantine Tabs) —
           не sticky, чтобы не накладываться на общую шапку AppLayout при скролле */}
       <Box px="md" py="sm">
-        <Group justify="center" gap="xs" style={{ minWidth: 0, flex: 1 }}>
-          {TABS.map((tab) => {
-            const isActive = tab.path === activeTab
-            return (
-              <div
-                key={tab.path}
-                onClick={handleTabClick(tab.path)}
-                role="link"
-                tabIndex={0}
-                className={`
-                  px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer
-                  ${isActive
-                    ? 'bg-primary-filled text-primary-color'
-                    : 'text-gray-600 hover:bg-gray-100 dark:hover:bg-dark-600'}
-                `}
-                style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 'xs' }}
-              >
-                <span role="tab" aria-selected={isActive}>
-                  <tab.icon size={16} />
-                  <Text size="sm" fw={500}>{tab.label}</Text>
-                </span>
-              </div>
-            )
-          })}
-        </Group>
-        <Group gap="xs" style={{ justifyContent: 'flex-end', width: '100%' }}>
+        <Group justify="space-between" align="center" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Group gap="xs" style={{ minWidth: 0, flex: 1 }}>
+            {TABS.map((tab) => {
+              const isActive = tab.path === activeTab
+              return (
+                <div
+                  key={tab.path}
+                  onClick={handleTabClick(tab.path)}
+                  role="link"
+                  tabIndex={0}
+                  className={`
+                    px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer
+                    ${isActive
+                      ? 'bg-primary-filled text-primary-color'
+                      : 'text-gray-600 hover:bg-gray-100 dark:hover:bg-dark-600'}
+                  `}
+                  style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 'xs' }}
+                >
+                  <span role="tab" aria-selected={isActive}>
+                    <tab.icon size={16} />
+                    <Text size="sm" fw={500}>{tab.label}</Text>
+                  </span>
+                </div>
+              )
+            })}
+          </Group>
           <ColorSchemeToggle />
         </Group>
       </Box>

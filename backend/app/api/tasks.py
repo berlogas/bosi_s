@@ -58,15 +58,25 @@ def tasks_health(user: User = Depends(require_researcher)) -> dict[str, Any]:
             "statuses": [s.value for s in TaskStatus]}
 
 
-async def _task_event_stream(user_id: str) -> AsyncIterator[str]:
+async def _task_event_stream(user_id: str, last_seq: int | None = None) -> AsyncIterator[str]:
     """Бесконечный поток событий задач одного пользователя.
 
     Завершение одной задачи не повод закрывать канал: при двух параллельных
     задачах события по второй терялись — EventSource на клиенте закрывался
     после первого `finished`, а сервер обрывал поток тем же break.
     Keep-alive раз в 15 с не даёт прокси принять молчание за обрыв.
+
+    `last_seq` — seq последнего полученного события (из заголовка
+    `Last-Event-ID`). Если задан, сначала отсылаем пропущенные события
+    из буфера, а потом переходим к реальному времени.
     """
     queue = await event_manager.subscribe(user_id)
+    # При переподключении после обрыва отсылаем пропущенные события из буфера.
+    if last_seq is not None:
+        missed = await event_manager.get_events_since(user_id, last_seq)
+        for task in missed:
+            data = task.to_dict()
+            yield f"id: {task.seq}\ndata: {json.dumps(data, default=str)}\n\n"
     try:
         while True:
             try:
@@ -75,7 +85,7 @@ async def _task_event_stream(user_id: str) -> AsyncIterator[str]:
                 yield ": keep-alive\n\n"
                 continue
             data = task.to_dict()
-            yield f"data: {json.dumps(data, default=str)}\n\n"
+            yield f"id: {task.seq}\ndata: {json.dumps(data, default=str)}\n\n"
     except asyncio.CancelledError:
         pass
     finally:
@@ -85,7 +95,8 @@ async def _task_event_stream(user_id: str) -> AsyncIterator[str]:
 
 
 @router.get("/events")
-async def task_events(user: User = Depends(require_researcher_sse)) -> StreamingResponse:
+async def task_events(user: User = Depends(require_researcher_sse),
+                      request: Request = None) -> StreamingResponse:
     """SSE-канал для live-прогресса задач вместо поллинга.
 
     Подключение: `GET /api/tasks/events` с заголовком `Accept: text/event-stream`.
@@ -94,10 +105,21 @@ async def task_events(user: User = Depends(require_researcher_sse)) -> Streaming
     Браузерный EventSource не умеет задавать HTTP-заголовки, поэтому токен
     разрешено передавать в query: `?access_token=...`. Это единственный
     маршрут, принимающий токен из query, — заголовок тоже поддерживается.
+
+    `Last-Event-ID` — seq последнего полученного события. При переподключении
+    сервер пришлёт пропущенные события из буфера.
     """
+    last_seq = None
+    if request is not None:
+        last_event_id = request.headers.get("last-event-id")
+        if last_event_id:
+            try:
+                last_seq = int(last_event_id)
+            except ValueError:
+                last_seq = None
 
     return StreamingResponse(
-        _task_event_stream(user.id),
+        _task_event_stream(user.id, last_seq),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

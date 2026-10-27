@@ -748,17 +748,17 @@ class PaperQA2Service:
         llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
 
         # litellm.acompletion с stream=True возвращает async генератор чанков.
-        # Каждый чанк — объект с delta.content (новый текст).
+        # Каждый чанк — объект с choices[].delta.content (новый текст).
         async for chunk in await llm.acompletion(
             messages=[Message(content=prompt)],
             stream=True,
         ):
-            delta = getattr(chunk, "choices", None)
-            if delta:
-                for choice in delta:
-                    content_delta = getattr(choice, "delta", None)
-                    if content_delta and getattr(content_delta, "content", None):
-                        yield content_delta.content
+            choices = getattr(chunk, "choices", None) or getattr(chunk, "data", None)
+            if choices:
+                for choice in choices:
+                    delta = getattr(choice, "delta", None)
+                    if delta and getattr(delta, "content", None):
+                        yield delta.content
 
     async def _read_upload(self, uploaded: Any) -> bytes:
         read = getattr(uploaded, "read", None)

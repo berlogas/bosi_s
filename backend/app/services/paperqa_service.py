@@ -752,7 +752,6 @@ class PaperQA2Service:
         async for chunk in await llm.acompletion(
             messages=[Message(content=prompt)],
             stream=True,
-            name=name,
         ):
             delta = getattr(chunk, "choices", None)
             if delta:

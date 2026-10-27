@@ -39,6 +39,7 @@ import type { AuditLogEntry, SessionOut, Task, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
 import { PageHeader } from '../../components/PageHeader'
+import { SkeletonList } from '../../components/SkeletonList'
 import { InboxPanel } from './components/InboxPanel'
 import { dayWhen, fullWhen, shortWhen } from '../../lib/format'
 import { roleOptions } from '../../lib/roles'
@@ -399,7 +400,7 @@ function UsersTab() {
     timer.current = window.setTimeout(() => setSavedFor(null), 2000)
   }
 
-  if (users.isPending) return <Loader size="sm" />
+  if (users.isPending) return <SkeletonList count={5} />
   if (users.isError) {
     return (
       <Alert color="error" role="alert">
@@ -652,7 +653,7 @@ function GlobalBaseTab() {
           Готово.
         </Alert>
       )}
-      {documents.isPending && <Loader size="sm" />}
+      {documents.isPending && <SkeletonList count={5} />}
       {documents.isError && (
         <Alert color="error" role="alert">
           {errorText(documents.error, 'Ошибка запроса')}
@@ -775,7 +776,7 @@ function TasksTab() {
     return map
   }, [users.data])
 
-  if (tasks.isPending) return <Loader size="sm" />
+  if (tasks.isPending) return <SkeletonList count={5} />
   if (tasks.isError) {
     return (
       <Alert color="error" role="alert">

@@ -15,6 +15,10 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
+  build: {
+    // Предупреждение, если чанк больше 500 КБ — нужно делать код-сплиттинг
+    chunkSizeWarningLimit: 500,
+  },
   server: {
     proxy: {
       // Dev: Vite отдаёт и код, и API с одного origin — CORS не нужен.

@@ -364,5 +364,6 @@ export function AppLayout() {
         </AppShell.Main>
       </AppShell>
     </TaskEventsProvider>
+    <CommandPalette />
   )
 }

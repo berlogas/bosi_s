@@ -15,7 +15,9 @@ import {
 
 import { useSessionsPage } from './hooks/useSessionsPage'
 import { SimpleTable } from '../components'
+import { EmptyState } from '../../components/EmptyState'
 import { shortWhen, fullWhen } from '../../../lib/format'
+import { IconLayoutDashboard } from '@tabler/icons-react'
 
 function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
@@ -108,7 +110,11 @@ export default function SessionsPage() {
       </Group>
 
       {data.length === 0 && !isLoading && (
-        <Text c="dimmed" role="status">Сессий нет.</Text>
+        <EmptyState
+          title="Сессий нет"
+          description="Сессии появляются в чате после первого вопроса исследователя."
+          icon={<IconLayoutDashboard size={32} />}
+        />
       )}
 
       {data.length > 0 && (

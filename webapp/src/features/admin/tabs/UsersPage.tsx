@@ -10,8 +10,10 @@ import { z } from 'zod'
 import { notifications } from '@mantine/notifications'
 import { useUsersPage } from './hooks/useUsersPage'
 import { SimpleTable, DangerZone } from '../components'
+import { EmptyState } from '../../components/EmptyState'
 import { roleOptions } from '../../../lib/roles'
 import { useAuth } from '../../auth/authStore'
+import { IconUsers } from '@tabler/icons-react'
 
 function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
@@ -262,20 +264,28 @@ export default function UsersPage() {
     <Stack gap="md">
       <Title order={3}>Пользователи</Title>
       <CreateUserForm handleCreate={handleCreate} />
-      <Text size="sm" c="dimmed">Найдено пользователей: {data.length}</Text>
-      <SimpleTable
-        columns={customColumns as any}
-        data={data}
-        pagination={pagination}
-        onPaginationChange={setPagination}
-        sorting={sorting}
-        onSortingChange={setSorting}
-        filters={filters}
-        onFiltersChange={() => {}}
-        rowActions={({ original: _ }) => null}
-        isLoading={isLoading}
-        emptyMessage="Пользователей нет."
-      />
+      {data.length === 0 && !isLoading ? (
+        <EmptyState
+          title="Пользователей нет"
+          description="Создайте первую учётную запись исследователя или администратора."
+          action={<Button onClick={() => {}}>Создать пользователя</Button>}
+          icon={<IconUsers size={32} />}
+        />
+      ) : (
+        <SimpleTable
+          columns={customColumns as any}
+          data={data}
+          pagination={pagination}
+          onPaginationChange={setPagination}
+          sorting={sorting}
+          onSortingChange={setSorting}
+          filters={filters}
+          onFiltersChange={() => {}}
+          rowActions={({ original: _ }) => null}
+          isLoading={isLoading}
+          emptyMessage="Пользователей нет."
+        />
+      )}
     </Stack>
   )
 }

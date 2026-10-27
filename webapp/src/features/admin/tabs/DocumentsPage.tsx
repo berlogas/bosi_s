@@ -18,6 +18,8 @@ import {
 import { useRef, useState } from 'react'
 
 import { useDocumentsPage } from './hooks/useDocumentsPage'
+import { EmptyState } from '../../components/EmptyState'
+import { IconDatabase } from '@tabler/icons-react'
 import { SimpleTable, DangerZone, InboxPanel } from '../components'
 
 function errorTextLocal(cause: unknown, fallback: string): string {
@@ -290,7 +292,12 @@ export default function DocumentsPage() {
         <Alert color="success" role="status">Готово.</Alert>
       )}
       {data.length === 0 && !isLoading && (
-        <Text c="dimmed">Документов пока нет.</Text>
+        <EmptyState
+          title="Документов пока нет"
+          description="Загрузите файлы через зону выше или добавьте по пути к файлу."
+          action={<Button>Загрузить файл</Button>}
+          icon={<IconDatabase size={32} />}
+        />
       )}
       {data.length > 0 && (
         <SimpleTable

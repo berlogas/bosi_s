@@ -321,7 +321,7 @@ task-oriented UX**. Паритет был правильной стратеги�
 | 1 | Быстрые победы: иконки, тема, `PageHeader`, подтверждения, скелетоны, пустые состояния | — | 2–3 дн. | ✅ |
 | 2 | Каркас: `theme.ts`, тонкая шапка, command palette, ящик задач, URL state | Ревизия 1 | 3–4 дн. | ✅ |
 | 3 | Чат: sticky-композитор, `Textarea`, Virtuoso, undo, a11y | Волна 2 | 2–3 дн. | ✅ |
-| 4 | Документы и проекты: Dropzone, таблица+Drawer, master-detail, CodeMirror, версии | Волна 2 | 3–5 дн. | 🔄 в работе: шаги 1–8 done (dropzone, несохранённые правки, таблица, Drawer, мастер-дейл, CodeMirror, HowToPanel в Accordion, автосохранение статуса) |
+| 4 | Документы и проекты: Dropzone, таблица+Drawer, master-detail, CodeMirror, версии | Волна 2 | 3–5 дн. | ✅ выполнено: шаги 1–10 (dropzone, несохранённые правки, таблица @tanstack/react-table, Drawer деталей, мастер-дейл, CodeMirror 6, HowToPanel в Accordion, автосохранение статуса, undo-тост удаления) |
 | 5 | Админка и база знаний: lazy split, URL state, аудит-фильтры, danger zone | Волна 2 | 2–4 дн. | 🔄 в работе: разбивка `AdminPage` на вкладки (`AdminLayout` + `tabs/`) |
 | 6 | Качество: a11y, visual regression, bundle budget, `QueryState`, формы | Волны 2–5 | 2–3 дн. | ⬜ |
 

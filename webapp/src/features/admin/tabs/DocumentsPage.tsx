@@ -18,7 +18,7 @@ import {
 import { useRef, useState } from 'react'
 
 import { useDocumentsPage } from './hooks/useDocumentsPage'
-import { EmptyState } from '../../components/EmptyState'
+import { EmptyState } from '../../../components/EmptyState'
 import { IconDatabase } from '@tabler/icons-react'
 import { SimpleTable, DangerZone, InboxPanel } from '../components'
 

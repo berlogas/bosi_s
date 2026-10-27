@@ -15,7 +15,7 @@ import {
 
 import { useSessionsPage } from './hooks/useSessionsPage'
 import { SimpleTable } from '../components'
-import { EmptyState } from '../../components/EmptyState'
+import { EmptyState } from '../../../components/EmptyState'
 import { shortWhen, fullWhen } from '../../../lib/format'
 import { IconLayoutDashboard } from '@tabler/icons-react'
 

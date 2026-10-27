@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -314,6 +315,67 @@ async def generate(session_id: str, project_id: str, payload: GenerateRequest,
           from_cache=result.from_cache, seconds=result.seconds)
 
     return GenerateResultOut(**result.to_dict(), project_id=project.id)
+
+
+@router.post("/{session_id}/projects/{project_id}/generate-async")
+async def generate_section_async(
+    session_id: str, project_id: str, payload: GenerateRequest,
+    request: Request, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Фоновая генерация раздела: возвращает task_id, UI опрашивает /api/tasks/{id}.
+
+    Генерация может занимать минуты, поэтому синхронный POST /generate
+    (для скриптов и тестов) дополняется фоновым режимом.
+    """
+    from app.services.tasks import Task, tasks
+
+    session = get_owned_session(db, session_id, user)
+    project = _owned(db, project_id, session_id, user)
+
+    request_obj = GenerationRequest(
+        section=payload.section.strip(),
+        question=payload.question.strip(),
+        word_target=payload.word_target,
+        notes=payload.notes,
+        use_cache=not payload.no_cache,
+        template_md=payload.template_md,
+        data_document_ids=payload.data_document_ids,
+    )
+
+    async def body(task: Task) -> dict[str, Any]:
+        # Этапы: подготовка -> поиск контекста -> LLM -> сохранение
+        task.set_stage(10, "подготовка запроса")
+        service = ProjectService()
+        try:
+            result = await service.generate_section(
+                db, project=project, session=session, user=user,
+                request=request_obj, kind=GenerationKind(request_obj.kind))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.exception("generate-async: ошибка генерации раздела %r",
+                          request_obj.section)
+            raise
+
+        touch_session(db, session, action_type="project.generate",
+                      action_label=f"Раздел: {request_obj.section}",
+                      snapshot={"tab": "projects", "active_project": project.id})
+        audit(db, action="project.generate", actor=user,
+             target_type="project", target_id=project.id,
+             **_meta(request), section=request_obj.section,
+             citations_ok=result.ok, sources=len(result.sources),
+             from_cache=result.from_cache, seconds=result.seconds)
+        return result.to_dict()
+
+    task = tasks.submit(body, kind="generate_section",
+                        title=f"Раздел: {request_obj.section}",
+                        user_id=user.id, session_id=session_id,
+                        project_id=project_id)
+    audit(db, action="project.generate.async", actor=user,
+          target_type="project", target_id=project.id,
+          **_meta(request), section=request_obj.section,
+          task_id=task.id)
+    return {"task_id": task.id}
 
 
 @router.get("/{session_id}/projects/{project_id}/versions",

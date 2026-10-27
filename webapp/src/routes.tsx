@@ -9,7 +9,13 @@ import { Center, Loader } from '@mantine/core'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { LoginPage } from './features/auth/LoginPage'
-import { AdminPage } from './features/admin/AdminPage'
+import { AdminLayout } from './features/admin/AdminLayout'
+import UsersPage from './features/admin/tabs/UsersPage'
+import DocumentsPage from './features/admin/tabs/DocumentsPage'
+import TasksPage from './features/admin/tabs/TasksPage'
+import SessionsPage from './features/admin/tabs/SessionsPage'
+import AuditPage from './features/admin/tabs/AuditPage'
+import MaintenancePage from './features/admin/tabs/MaintenancePage'
 import { useAuth } from './features/auth/authStore'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
@@ -57,9 +63,10 @@ export function AppRoutes() {
         {/* Глобальная база знаний на чтение: доступна и исследователю,
             который не может её наполнять (наполняет администратор) */}
         <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        {/* вкладка админки — в адресе: F5 и ссылки сохраняют её */}
-        <Route path="/admin/:tab" element={<AdminPage />} />
+        {/* Админка: страницы по вкладкам. Оба варианта адреса (/admin и /admin/:tab)
+            рендерят AdminLayout, который сам определяет активную вкладку по URL. */}
+        <Route path="/admin" element={<AdminLayout />} />
+        <Route path="/admin/:tab" element={<AdminLayout />} />
         <Route path="/s/:sessionId" element={<SessionPage />}>
           {/* без вкладки — на чат (у Streamlit это был active_tab) */}
           <Route index element={<Navigate to="chat" replace />} />

@@ -823,7 +823,10 @@ class ApiClient {
     })
   }
 
-  adminUpload(files: File[], tags = ''): Promise<DocumentBatchResult> {
+  adminUpload(files: File[], tags = '', options: {
+    /** % отправленных байтов (0–100); включает XHR-транспорт. */
+    onProgress?: (percent: number) => void
+  } = {}): Promise<DocumentBatchResult> {
     const form = new FormData()
     for (const file of files) form.append('files', file, file.name)
     form.append('tags', tags)
@@ -831,6 +834,7 @@ class ApiClient {
       method: 'POST',
       form,
       timeoutMs: 600_000,
+      onProgress: options.onProgress,
     })
   }
 

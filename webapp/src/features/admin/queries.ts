@@ -30,6 +30,7 @@ export function useAdminUsers() {
   return useQuery({
     queryKey: adminKeys.users,
     queryFn: () => client.adminUsers(),
+    refetchOnMount: 'always',
   })
 }
 
@@ -96,6 +97,7 @@ export function useAudit(since?: string) {
   return useQuery({
     queryKey: [...adminKeys.audit, since ?? 'все'],
     queryFn: () => client.adminAudit({ limit: 200, since }),
+    refetchOnMount: 'always',
   })
 }
 
@@ -107,6 +109,7 @@ export function useAuditStats() {
   return useQuery({
     queryKey: adminKeys.auditStats,
     queryFn: () => client.adminAuditStats(),
+    refetchOnMount: 'always',
   })
 }
 
@@ -114,6 +117,7 @@ export function useAdminDocuments() {
   return useQuery({
     queryKey: adminKeys.documents,
     queryFn: () => client.adminDocuments(),
+    refetchOnMount: 'always',
   })
 }
 
@@ -138,8 +142,16 @@ export function useAdminAddPath() {
 export function useAdminUpload() {
   const invalidate = useInvalidateGlobalDocs()
   return useMutation({
-    mutationFn: ({ files, tags }: { files: File[]; tags: string }) =>
-      client.adminUpload(files, tags),
+    mutationFn: ({
+      files,
+      tags,
+      onProgress,
+    }: {
+      files: File[]
+      tags: string
+      /** % отправленных байтов — для прогресс-бара (XHR onprogress). */
+      onProgress?: (percent: number) => void
+    }) => client.adminUpload(files, tags, { onProgress }),
     onSuccess: invalidate,
   })
 }
@@ -166,14 +178,16 @@ export function useInboxStatus() {
   return useQuery({
     queryKey: adminKeys.inbox,
     queryFn: () => client.adminInboxStatus(),
+    refetchOnMount: 'always',
   })
 }
 
 /** Журнал прогонов (последние). Обновляется после скана. */
-export function useInboxRuns() {
+export function useInboxRuns(limit = 20) {
   return useQuery({
-    queryKey: adminKeys.inboxRuns,
-    queryFn: () => client.adminInboxRuns(),
+    queryKey: [...adminKeys.inboxRuns, limit],
+    queryFn: () => client.adminInboxRuns(limit),
+    refetchOnMount: 'always',
   })
 }
 
@@ -254,6 +268,7 @@ export function useSessionsTable() {
   return useQuery({
     queryKey: queryKeys.sessions,
     queryFn: () => client.sessions(),
+    refetchOnMount: 'always',
   })
 }
 
@@ -291,8 +306,7 @@ export function useBackups() {
   return useQuery({
     queryKey: adminKeys.backups,
     queryFn: () => client.adminBackups(),
-    // план зависит от размера данных — после сброса он меняется
-    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
   })
 }
 

@@ -13,7 +13,6 @@ import {
   Button,
   Checkbox,
   Divider,
-  FileInput,
   Group,
   Loader,
   Modal,
@@ -28,6 +27,8 @@ import {
   Text,
   TextInput,
   Title,
+  UnstyledButton,
+  Progress,
 } from '@mantine/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -661,9 +662,12 @@ function GlobalBaseTab() {
   const documents = useAdminDocuments()
 
   const [path, setPath] = useState('')
-  const [files, setFiles] = useState<File[] | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [dragOver, setDragOver] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [reindexDone, setReindexDone] = useState(false)
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   return (
     <Stack gap="sm">
@@ -702,41 +706,107 @@ function GlobalBaseTab() {
         </Alert>
       )}
 
-      <Group align="flex-end" gap="sm" wrap="nowrap">
-        <FileInput
-          label="Или файлы"
-          multiple
-          // пустой массив, а не undefined: undefined делает поле
-          // неуправляемым, и Mantine продолжает показывать старые файлы
-          value={files ?? []}
-          onChange={setFiles}
-          style={{ flex: 1 }}
-        />
-        <Button
-          disabled={!files || files.length === 0}
-          loading={upload.isPending}
-          onClick={() => {
-            setMessage(null)
-            // Список файлов очищаем сразу по клику: пока идёт загрузка,
-            // повторное нажатие не должно уходить теми же файлами.
-            const selected = files ?? []
-            setFiles(null)
-            upload.mutate(
-              { files: selected, tags: '' },
-              {
-                onSuccess: (result) => {
-                  setMessage(`Добавлено ${(result.added ?? []).length}`)
-                  setFiles(null)
-                },
-                // при ошибке возвращаем выбор в поле, чтобы можно было повторить
-                onError: () => setFiles(selected),
-              },
-            )
-          }}
-        >
-          Загрузить
-        </Button>
-      </Group>
+      {/* Drag&Drop зона для загрузки файлов — паритет DocumentsTab */}
+      <UnstyledButton
+        component="div"
+        onClick={() => fileInput.current?.click()}
+        onDragOver={(event) => {
+          event.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragOver(false)
+          const dropped = Array.from(event.dataTransfer.files)
+          if (dropped.length > 0) setFiles((current) => [...current, ...dropped])
+        }}
+        data-testid="admin-doc-dropzone"
+        style={{
+          border: `2px dashed ${dragOver ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-default-border)'}`,
+          borderRadius: 'var(--mantine-radius-md)',
+          padding: 'var(--mantine-spacing-md)',
+          textAlign: 'center',
+          cursor: 'pointer',
+          background: dragOver ? 'var(--mantine-color-blue-light)' : undefined,
+        }}
+      >
+        <Text size="sm" c="dimmed">
+          Перетащите файлы сюда или нажмите, чтобы выбрать
+        </Text>
+      </UnstyledButton>
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        hidden
+        data-testid="admin-doc-file-input"
+        onChange={(event) => {
+          const selected = Array.from(event.target.files ?? [])
+          if (selected.length > 0) setFiles((current) => [...current, ...selected])
+          event.target.value = ''
+        }}
+      />
+
+      {files.length > 0 && (
+        <Group justify="space-between">
+          <Text size="sm">
+            Выбрано файлов: {files.length}{' '}
+            <Text component="span" c="dimmed" size="xs">
+              ({files.map((file) => file.name).join(', ')})
+            </Text>
+          </Text>
+          <Group gap="xs">
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => setFiles([])}
+              disabled={upload.isPending}
+            >
+              Очистить
+            </Button>
+            <Button
+              onClick={() => {
+                setMessage(null)
+                setUploadPercent(0)
+                upload.mutate(
+                  { files, tags: '', onProgress: setUploadPercent },
+                  {
+                    onSuccess: (result) => {
+                      setMessage(`Добавлено ${(result.added ?? []).length}`)
+                      setFiles([])
+                    },
+                    onError: (cause) =>
+                      setMessage(
+                        cause instanceof Error ? cause.message : 'Загрузка не удалась',
+                      ),
+                    onSettled: () => setUploadPercent(null),
+                  },
+                )
+              }}
+              loading={upload.isPending}
+              disabled={files.length === 0}
+            >
+              Загрузить файлы
+            </Button>
+          </Group>
+        </Group>
+      )}
+
+      {upload.isPending && (
+        <Stack gap={4}>
+          <Progress
+            value={uploadPercent ?? 0}
+            aria-label="Прогресс загрузки файлов"
+            data-testid="admin-upload-progress"
+          />
+          <Text size="sm" c="dimmed">
+            {uploadPercent !== null && uploadPercent < 100
+              ? `Отправляю файлы: ${uploadPercent}%…`
+              : 'Файлы отправлены. Индексирую — это может занять минуты…'}
+          </Text>
+        </Stack>
+      )}
       {upload.isError && (
         <Alert color="error" role="alert">
           {errorText(upload.error, 'Ошибка запроса')}
@@ -1735,3 +1805,16 @@ export function AdminPage() {
     </Stack>
   )
 }
+
+// Реэкспорт компонентов вкладок для новых страниц
+export { CreateUser }
+export { UsersTab }
+export { InboxPanel }
+export { GlobalBaseTab }
+export { TasksTab }
+export { SessionsTab }
+export { AuditTab }
+export { MaintenanceTab }
+export { ResetSection }
+export { BackupsSection }
+

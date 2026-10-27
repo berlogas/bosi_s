@@ -26,6 +26,7 @@ from app.db.models import (
     DocumentCategory,
     DocumentStatus,
     DocumentVisibility,
+    Session,
     User,
 )
 from app.db.repositories import documents as docs_repo

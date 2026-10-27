@@ -4,12 +4,11 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Spotlight, SpotlightInput, SpotlightGroup, SpotlightItem } from '@mantine/spotlight'
+import { Spotlight, SpotlightRoot, SpotlightSearch, SpotlightActionsGroup, SpotlightActionsList, SpotlightAction, SpotlightEmpty } from '@mantine/spotlight'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
   Group,
-  IconButton,
   Text,
 } from '@mantine/core'
 import {
@@ -121,28 +120,40 @@ export function CommandPalette() {
       withOverlay
       zIndex={1000}
     >
-      <SpotlightInput
-        icon={<IconSearch size={16} />}
-        placeholder="Поиск по разделам, сессиям, действиям…"
-        leftSectionWidth={40}
-      />
-      <SpotlightGroup title="Разделы">
-        {items.map((item) => (
-          <SpotlightItem
-            key={item.label}
-            icon={item.icon}
-            onSelect={() => {
-              setOpened(false)
-              item.onSelect()
-            }}
-          >
-            <Box>
-              <Text weight={500}>{item.label}</Text>
-              {item.hint && <Text size="xs" c="dimmed">{item.hint}</Text>}
-            </Box>
-          </SpotlightItem>
-        ))}
-      </SpotlightGroup>
+      <SpotlightRoot>
+        <Group gap="xs" align="center" style={{ width: '100%' }}>
+          <IconSearch size={16} color="dimmed" />
+          <SpotlightSearch
+            placeholder="Поиск по разделам, сессиям, действиям…"
+            icon={<Box />}
+            withinPortal
+          />
+        </Group>
+        <SpotlightActionsGroup>
+          <SpotlightActionsList>
+            {items.map((item) => (
+              <SpotlightAction
+                key={item.label}
+                icon={item.icon}
+                onSelect={() => {
+                  setOpened(false)
+                  item.onSelect()
+                }}
+              >
+                <Box>
+                  <Text weight={500}>{item.label}</Text>
+                  {item.hint && <Text size="xs" c="dimmed">{item.hint}</Text>}
+                </Box>
+              </SpotlightAction>
+            ))}
+            {items.length === 0 && (
+              <SpotlightEmpty>
+                <Text c="dimmed">Ничего не найдено</Text>
+              </SpotlightEmpty>
+            )}
+          </SpotlightActionsList>
+        </SpotlightActionsGroup>
+      </SpotlightRoot>
     </Spotlight>
   )
 }

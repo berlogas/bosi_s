@@ -26,7 +26,6 @@ from app.db.models import (
     DocumentCategory,
     DocumentStatus,
     DocumentVisibility,
-    Session,
     User,
 )
 from app.db.repositories import documents as docs_repo
@@ -158,22 +157,11 @@ def document_knowledge_view(doc: Document) -> GlobalDocumentOut:
 @router.get("", response_model=list[DocumentOut])
 def list_global_documents(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
     category: DocumentCategory | None = None
 ) -> list[DocumentOut]:
-    # Глобальные документы (session_id=None) видны всем
-    rows = docs_repo.list_documents(db, session_id=None, category=category)
-    # Временные документы текущего пользователя из его сессий
-    user_sessions = db.scalars(
-        select(Session.id).where(Session.user_id == user.id)
-    ).all()
-    if user_sessions:
-        session_docs = docs_repo.list_documents(
-            db, session_id=list(user_sessions),
-            category=DocumentCategory.temp_literature,
-        )
-        rows.extend(session_docs)
-    return [document_from_row(d) for d in rows]
+    # Только глобальные документы (session_id = NULL) видны всем
+    return [document_knowledge_view(d) for d in
+            docs_repo.list_documents(db, session_id=None, category=category)]
 
 
 @router.get("/stats")

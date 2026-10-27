@@ -7,13 +7,9 @@
  * «Администрирование» → «Глобальная база»), здесь только чтение, поэтому
  * кнопок загрузки и удаления на странице нет намеренно.
  *
- * Если пользователь — администратор, вверху есть ссылка в его раздел: тот же
- * список с возможностью наполнения, чтобы не искать его по меню.
- *
- * Правила доступа:
- * - Администратор видит все документы (глобальные + временные любого пользователя)
- *   Обычный пользователь видит только глобальные (session_id === null) и свои
-  временные (session_id === id своей сессии, category === 'temp_literature')
+ * Правило доступа: в этой вкладке видны только глобальные документы
+ * (session_id === null), доступные всем研究телям. Временные документы из
+ * сессий видны только внутри соответствующей сессии.
  */
 
 import { useDeferredValue } from 'react'
@@ -78,19 +74,11 @@ export function KnowledgePage() {
   const documents = useKnowledgeDocuments(search, category || null)
   const stats = useKnowledgeStats()
 
-  // Фильтрация документов по правам доступа:
-  // - Администратор видит все документы (глобальные + временные любого пользователя)
-  // - Обычный пользователь видит только глобальные (session_id === null) и свои
-  //   временные (session_id === id своей сессии, category === 'temp_literature')
-  const isAdmin = user?.role === 'admin'
-
-  const visibleDocuments = (documents.data ?? []).filter((document) => {
-    if (isAdmin) return true
-    // Глобальный документ (не привязан к сессии)
-    if (!document.session_id) return true
-    // Временный документ пользователя из его сессии
-    return document.session_id && document.category === 'temp_literature'
-  })
+  // Глобальная база знаний — только документы без привязки к сессии.
+  // Временные документы из сессий видны только внутри соответствующей сессии.
+  const visibleDocuments = (documents.data ?? []).filter(
+    (document) => !document.session_id,
+  )
 
   return (
     <Stack gap="md">

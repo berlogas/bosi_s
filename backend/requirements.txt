@@ -7,6 +7,7 @@
 
 # Ядро RAG
 paper-qa[local]==2026.8.12
+paper-qa[office]==2026.8.12
 
 # Web
 fastapi==0.142.2

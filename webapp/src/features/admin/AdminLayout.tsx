@@ -84,7 +84,7 @@ export function AdminLayout() {
           не sticky, чтобы не накладываться на общую шапку AppLayout при скролле */}
       <Box px="md" py="sm">
         <Group justify="space-between" align="center" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Group gap="xs" style={{ minWidth: 0, flex: 1 }}>
+          <Group gap="sm" style={{ minWidth: 0, flex: 1 }}>
             {TABS.map((tab) => {
               const isActive = tab.path === activeTab
               return (
@@ -99,7 +99,7 @@ export function AdminLayout() {
                       ? 'bg-primary-filled text-primary-color'
                       : 'text-gray-600 hover:bg-gray-100 dark:hover:bg-dark-600'}
                   `}
-                  style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 'xs' }}
+                  style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 'sm' }}
                 >
                   <span role="tab" aria-selected={isActive}>
                     <tab.icon size={16} />

@@ -53,6 +53,8 @@ from app.config import Settings, get_settings
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.db.models import (
     Document,
+    DocumentCategory,
+    DocumentVisibility,
     InboxFile,
     InboxFileStatus,
     InboxRun,
@@ -361,6 +363,9 @@ class InboxService:
             chunk_count=ref.chunk_count,
             citation=ref.citation,
             content_hash=ref.content_hash,
+            category=DocumentCategory.global_knowledge,
+            visibility=DocumentVisibility.global_,
+            session_id=None,
             source="inbox",
             owner_user_id=actor.id,
             added_by=actor.id,

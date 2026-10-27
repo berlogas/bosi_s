@@ -19,6 +19,7 @@ from __future__ import annotations
 import locale
 import os
 from pathlib import Path
+from typing import Any
 
 from html2text import __version__ as html2text_version
 from html2text import html2text
@@ -27,6 +28,87 @@ from paperqa.utils import ImpossibleParsingError
 from paperqa.version import __version__ as pqa_version
 
 _installed = False
+
+# unstructured.partition.auto.partition падает с Segmentation fault на некоторых
+# офисных файлах (.xlsx, .docx, .pptx). Прямые partition_xlsx/docx/pptx работают
+# нормально. Подменяем auto-partitioner, чтобы для офисных файлов вызывать
+# соответствующий конкретный partitioner.
+def _install_office_partition_patch() -> None:
+    """Заменить `parse_office_doc` в paperqa на версию без `partition_auto`.
+
+    `paperqa.readers.parse_office_doc` вызывает `unstructured.partition.auto.partition`,
+    который падает с Segmentation fault на некоторых офисных файлах (.xlsx).
+    Прямые partition_xlsx/docx/pptx работают нормально. Подменяем функцию
+    в модуле paperqa.readers, чтобы для офисных файлов использовать
+    конкретный partitioner вместо auto.
+    """
+    try:
+        import unstructured  # noqa: F401
+    except ImportError:
+        return
+
+    from unstructured.partition.docx import partition_docx
+    from unstructured.partition.xlsx import partition_xlsx
+    from unstructured.partition.pptx import partition_pptx
+    from unstructured.documents.elements import Image, Table
+    from unstructured.documents.elements import Element  # noqa: F401
+
+    from paperqa.readers import ParsedMetadata, ParsedText, ParsedMedia
+    from paperqa.version import __version__ as pqa_version
+    from importlib.metadata import version as _dist_version
+
+    def parse_office_doc_boasi(path: str | os.PathLike, **kwargs) -> ParsedText:
+        """Parse office documents using specific unstructured partitioners (no auto)."""
+        UNSTRUCTURED_VERSION = _dist_version("unstructured")
+        ext = Path(str(path)).suffix.lower()
+        if ext == ".xlsx":
+            elements = partition_xlsx(str(path), **kwargs)
+        elif ext == ".docx":
+            elements = partition_docx(str(path), **kwargs)
+        elif ext == ".pptx":
+            elements = partition_pptx(str(path), **kwargs)
+        else:
+            # fallback к auto для неизвестных расширений
+            from unstructured.partition.auto import partition as _auto_partition
+            elements = _auto_partition(str(path), **kwargs)
+
+        content_dict: dict[str, Any] = {}
+        media_list: list[Any] = []
+        current_text = ""
+        media_index = 0
+
+        for el in elements:
+            if isinstance(el, Image):
+                image_data = el.metadata.image_data
+                parsed_media = ParsedMedia(
+                    index=media_index,
+                    data=image_data,
+                    info={"suffix": el.metadata.image_mime_type},
+                )
+                media_list.append(parsed_media)
+                media_index += 1
+            elif isinstance(el, Table):
+                if el.metadata.text_as_html:
+                    current_text += el.metadata.text_as_html + "\n\n"
+            else:
+                current_text += str(el) + "\n\n"
+
+        content_dict["1"] = (current_text, media_list)
+
+        return ParsedText(
+            content=content_dict,
+            metadata=ParsedMetadata(
+                parsing_libraries=[f"unstructured ({UNSTRUCTURED_VERSION})"],
+                paperqa_version=pqa_version,
+                total_parsed_text_length=len(current_text),
+                count_parsed_media=len(media_list),
+                name=f"office_doc|path={path}",
+            ),
+        )
+
+    import paperqa.readers as _pqa_readers
+
+    _pqa_readers.parse_office_doc = parse_office_doc_boasi  # type: ignore[assignment]
 
 
 def parse_text_utf8(
@@ -96,4 +178,5 @@ def install_utf8_parser() -> None:
     import paperqa.readers as pqa_readers
 
     pqa_readers.parse_text = parse_text_utf8  # type: ignore[assignment]
+    _install_office_partition_patch()
     _installed = True

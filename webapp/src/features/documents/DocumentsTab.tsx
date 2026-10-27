@@ -665,7 +665,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         accept={getAccept()}
         maxSize={MAX_FILE_SIZE}
         onReject={(fileRejections: any) => onReject(fileRejections)}
-        onDrop={((_event: any, acceptedFiles: any) => {
+        onDrop={(acceptedFiles: any) => {
           if (readOnly) return
           const newFiles: File[] = []
           for (const file of acceptedFiles) {
@@ -682,56 +682,61 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             }
           }
           if (newFiles.length > 0) setFiles((current) => [...current, ...newFiles])
-        }) as any}
+        }}
         disabled={readOnly}
         style={{
           minHeight: 120,
           borderRadius: 'var(--mantine-radius-md)',
         }}
       >
-        {/* @ts-ignore */}
-        {(({
-          dropzoneProps,
-          dropzoneState,
-          getRootProps,
-          getInputProps,
-        }: any) => (
-          <>
-            <div
-              {...(getRootProps({
-                ...dropzoneProps,
-                onClick: () => !readOnly && getInputProps().onClick(),
-              }) as Record<string, unknown>)}
-              data-testid="doc-dropzone"
-              aria-disabled={readOnly}
-              style={{
-                border: `2px dashed ${
-                  dropzoneState.dragOver
-                    ? 'var(--mantine-color-blue-filled)'
-                    : 'var(--mantine-color-default-border)'
-                }`,
-                borderRadius: 'var(--mantine-radius-md)',
-                padding: 'var(--mantine-spacing-md)',
-                textAlign: 'center',
-                cursor: readOnly ? 'not-allowed' : 'pointer',
-                background: dropzoneState.dragOver
-                  ? 'var(--mantine-color-blue-light)'
-                  : undefined,
-                opacity: readOnly ? 0.6 : 1,
-              }}
-            >
-              <Text size="sm" c="dimmed">
-                Перетащите файлы сюда или нажмите, чтобы выбрать
-              </Text>
-              <input {...getInputProps()} data-testid="doc-file-input" />
-            </div>
-            {dropzoneState.dragOver && (
-              <Text size="xs" c="blue" mt="xs">
-                Отпустите, чтобы добавить файлы
-              </Text>
-            )}
-          </>
-        ) as any)}
+        <div
+          data-testid="doc-dropzone"
+          aria-disabled={readOnly}
+          style={{
+            border: `2px dashed var(--mantine-color-default-border)`,
+            borderRadius: 'var(--mantine-radius-md)',
+            padding: 'var(--mantine-spacing-md)',
+            textAlign: 'center',
+            cursor: readOnly ? 'not-allowed' : 'pointer',
+            opacity: readOnly ? 0.6 : 1,
+          }}
+          onClick={() => {
+            if (!readOnly) {
+              const input = document.querySelector('[data-testid="doc-file-input"]') as HTMLInputElement | null
+              input?.click()
+            }
+          }}
+        >
+          <Text size="sm" c="dimmed">
+            Перетащите файлы сюда или нажмите, чтобы выбрать
+          </Text>
+          <input
+            type="file"
+            multiple
+            hidden
+            data-testid="doc-file-input"
+            onChange={(e) => {
+              const selected = Array.from(e.target.files ?? [])
+              if (selected.length > 0) {
+                const newFiles: File[] = []
+                for (const file of selected) {
+                  const reason = validateFile(file)
+                  if (reason) {
+                    setRejectErrors((prev) => ({ ...prev, [file.name]: reason }))
+                  } else {
+                    newFiles.push(file)
+                    setRejectErrors((prev) => {
+                      const next = { ...prev }
+                      delete next[file.name]
+                      return next
+                    })
+                  }
+                }
+                if (newFiles.length > 0) setFiles((current) => [...current, ...newFiles])
+              }
+            }}
+          />
+        </div>
       </Dropzone>
 
       {files.length > 0 && (

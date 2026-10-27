@@ -208,7 +208,7 @@ export function AppLayout() {
               />
               <Title
                 order={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
               >
                 <IconBook size={16} stroke={1.5} />
                 <span>boasi_s</span>
@@ -231,7 +231,7 @@ export function AppLayout() {
             <Group gap="sm">
               <Title
                 order={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
               >
                 <IconBook size={16} stroke={1.5} />
                 <span>boasi_s</span>
@@ -247,7 +247,7 @@ export function AppLayout() {
 
         <AppShellNavbar id="main-nav" p="md" component={ScrollArea}>
           <Group gap="xs" mb="xs" justify="space-between">
-            <Title order={4} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Title order={4} style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}>
               <IconBook size={16} stroke={1.5} />
               <span>boasi_s</span>
             </Title>
@@ -306,7 +306,7 @@ export function AppLayout() {
                 size="xs"
                 c="dimmed"
                 mb={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
               >
                 <IconUser size={16} stroke={1.5} />
                 <span>

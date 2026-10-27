@@ -159,15 +159,15 @@ function DocumentsTable({
                 style={{
                   cursor: h.key !== 'actions' ? 'pointer' : 'default',
                   userSelect: 'none',
-                  padding: '8px 12px',
-                  borderBottom: '2px solid #ddd',
+                  padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                  borderBottom: '2px solid var(--mantine-color-default-border)',
                   textAlign: 'left',
-                  background: '#f5f5f5',
+                  background: 'var(--mantine-color-gray-0)',
                 }}
               >
                 {h.label}
                 {sortId === h.key && (
-                  <span style={{ marginLeft: 4 }}>
+                  <span style={{ marginLeft: 'var(--mantine-spacing-xs)' }}>
                     {sortDesc ? '▼' : '▲'}
                   </span>
                 )}
@@ -182,8 +182,8 @@ function DocumentsTable({
                 colSpan={headers.length}
                 style={{
                   textAlign: 'center',
-                  padding: '2rem',
-                  color: '#999',
+                  padding: 'var(--mantine-spacing-xl)',
+                  color: 'var(--mantine-color-dimmed)',
                 }}
               >
                 Документов не найдено.
@@ -192,19 +192,19 @@ function DocumentsTable({
           ) : (
             pageData.map((document) => (
               <tr key={document.id ?? document.dockey}>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   {document.title || document.docname}
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   {categoryLabel(document.category)}
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   <Badge size="xs">{document.status ?? '—'}</Badge>
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   {document.chunk_count ?? 0}
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   {(() => {
                     const bytes = document.size_bytes ?? 0
                     if (bytes < 1024) return `${bytes} Б`
@@ -212,13 +212,13 @@ function DocumentsTable({
                     return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
                   })()}
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   {document.tags?.join(', ') || '—'}
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                   {document.dockey?.slice(0, 8) || '—'}
                 </td>
-                <td style={{ padding: '8px 12px', borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)', textAlign: 'right' }}>
                   <Group gap="xs">
                     <Button
                       size="compact-xs"
@@ -251,18 +251,18 @@ function DocumentsTable({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginTop: '1rem',
+          marginTop: 'var(--mantine-spacing-md)',
           flexWrap: 'wrap',
-          gap: '0.5rem',
+          gap: 'var(--mantine-spacing-xs)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}>
           <button
             style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              background: 'white',
-              borderRadius: 4,
+              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              border: '1px solid var(--mantine-color-default-border)',
+              background: 'var(--mantine-color-white)',
+              borderRadius: 'var(--mantine-radius-xs)',
               cursor: 'pointer',
             }}
             disabled={safePage === 0}
@@ -277,10 +277,10 @@ function DocumentsTable({
           </span>
           <button
             style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              background: 'white',
-              borderRadius: 4,
+              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              border: '1px solid var(--mantine-color-default-border)',
+              background: 'var(--mantine-color-white)',
+              borderRadius: 'var(--mantine-radius-xs)',
               cursor: 'pointer',
             }}
             disabled={safePage >= pageCount - 1}
@@ -293,9 +293,9 @@ function DocumentsTable({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
-            color: '#999',
-            fontSize: 14,
+            gap: 'var(--mantine-spacing-xs)',
+            color: 'var(--mantine-color-dimmed)',
+            fontSize: 'var(--mantine-font-size-sm)',
           }}
         >
           <span>Всего: {documents.length}</span>

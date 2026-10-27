@@ -465,11 +465,11 @@ function ProjectEditor({
             aria-valuemin={0}
             aria-valuemax={100}
             style={{
-              height: 8,
-              borderRadius: 4,
+              height: 'var(--mantine-spacing-sm)',
+              borderRadius: 'var(--mantine-radius-xs)',
               background: 'var(--mantine-color-default-border)',
               overflow: 'hidden',
-              marginTop: 4,
+              marginTop: 'var(--mantine-spacing-xs)',
             }}
           >
             <div
@@ -1030,33 +1030,33 @@ function VersionHistoryDrawer({
         <Table>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Версия</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Дата</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Автор</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Слов</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px' }}>Описание</th>
-              <th style={{ textAlign: 'center', padding: '8px 12px' }}>Сравнить</th>
+              <th style={{ textAlign: 'left', padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>Версия</th>
+              <th style={{ textAlign: 'left', padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>Дата</th>
+              <th style={{ textAlign: 'left', padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>Автор</th>
+              <th style={{ textAlign: 'left', padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>Слов</th>
+              <th style={{ textAlign: 'left', padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>Описание</th>
+              <th style={{ textAlign: 'center', padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>Сравнить</th>
             </tr>
           </thead>
           <tbody>
             {versions.map((v) => (
               <tr key={v.version_id}>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 'xs' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', fontFamily: 'monospace', fontSize: 'xs' }}>
                   {v.version_id}
                 </td>
-                <td style={{ padding: '8px 12px', fontSize: 'xs', color: 'dimmed' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', fontSize: 'xs', color: 'dimmed' }}>
                   {v.created_at}
                 </td>
-                <td style={{ padding: '8px 12px', fontSize: 'xs' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', fontSize: 'xs' }}>
                   {v.author}
                 </td>
-                <td style={{ padding: '8px 12px', fontSize: 'xs' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', fontSize: 'xs' }}>
                   {v.words}
                 </td>
-                <td style={{ padding: '8px 12px', fontSize: 'xs' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', fontSize: 'xs' }}>
                   {v.change_summary}
                 </td>
-                <td style={{ padding: '8px 12px' }}>
+                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)' }}>
                   <Group gap="xs">
                     <Button
                       size="xs"

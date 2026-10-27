@@ -1944,6 +1944,8 @@ export interface components {
             source?: string | null;
             /** Created At */
             created_at?: string | null;
+            /** Session Id (null для глобальных документов) */
+            session_id?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {

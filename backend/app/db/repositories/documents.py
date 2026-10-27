@@ -54,12 +54,19 @@ def find_document(db: Session, *, session_id: str | None, dockey: str) -> Docume
 def list_documents(
     db: Session,
     *,
-    session_id: str | None,
+    session_id: str | None | list[str] | None = None,
     category: DocumentCategory | None = None,
 ) -> list[Document]:
     stmt = select(Document)
-    stmt = (stmt.where(Document.session_id == session_id) if session_id
-            else stmt.where(Document.session_id.is_(None)))
+    if session_id is None:
+        stmt = stmt.where(Document.session_id.is_(None))
+    elif isinstance(session_id, list):
+        if session_id:
+            stmt = stmt.where(Document.session_id.in_(session_id))
+        else:
+            stmt = stmt.where(Document.session_id.is_(None))
+    else:
+        stmt = stmt.where(Document.session_id == session_id)
     if category is not None:
         stmt = stmt.where(Document.category == category)
     return list(db.scalars(stmt.order_by(Document.created_at)))

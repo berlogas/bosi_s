@@ -14,6 +14,7 @@ from typing import Any
 
 import anyio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.serializers import _enum_value, document_from_ref, document_from_row
@@ -149,15 +150,29 @@ def document_knowledge_view(doc: Document) -> GlobalDocumentOut:
         tags=list(doc.tags or []),
         source=doc.source,
         created_at=doc.created_at,
+        session_id=doc.session_id,
     )
 
 
 @router.get("", response_model=list[DocumentOut])
-def list_global_documents(db: Session = Depends(get_db),
-                          category: DocumentCategory | None = None
-                          ) -> list[DocumentOut]:
-    return [document_from_row(d) for d in
-            docs_repo.list_documents(db, session_id=None, category=category)]
+def list_global_documents(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    category: DocumentCategory | None = None
+) -> list[DocumentOut]:
+    # Глобальные документы (session_id=None) видны всем
+    rows = docs_repo.list_documents(db, session_id=None, category=category)
+    # Временные документы текущего пользователя из его сессий
+    user_sessions = db.scalars(
+        select(Session.id).where(Session.user_id == user.id)
+    ).all()
+    if user_sessions:
+        session_docs = docs_repo.list_documents(
+            db, session_id=list(user_sessions),
+            category=DocumentCategory.temp_literature,
+        )
+        rows.extend(session_docs)
+    return [document_from_row(d) for d in rows]
 
 
 @router.get("/stats")

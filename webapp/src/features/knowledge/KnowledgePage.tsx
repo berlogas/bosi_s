@@ -9,6 +9,11 @@
  *
  * Если пользователь — администратор, вверху есть ссылка в его раздел: тот же
  * список с возможностью наполнения, чтобы не искать его по меню.
+ *
+ * Правила доступа:
+ * - Администратор видит все документы (глобальные + временные любого пользователя)
+ *   Обычный пользователь видит только глобальные (session_id === null) и свои
+  временные (session_id === id своей сессии, category === 'temp_literature')
  */
 
 import { useDeferredValue } from 'react'
@@ -23,6 +28,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
+import { useDebouncedValue } from '@mantine/hooks'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { categoryLabel } from '../../lib/format'
@@ -72,6 +78,20 @@ export function KnowledgePage() {
   const documents = useKnowledgeDocuments(search, category || null)
   const stats = useKnowledgeStats()
 
+  // Фильтрация документов по правам доступа:
+  // - Администратор видит все документы (глобальные + временные любого пользователя)
+  // - Обычный пользователь видит только глобальные (session_id === null) и свои
+  //   временные (session_id === id своей сессии, category === 'temp_literature')
+  const isAdmin = user?.role === 'admin'
+
+  const visibleDocuments = (documents.data ?? []).filter((document) => {
+    if (isAdmin) return true
+    // Глобальный документ (не привязан к сессии)
+    if (!document.session_id) return true
+    // Временный документ пользователя из его сессии
+    return document.session_id && document.category === 'temp_literature'
+  })
+
   return (
     <Stack gap="md">
       <PageHeader
@@ -89,10 +109,12 @@ export function KnowledgePage() {
       {stats.data && (
         <Group gap="xs">
           <Badge size="lg" variant="light">
-            документов: {stats.data.total}
+            документов: {visibleDocuments.length}
           </Badge>
           <Badge size="lg" variant="light" color="gray">
-            объём: {formatBytes(stats.data.storage_bytes)}
+            объём: {formatBytes(
+              visibleDocuments.reduce((sum, d) => sum + (d.size_bytes || 0), 0)
+            )}
           </Badge>
         </Group>
       )}
@@ -137,7 +159,7 @@ export function KnowledgePage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {(documents.data ?? []).map((document) => (
+              {visibleDocuments.map((document) => (
                 <Table.Tr key={document.id ?? document.dockey}>
                   <Table.Td>
                     <Text size="sm">{document.title || document.filename}</Text>

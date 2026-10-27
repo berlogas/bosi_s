@@ -38,6 +38,7 @@ import type { InboxRun } from '../../api/client'
 import type { AuditLogEntry, SessionOut, Task, User } from '../../api/types'
 import type { ResetScope } from '../../api/client'
 import { TaskPanel } from '../../components/TaskPanel'
+import { PageHeader } from '../../components/PageHeader'
 import { InboxPanel } from './components/InboxPanel'
 import { dayWhen, fullWhen, shortWhen } from '../../lib/format'
 import { roleOptions } from '../../lib/roles'
@@ -615,28 +616,31 @@ function GlobalBaseTab() {
         </Alert>
       )}
 
-      <Title order={5}>Массовое добавление</Title>
-      <Text size="sm" c="dimmed">
-        Файлы кладутся в папку-приёмник, затем нажимается кнопка: backend проиндексирует
-        их и перенесёт в постоянную библиотеку, а приёмник снова освободится.
-      </Text>
+      <PageHeader
+        order={5}
+        title="Массовое добавление"
+        description="Файлы кладутся в папку-приёмник, затем нажимается кнопка: backend проиндексирует их и перенесёт в постоянную библиотеку, а приёмник снова освободится."
+      />
       <InboxPanel />
 
-      <Group justify="space-between">
-        <Title order={5}>Документы глобальной базы</Title>
-        <Button
-          color="warning"
-          variant="light"
-          size="xs"
-          loading={reindex.isPending}
-          onClick={() => {
-            setReindexDone(false)
-            reindex.mutate(undefined, { onSuccess: () => setReindexDone(true) })
-          }}
-        >
-          Переиндексировать всё
-        </Button>
-      </Group>
+      <PageHeader
+        order={5}
+        title="Документы глобальной базы"
+        actions={
+          <Button
+            color="warning"
+            variant="light"
+            size="xs"
+            loading={reindex.isPending}
+            onClick={() => {
+              setReindexDone(false)
+              reindex.mutate(undefined, { onSuccess: () => setReindexDone(true) })
+            }}
+          >
+            Переиндексировать всё
+          </Button>
+        }
+      />
       {reindex.isError && (
         <Alert color="error" role="alert">
           {errorText(reindex.error, 'Ошибка запроса')}

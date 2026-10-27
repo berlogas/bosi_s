@@ -30,6 +30,7 @@ from app.db.models import (
     GenerationKind,
     Project,
     ProjectDocRole,
+    ProjectVersion as ProjectVersionModel,
     User,
 )
 from app.db.repositories import documents as docs_repo
@@ -376,6 +377,57 @@ async def generate_section_async(
           **_meta(request), section=request_obj.section,
           task_id=task.id)
     return {"task_id": task.id}
+
+
+@router.get("/{session_id}/projects/{project_id}/eta")
+def project_generate_eta(
+    session_id: str, project_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)) -> dict[str, Any]:
+    """ETA генерации раздела: среднее время по типу документа.
+
+    Возвращает медиану и среднее время (секунд) по уже сгенерированным
+    версиям этого проекта, сгруппированное по kind. Если данных ещё нет —
+    возвращает оценочный диапазон 120–240 с.
+    """
+    project = _owned(db, project_id, session_id, user)
+    rows = db.scalars(
+        select(ProjectVersionModel).where(
+            ProjectVersion.project_id == project.id,
+            ProjectVersion.seconds.is_not(None),
+        )
+    ).all()
+
+    if not rows:
+        return {
+            "kind": None,
+            "estimate_seconds": 180,
+            "estimate_range": [120, 240],
+            "note": "Нет данных — ориентировочная оценка",
+        }
+
+    from statistics import mean
+    by_kind: dict[str, list[float]] = {}
+    for r in rows:
+        by_kind.setdefault(str(r.kind), []).append(r.seconds)
+
+    all_seconds = [s for secs in by_kind.values() for s in secs]
+    return {
+        "kind": None,
+        "estimate_seconds": round(mean(all_seconds), 1),
+        "estimate_range": [
+            round(min(all_seconds), 1),
+            round(max(all_seconds), 1),
+        ],
+        "by_kind": {
+            k: {
+                "estimate_seconds": round(mean(v), 1),
+                "count": len(v),
+            }
+            for k, v in by_kind.items()
+        },
+        "count": len(all_seconds),
+    }
 
 
 @router.get("/{session_id}/projects/{project_id}/versions",

@@ -306,6 +306,7 @@ class ProjectService:
             content_md=generation.content_md,
             word_count=generation.word_count,
             citation_map=generation.citation_map,
+            seconds=generation.seconds,
             stats={"citations_ok": generation.ok,
                    "sources": len(generation.sources),
                    "seconds": round(generation.seconds, 2)},

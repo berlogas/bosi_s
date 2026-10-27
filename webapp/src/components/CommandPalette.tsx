@@ -4,13 +4,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Spotlight, SpotlightRoot, SpotlightSearch, SpotlightActionsGroup, SpotlightActionsList, SpotlightAction, SpotlightEmpty } from '@mantine/spotlight'
+import { Spotlight } from '@mantine/spotlight'
 import { useNavigate } from 'react-router-dom'
-import {
-  Box,
-  Group,
-  Text,
-} from '@mantine/core'
+import { Text } from '@mantine/core'
 import {
   IconSearch,
   IconUsers,
@@ -24,9 +20,10 @@ import {
 import { useAuth } from '../features/auth/authStore'
 
 interface CommandItem {
+  id: string
   label: string
   icon: React.ReactNode
-  hint?: string
+  description?: string
   onSelect: () => void
 }
 
@@ -62,49 +59,62 @@ export function CommandPalette() {
     }
   }, [])
 
-  const items: CommandItem[] = [
+  const actions: Array<{
+    id: string
+    title: string
+    description?: string
+    icon: React.ReactNode
+    onSelect: () => void
+  }> = [
     {
-      label: 'Пользователи',
+      id: 'users',
+      title: 'Пользователи',
+      description: 'Администраторы и исследователи',
       icon: <IconUsers size={16} />,
-      hint: 'Администраторы и исследователи',
       onSelect: () => navigate('/admin/users'),
     },
     {
-      label: 'Глобальная база',
+      id: 'documents',
+      title: 'Глобальная база',
+      description: 'Документы базы знаний',
       icon: <IconDatabase size={16} />,
-      hint: 'Документы базы знаний',
       onSelect: () => navigate('/admin/documents'),
     },
     {
-      label: 'Задачи',
+      id: 'tasks',
+      title: 'Задачи',
+      description: 'Фоновые задачи и индексация',
       icon: <IconListCheck size={16} />,
-      hint: 'Фоновые задачи и индексация',
       onSelect: () => navigate('/admin/tasks'),
     },
     {
-      label: 'Сессии',
+      id: 'sessions',
+      title: 'Сессии',
+      description: 'Активные и архивные сессии',
       icon: <IconLayoutDashboard size={16} />,
-      hint: 'Активные и архивные сессии',
       onSelect: () => navigate('/admin/sessions'),
     },
     {
-      label: 'Аудит',
+      id: 'audit',
+      title: 'Аудит',
+      description: 'Журнал действий администраторов',
       icon: <IconFileAnalytics size={16} />,
-      hint: 'Журнал действий администраторов',
       onSelect: () => navigate('/admin/audit'),
     },
     {
-      label: 'Обслуживание',
+      id: 'maintenance',
+      title: 'Обслуживание',
+      description: 'Бэкапы и сброс состояния',
       icon: <IconAdjustments size={16} />,
-      hint: 'Бэкапы и сброс состояния',
       onSelect: () => navigate('/admin/maintenance'),
     },
     ...(user?.role === 'admin'
       ? [
           {
-            label: 'Создать пользователя',
+            id: 'create-user',
+            title: 'Создать пользователя',
+            description: 'Новая учётная запись',
             icon: <IconPlus size={16} />,
-            hint: 'Новая учётная запись',
             onSelect: () => navigate('/admin/users'),
           },
         ]
@@ -119,41 +129,21 @@ export function CommandPalette() {
       withinPortal
       withOverlay
       zIndex={1000}
-    >
-      <SpotlightRoot>
-        <Group gap="xs" align="center" style={{ width: '100%' }}>
-          <IconSearch size={16} color="dimmed" />
-          <SpotlightSearch
-            placeholder="Поиск по разделам, сессиям, действиям…"
-            icon={<Box />}
-            withinPortal
-          />
-        </Group>
-        <SpotlightActionsGroup>
-          <SpotlightActionsList>
-            {items.map((item) => (
-              <SpotlightAction
-                key={item.label}
-                icon={item.icon}
-                onSelect={() => {
-                  setOpened(false)
-                  item.onSelect()
-                }}
-              >
-                <Box>
-                  <Text weight={500}>{item.label}</Text>
-                  {item.hint && <Text size="xs" c="dimmed">{item.hint}</Text>}
-                </Box>
-              </SpotlightAction>
-            ))}
-            {items.length === 0 && (
-              <SpotlightEmpty>
-                <Text c="dimmed">Ничего не найдено</Text>
-              </SpotlightEmpty>
-            )}
-          </SpotlightActionsList>
-        </SpotlightActionsGroup>
-      </SpotlightRoot>
-    </Spotlight>
+      actions={actions.map((action) => ({
+        id: action.id,
+        title: action.title,
+        description: action.description,
+        icon: action.icon,
+        onSelect: () => {
+          setOpened(false)
+          action.onSelect()
+        },
+      }))}
+      nothingFound={<Text c="dimmed">Ничего не найдено</Text>}
+      searchProps={{
+        placeholder: 'Поиск по разделам, сессиям, действиям…',
+        icon: <IconSearch size={16} color="dimmed" />,
+      }}
+    />
   )
 }

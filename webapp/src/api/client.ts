@@ -800,10 +800,11 @@ class ApiClient {
    * администратору.
    */
   globalDocuments(
-    options: { q?: string; category?: string } = {},
+    options: { q?: string | undefined; category?: string | undefined } = {},
   ): Promise<GlobalDocumentOut[]> {
+    const q = typeof options.q === 'string' ? options.q.trim() : undefined
     return this.request('/api/documents', {
-      query: { q: options.q?.trim() || undefined, category: options.category },
+      query: { q, category: options.category },
     })
   }
 

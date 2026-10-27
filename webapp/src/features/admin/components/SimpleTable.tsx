@@ -166,7 +166,7 @@ export function SimpleTable<T extends { id: string | number }>({
           ) : (
             pageData.map((row) => (
               <tr
-                key={String(row.id) || JSON.stringify(row)}
+                key={row.id != null ? String(row.id) : JSON.stringify(row)}
                 style={{
                   contentVisibility: 'auto',
                   containIntrinsicSize: '100px 60px',

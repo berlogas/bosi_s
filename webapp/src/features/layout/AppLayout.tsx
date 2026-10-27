@@ -218,7 +218,15 @@ export function AppLayout() {
           </Group>
         </AppShellHeader>
 
-        <AppShellHeader visibleFrom="sm" h={60} px="md" pt="md">
+        <AppShellHeader
+          visibleFrom="sm"
+          h={60}
+          px="md"
+          pt="md"
+          style={{
+            borderBottom: `1px solid var(--mantine-color-default-border)`,
+          }}
+        >
           <Group gap="sm" justify="space-between" w="100%">
             <Group gap="sm">
               <Title

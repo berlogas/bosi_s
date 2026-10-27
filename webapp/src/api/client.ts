@@ -914,6 +914,18 @@ class ApiClient {
     })
   }
 
+  /** Прямая загрузка офисных файлов (.docx, .xlsx, .pptx, .pdf, .txt, .md) */
+  bulkUpload(files: File[], tags = ''): Promise<DocumentBatchResult> {
+    const form = new FormData()
+    for (const file of files) form.append('files', file, file.name)
+    form.append('tags', tags)
+    return this.request('/api/admin/documents/bulk-upload', {
+      method: 'POST',
+      form,
+      timeoutMs: 600_000,
+    })
+  }
+
   adminDeleteDocument(documentId: string): Promise<void> {
     return this.request(`/api/admin/documents/${documentId}`, { method: 'DELETE' })
   }

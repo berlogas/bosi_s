@@ -229,6 +229,36 @@ async def bulk_add(payload: dict[str, Any], request: Request,
     )
 
 
+@router.post("/bulk-upload", response_model=DocumentBatchResultOut)
+async def bulk_upload(
+    files: list[UploadFile] = File(...),
+    tags: str = Form(""),
+    request: Request = None,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> DocumentBatchResultOut:
+    """Прямая загрузка файлов через multipart/form-data.
+
+    Принимает офисные форматы (.docx, .xlsx, .pptx), PDF, TXT, MD и другие
+    из `allowed_extensions`. Файлы пишутся во временное хранилище и
+    индексируются через `add_uploads`.
+    """
+    tag_list = [str(t).strip() for t in (tags or "").split(",") if str(t).strip()]
+    result = await _service().add_uploads(files)
+    stored = [document_from_row(_register(db, admin, ref, tag_list, "bulk"))
+              for ref in result.added]
+    audit(db, action="admin.documents.bulk_upload", actor=admin,
+          target_type="collection", target_id="global",
+          **(_meta(request) if request else {}),
+          files=len(files), added=len(result.added), failed=len(result.failed))
+    return DocumentBatchResultOut(
+        added=stored,
+        duplicates=[document_from_ref(ref) for ref in result.duplicates],
+        failed=[FileFailureOut(name=name, error=error) for name, error in result.failed],
+        total=result.total,
+    )
+
+
 @router.post("/bulk-async")
 async def bulk_async(payload: dict[str, Any], request: Request,
                      admin: User = Depends(require_admin),

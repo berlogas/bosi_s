@@ -156,6 +156,15 @@ export function useAdminUpload() {
   })
 }
 
+/** Прямая загрузка офисных файлов (.docx, .xlsx, .pptx, .pdf, .txt, .md) */
+export function useBulkUpload() {
+  const invalidate = useInvalidateGlobalDocs()
+  return useMutation({
+    mutationFn: ({ files, tags }: { files: File[]; tags: string }) =>
+      client.bulkUpload(files, tags),
+    onSuccess: invalidate,
+  })
+
 export function useAdminDeleteDocument() {
   const invalidate = useInvalidateGlobalDocs()
   return useMutation({

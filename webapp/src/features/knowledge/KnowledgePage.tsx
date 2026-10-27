@@ -70,12 +70,12 @@ export function KnowledgePage() {
     setSearchParams(next, { replace: true })
   }
 
-  const documents = useKnowledgeDocuments(debouncedSearch, category || null)
-  const stats = useKnowledgeStats()
-
   // useDebouncedValue: серверный запрос отправляется не при каждом вводе,
   // а через 300 мс после остановки — снижает число запросов к бэкенду.
   const debouncedSearch = useDebouncedValue(search, 300)
+
+  const documents = useKnowledgeDocuments(debouncedSearch, category || null)
+  const stats = useKnowledgeStats()
 
   // Глобальная база знаний — только документы без привязки к сессии.
   // Временные документы из сессий видны только внутри соответствующей сессии.

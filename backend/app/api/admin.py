@@ -476,3 +476,18 @@ def inbox_clear_rejected(
     audit(db, action="admin.inbox.rejected.clear", actor=actor, target_type="inbox",
           target_id="rejected", **_client_meta(request), removed=removed)
     return {"removed": removed}
+
+
+@router.delete("/inbox/journal", response_model=dict[str, int])
+def inbox_clear_journal(
+    request: Request,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Очистить весь журнал добавления (все прогоны и строки файлов).
+
+    Файлы в библиотеке и в папке inbox не трогаются — только записи в БД."""
+    removed = InboxService().clear_journal(db)
+    audit(db, action="admin.inbox.journal.clear", actor=actor, target_type="inbox",
+          target_id="journal", **_client_meta(request), removed=removed)
+    return {"removed": removed}

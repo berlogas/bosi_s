@@ -544,3 +544,16 @@ class InboxService:
                 except OSError as exc:
                     log.warning("inbox: не удалось удалить %s: %s", path, exc)
         return removed
+
+    def clear_journal(self, db: Session) -> int:
+        """Удалить все прогоны и связанные с ними строки файлов из журнала.
+
+        Файлы в библиотеке и в папке inbox не трогаются — только записи
+        в БД. Возвращает число удалённых прогонов."""
+        runs = db.scalars(select(InboxRun)).all()
+        count = len(runs)
+        for run in runs:
+            db.delete(run)
+        db.commit()
+        log.info("inbox: журнал очищен, удалено прогонов=%d", count)
+        return count

@@ -219,6 +219,18 @@ export function useClearRejected() {
   })
 }
 
+/** Очистка всего журнала добавления (все прогоны и строки файлов). */
+export function useClearJournal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => client.adminClearJournal(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.inboxRuns })
+      void queryClient.invalidateQueries({ queryKey: adminKeys.inbox })
+    },
+  })
+}
+
 /** Отмена задачи: инвалидируем и общую выдачу, и админ-вкладку. */
 export function useAdminCancelTask() {
   const queryClient = useQueryClient()

@@ -18,6 +18,7 @@ import {
 } from '@mantine/core'
 import { Loader } from '@mantine/core'
 import {
+  useClearJournal,
   useClearRejected,
   useInboxRuns,
   useInboxScan,
@@ -155,15 +156,31 @@ export function InboxPanel() {
 
       <Group justify="space-between">
         <Text fw={500}>Журнал добавления</Text>
-        <Button
-          size="compact-xs"
-          variant="subtle"
-          loading={clearRejected.isPending}
-          onClick={() => clearRejected.mutate()}
-        >
-          Очистить ошибочные
-        </Button>
+        <Group gap="xs">
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="red"
+            loading={clearJournal.isPending}
+            onClick={() => clearJournal.mutate()}
+          >
+            Очистить журнал
+          </Button>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            loading={clearRejected.isPending}
+            onClick={() => clearRejected.mutate()}
+          >
+            Очистить ошибочные
+          </Button>
+        </Group>
       </Group>
+      {clearJournal.isSuccess && (
+        <Text size="xs" c="success" role="status">
+          {`Удалено прогонов: ${clearJournal.data.removed}`}
+        </Text>
+      )}
       {clearRejected.isSuccess && (
         <Text size="xs" c="success" role="status">
           {`Удалено файлов: ${clearRejected.data.removed}`}

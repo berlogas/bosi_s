@@ -921,6 +921,11 @@ class ApiClient {
     return this.request('/api/admin/inbox/rejected', { method: 'DELETE' })
   }
 
+  /** Очистить весь журнал добавления (все прогоны и строки файлов). */
+  adminClearJournal(): Promise<{ removed: number }> {
+    return this.request('/api/admin/inbox/journal', { method: 'DELETE' })
+  }
+
   // --------------------------------------------------------------- сброс
   /** План сброса: что именно будет удалено. Ничего не меняет. */
   adminResetPreview(scope: ResetScope, includeModels = false): Promise<ResetPlan> {

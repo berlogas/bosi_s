@@ -7,7 +7,8 @@
  * вправо из-за двойных отступов и несуществующего navbar.
  */
 
-import { useLocation, useNavigate, Suspense, lazy } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Suspense, lazy } from 'react'
 import {
   Group,
   Box,
@@ -15,8 +16,8 @@ import {
   Text,
   useMantineColorScheme,
   Alert,
-  SkeletonList,
 } from '@mantine/core'
+import { SkeletonList } from '../../components/SkeletonList'
 import { useAuth } from '../auth/authStore'
 import {
   IconUsers,

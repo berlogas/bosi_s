@@ -184,7 +184,6 @@ export function AppLayout() {
 
   return (
     <TaskEventsProvider>
-      <CommandPalette />
       <AppShell
         // Тонкая шапка (48px) вмещает триггер палитры, индикатор задач и
         // меню пользователя — без неё глобальным элементам негде жить.

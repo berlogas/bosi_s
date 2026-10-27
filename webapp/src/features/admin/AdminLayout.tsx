@@ -7,7 +7,7 @@
  * вправо из-за двойных отступов и несуществующего navbar.
  */
 
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Suspense, lazy } from 'react-router-dom'
 import {
   Group,
   Box,
@@ -15,6 +15,7 @@ import {
   Text,
   useMantineColorScheme,
   Alert,
+  SkeletonList,
 } from '@mantine/core'
 import { useAuth } from '../auth/authStore'
 import {
@@ -25,12 +26,13 @@ import {
   IconFileAnalytics,
   IconAdjustments,
 } from '@tabler/icons-react'
-import UsersPage from './tabs/UsersPage'
-import DocumentsPage from './tabs/DocumentsPage'
-import TasksPage from './tabs/TasksPage'
-import SessionsPage from './tabs/SessionsPage'
-import AuditPage from './tabs/AuditPage'
-import MaintenancePage from './tabs/MaintenancePage'
+
+const UsersPage = lazy(() => import('./tabs/UsersPage').then((m) => ({ default: m.UsersPage })))
+const DocumentsPage = lazy(() => import('./tabs/DocumentsPage').then((m) => ({ default: m.DocumentsPage })))
+const TasksPage = lazy(() => import('./tabs/TasksPage').then((m) => ({ default: m.TasksPage })))
+const SessionsPage = lazy(() => import('./tabs/SessionsPage').then((m) => ({ default: m.SessionsPage })))
+const AuditPage = lazy(() => import('./tabs/AuditPage').then((m) => ({ default: m.AuditPage })))
+const MaintenancePage = lazy(() => import('./tabs/MaintenancePage').then((m) => ({ default: m.MaintenancePage })))
 
 const TABS = [
   { path: 'users', label: 'Пользователи', icon: IconUsers, component: UsersPage },
@@ -129,7 +131,9 @@ export function AdminLayout() {
       {/* Контент вкладки — без AppShell, чтобы не было двойных отступов.
           padding-top компенсирует фиксированное меню. */}
       <Stack p="md" style={{ paddingTop: 'var(--mantine-spacing-xl)' }}>
-        <ActiveComponent />
+        <Suspense fallback={<SkeletonList count={3} />}>
+          <ActiveComponent />
+        </Suspense>
       </Stack>
     </Stack>
   )

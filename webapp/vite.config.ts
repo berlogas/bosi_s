@@ -1,9 +1,20 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Bundle budget визуализатор (Волна 6, п.3): запускать через
+    // `vite build --mode analyze` для отчёта размера чанков
+    process.env.ANALYZE === 'true' && visualizer({
+      open: false,
+      filename: 'stats.html',
+      gzipSize: true,
+      brotliSize: true,
+    }),
+  ],
   server: {
     proxy: {
       // Dev: Vite отдаёт и код, и API с одного origin — CORS не нужен.

@@ -1,10 +1,9 @@
 /**
  * Страница «Аудит» админки.
- * SimpleTable + DatePicker фильтры + экспорт CSV.
+ * SimpleTable + ручной ввод дат (дд.мм.гг) + экспорт CSV.
  */
 
 import React from 'react'
-import { DatePickerInput } from '@mantine/dates'
 import {
   Stack,
   Title,
@@ -27,6 +26,31 @@ const AUDIT_PERIODS = [
 
 function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
+}
+
+/** Парсит дату из строки «дд.мм.гг» в ISO «YYYY-MM-DD». Возвращает undefined при невалидном вводе. */
+function parseRuDate(value: string): string | undefined {
+  const m = value.trim().match(/^(\d{2})\.(\d{2})\.(\d{2})$/)
+  if (!m) return undefined
+  const [, day, month, year] = m
+  const y = 2000 + Number(year)
+  const mo = Number(month)
+  const d = Number(day)
+  const date = new Date(y, mo - 1, d)
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) {
+    return undefined
+  }
+  return `${String(y).padStart(4, '0')}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/** Форматирует ISO дату «YYYY-MM-DD» в «дд.мм.гг». */
+function formatRuDate(iso: string | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso + 'T00:00:00')
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = String(d.getFullYear()).slice(-2)
+  return `${day}.${month}.${year}`
 }
 
 export default function AuditPage() {
@@ -117,20 +141,36 @@ export default function AuditPage() {
           allowDeselect={false}
           w={150}
         />
-        <DatePickerInput
+        <TextInput
           label="С"
-          placeholder="с"
-          value={dateFrom ? new Date(dateFrom) : undefined}
-          onChange={(date: any) => setDateFrom(date ? (date as Date).toISOString() : undefined)}
-          w={130}
+          placeholder="дд.мм.гг"
+          value={formatRuDate(dateFrom)}
+          onChange={(event) => {
+            const v = event.currentTarget.value.trim()
+            if (!v) {
+              setDateFrom(undefined)
+              return
+            }
+            const iso = parseRuDate(v)
+            setDateFrom(iso)
+          }}
+          w={110}
           size="xs"
         />
-        <DatePickerInput
+        <TextInput
           label="По"
-          placeholder="по"
-          value={dateTo ? new Date(dateTo) : undefined}
-          onChange={(date: any) => setDateTo(date ? (date as Date).toISOString() : undefined)}
-          w={130}
+          placeholder="дд.мм.гг"
+          value={formatRuDate(dateTo)}
+          onChange={(event) => {
+            const v = event.currentTarget.value.trim()
+            if (!v) {
+              setDateTo(undefined)
+              return
+            }
+            const iso = parseRuDate(v)
+            setDateTo(iso)
+          }}
+          w={110}
           size="xs"
         />
         <Button

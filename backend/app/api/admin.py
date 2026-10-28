@@ -445,7 +445,7 @@ async def inbox_scan(
     клик во время прогона получает 409 — два скана одновременно запускать
     нельзя.
     """
-    from app.services.paperqa_service import get_registry
+    from app.services.pqa_registry import get_registry
 
     service = InboxService()
     status = service.peek(db)

@@ -395,8 +395,8 @@ def project_generate_eta(
     project = _owned(db, project_id, session_id, user)
     rows = db.scalars(
         select(ProjectVersionModel).where(
-            ProjectVersion.project_id == project.id,
-            ProjectVersion.seconds.is_not(None),
+            ProjectVersionModel.project_id == project.id,
+            ProjectVersionModel.seconds.is_not(None),
         )
     ).all()
 

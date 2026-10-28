@@ -467,12 +467,12 @@ async def test_llm_citation_markers_are_repaired(client, researcher, session_id,
     ссылками `[n]` (нумерация источников в интерфейсе), а номера за пределами
     выдачи — удалены и видны в stats["citations"].
     """
-    from app.services import paperqa_service as svc
+    from app.services import pqa_registry as svc
 
     stub = _MarkerStub(answer=(
         "Хлорофилл-а измеряют экстракционным методом (степень 1, степень 2), "
-        "а редкие случаи (степень 9) не опираются ни на что."))
-    svc._registry.session_service(session_id)._llm_model = stub
+        "а редкие случаи (степень 9) не опирается ни на что."))
+    svc.get_registry().session_service(session_id)._llm_model = stub
 
     body = await _query(client, researcher, session_id, no_cache=True)
 

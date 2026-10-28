@@ -139,7 +139,7 @@ def test_delete_quick_messages_clears_only_quick(db, researcher_user, talk) -> N
 async def test_chat_query_persists_history(client, researcher, session_id,
                                            stub_registry, tmp_path) -> None:
     """Ответ на вопрос сохраняется в `messages` — иначе диалог теряется."""
-    from app.services import paperqa_service as svc
+    from app.services.pqa_registry import get_registry as svc_get_registry
     from tests.conftest import StubLLMModel
 
     registry = stub_registry
@@ -147,7 +147,7 @@ async def test_chat_query_persists_history(client, researcher, session_id,
     doc.write_text("# A\n\nHlorofill-a 1.85 mg/m3.\n", encoding="utf-8")
     await registry.session_service(session_id).add_file(doc, session_id=session_id)
     # подменяем LLM заглушкой: запрос к реальной модели недопустим в тестах
-    svc.get_registry().session_service(session_id)._llm_model = StubLLMModel()
+    svc_get_registry().session_service(session_id)._llm_model = StubLLMModel()
 
     response = await client.post("/api/chat/query", headers=researcher,
                                  json={"session_id": session_id,

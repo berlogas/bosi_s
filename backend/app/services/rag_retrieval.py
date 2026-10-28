@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db.models import SearchMode
-from app.services.paperqa_service import ServiceRegistry, get_registry
+from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.rag_fusion import (
     Candidate,
     DocumentCatalog,

@@ -175,6 +175,10 @@ export function SessionPage() {
         <Stack gap={4}>
           <Title order={3}>{session.title}</Title>
           <Text size="sm" c="dimmed">
+            Автор: {session.owner_username}
+            {session.owner_full_name ? ` (${session.owner_full_name})` : ''}
+          </Text>
+          <Text size="sm" c="dimmed">
             Статус: {sessionStatusLabel(session.status)} · Срок хранения:{' '}
             {ttlLabel(session.days_left)}
           </Text>

@@ -199,7 +199,7 @@ async def resume(session_id: str, request: Request,
     session = get_owned_session(db, session_id, user)
     reactivate_session(db, session)
 
-    from app.services.paperqa_service import get_registry
+    from app.services.pqa_registry import get_registry
 
     service = get_registry().session_service(session.id)
     restored = await service.restore_state()

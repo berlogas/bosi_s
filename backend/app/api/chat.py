@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -31,7 +32,7 @@ from app.schemas.api import (
     QuickQueryRequest,
     SuggestionsResponse,
 )
-from app.services.paperqa_service import get_registry
+from app.services.pqa_registry import get_registry
 from app.services.rag_service import RagFusionService
 
 log = logging.getLogger("boasi.api.chat")
@@ -102,7 +103,7 @@ async def chat_stream(
 
     service = get_registry().global_service()
 
-    async def token_generator():
+    async def token_generator() -> AsyncIterator[str]:
         # 1. Ищем контекст (чанки) без генерации ответа
         chunks, _ = await service.get_evidence(
             payload.query,

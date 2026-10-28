@@ -130,11 +130,12 @@ def stub_registry(monkeypatch, service_app, chunk_store, tmp_path):
     по сети: `service_app` уже содержит быстрый тестовый профиль.
     """
     from app.core import safety
-    from app.services import paperqa_service as svc
+    from app.services import pqa_registry as svc
+    from app.services.pqa_registry import ServiceRegistry
 
     service_app.data_dir = tmp_path / "registry-data"
     service_app.ensure_dirs()
-    registry = svc.ServiceRegistry(service_app, chunk_store)
+    registry = ServiceRegistry(service_app, chunk_store)
     monkeypatch.setattr(svc, "_registry", registry)
     # Валидация путей (Фаза 9) тоже должна смотреть в каталоги этого профиля,
     # иначе она отклонит всё, что лежит вне боевого data_dir.

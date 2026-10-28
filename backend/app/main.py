@@ -29,7 +29,7 @@ from app.core.errors import register_exception_handlers
 from app.core.leases import leases
 from app.core.logging import setup_logging
 from app.db.session import dispose_engine, init_db
-from app.services.paperqa_service import get_registry, reset_registry
+from app.services.pqa_registry import get_registry, reset_registry
 from app.workers.heartbeat import heartbeat_loop
 from app.workers.reaper import reaper_loop, reaper_once
 

@@ -36,6 +36,7 @@ import { indentWithTab } from '@codemirror/commands'
 import { client } from '../../api/client'
 import type { ExportFormat } from '../../api/client'
 import type { GenerateResult, ProjectOut } from '../../api/types'
+import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal'
 import { MarkdownText } from '../../components/MarkdownText'
 import { TaskPanel } from '../../components/TaskPanel'
 import { loadDrafts, saveDraft } from './drafts'
@@ -44,6 +45,7 @@ import { kindOptions } from '../../lib/kinds'
 import {
   docRoleLabel,
   docRoleOptions,
+  projectStatusLabel,
   projectStatusOptions,
 } from '../../lib/projectOptions'
 import {
@@ -97,6 +99,9 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const patch = usePatchProject(sessionId)
   const remove = useDeleteProject(sessionId)
   const [_actionError, setActionError] = useState<string | null>(null)
+  const [deleteConfirmOpened, setDeleteConfirmOpened] = useState(false)
+  const [deletePendingProjectId, setDeletePendingProjectId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const journalChoices = (styles.data ?? []).map((item) => ({
     value: item.key,
@@ -199,7 +204,14 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
       <HowToPanel hasProjects={list.length > 0} />
 
       {/* список проектов слева (sticky через CSS в реальном браузере) */}
-      <Stack gap="xs">
+      <Stack
+        gap="xs"
+        style={{
+          overflowY: 'auto',
+          maxHeight: 'calc(100vh - 320px)',
+          minHeight: 0,
+        }}
+      >
         {list.length === 0 && !projects.isPending && (
           <Paper withBorder p="md" style={{ minHeight: 200 }}>
             <Stack align="center" justify="center" gap="xs">
@@ -212,32 +224,102 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         {list.map((project) => {
           const isActive = project.id === selectedId
           return (
-            <Button
+            <Paper
               key={project.id}
-              onClick={() => setSelectedId(project.id)}
-              variant={isActive ? 'default' : 'subtle'}
-              fullWidth
-              size="xs"
+              withBorder
+              radius="xs"
+              p="xs"
               style={{
-                justifyContent: 'space-between',
-                textAlign: 'left',
-                borderLeft: isActive
-                  ? '3px solid var(--mantine-color-primary-filled)'
-                  : '3px solid transparent',
+                cursor: 'pointer',
+                border: isActive
+                  ? `1px solid var(--mantine-color-primary-filled)`
+                  : '1px solid var(--mantine-color-default-border)',
+                background: isActive
+                  ? 'var(--mantine-color-primary-light)'
+                  : 'var(--mantine-color-body)',
+                transition: 'border 0.15s, background 0.15s',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                minHeight: 56,
               }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  ;(e.currentTarget as HTMLElement).style.borderColor =
+                    'var(--mantine-color-primary-filled)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  ;(e.currentTarget as HTMLElement).style.borderColor =
+                    'var(--mantine-color-default-border)'
+                }
+              }}
+              onClick={() => setSelectedId(project.id)}
             >
-              <Stack gap="0">
-                <Text size="sm" fw={500}>
-                  {project.title}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {project.status}
-                </Text>
-              </Stack>
-              <Badge size="xs">
-                {project.status}
-              </Badge>
-            </Button>
+              <Group justify="space-between" align="center" wrap="nowrap" style={{ width: '100%', minWidth: 0 }}>
+                <Stack gap="0" style={{ minWidth: 0 }}>
+                  <Text
+                    size="sm"
+                    fw={600}
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      minWidth: 0,
+                    }}
+                  >
+                    {project.title}
+                  </Text>
+                </Stack>
+                {isActive && (
+                  <Group gap="xs" align="center" style={{ flexShrink: 0, marginLeft: 'auto' }}>
+                    <Select
+                      data={projectStatusOptions(STATUSES)}
+                      value={project.status}
+                      onChange={(value) => {
+                        if (!value) return
+                        setActionError(null)
+                        patch.mutate(
+                          {
+                            projectId: project.id,
+                            fields: { status: value },
+                          },
+                          {
+                            onError: (cause) =>
+                              setActionError(
+                                cause instanceof Error
+                                  ? cause.message
+                                  : 'Не удалось обновить статус',
+                              ),
+                          },
+                        )
+                      }}
+                      disabled={readOnly}
+                      allowDeselect={false}
+                      w={200}
+                      size="xs"
+                    />
+                    <Button
+                      color="error"
+                      variant="light"
+                      onClick={() => {
+                        setDeletePendingProjectId(project.id)
+                        setDeleteConfirmOpened(true)
+                      }}
+                      disabled={readOnly}
+                      loading={
+                        remove.isPending &&
+                        remove.variables === project.id
+                      }
+                      size="xs"
+                    >
+                      Удалить
+                    </Button>
+                  </Group>
+                )}
+              </Group>
+            </Paper>
           )
         })}
       </Stack>
@@ -247,37 +329,38 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           sessionId={sessionId}
           project={selected}
           readOnly={readOnly}
-          onStatusChange={(value) => {
-            // Статус сохраняется автоматически при изменении — без кнопки «Обновить»
-            setActionError(null)
-            patch.mutate(
-              {
-                projectId: selected.id,
-                fields: { status: value },
-              },
-              {
-                onError: (cause) =>
-                  setActionError(
-                    cause instanceof Error
-                      ? cause.message
-                      : 'Не удалось обновить статус',
-                  ),
-              },
-            )
-          }}
-          onDelete={() => {
-            setActionError(null)
-            remove.mutate(selected.id, {
-              onSuccess: () => setSelectedId(null),
-              onError: (cause) =>
-                setActionError(
-                  cause instanceof Error ? cause.message : 'Не удалось удалить',
-                ),
-            })
-          }}
-          deleting={remove.isPending && remove.variables === selected.id}
         />
       ) : null}
+
+      {/* Подтверждение удаления проекта */}
+      <ConfirmDeleteModal
+        opened={deleteConfirmOpened}
+        title="Удалить проект статьи"
+        subject={deletePendingProjectId ? `Проект будет удалён безвозвратно.` : null}
+        error={deleteError}
+        loading={remove.isPending && remove.variables === deletePendingProjectId}
+        onCancel={() => {
+          setDeleteConfirmOpened(false)
+          setDeletePendingProjectId(null)
+          setDeleteError(null)
+        }}
+        onConfirm={() => {
+          if (!deletePendingProjectId) return
+          setDeleteError(null)
+          remove.mutate(deletePendingProjectId, {
+            onSuccess: () => {
+              setSelectedId(null)
+              setDeletePendingProjectId(null)
+              setDeleteConfirmOpened(false)
+              setDeleteError(null)
+            },
+            onError: (cause) =>
+              setDeleteError(
+                cause instanceof Error ? cause.message : 'Не удалось удалить',
+              ),
+          })
+        }}
+      />
     </Stack>
   )
 }
@@ -415,44 +498,16 @@ interface ProjectEditorProps {
   sessionId: string
   project: ProjectOut
   readOnly: boolean
-  onStatusChange: (value: string) => void
-  onDelete: () => void
-  deleting: boolean
 }
 
 function ProjectEditor({
   sessionId,
   project,
   readOnly,
-  onStatusChange,
-  onDelete,
-  deleting,
 }: ProjectEditorProps) {
   const progress = useProjectProgress(sessionId, project.id)
   return (
     <Stack gap="sm">
-      <Group align="flex-end" gap="sm">
-        <Select
-          label="Статус"
-          data={projectStatusOptions(STATUSES)}
-          value={project.status}
-          onChange={(value) => value && onStatusChange(value)}
-          disabled={readOnly}
-          allowDeselect={false}
-          w={200}
-          size="xs"
-        />
-        <Button
-          color="error"
-          variant="light"
-          onClick={onDelete}
-          disabled={readOnly}
-          loading={deleting}
-        >
-          Удалить
-        </Button>
-      </Group>
-
       {progress.data && (
         <div>
           <Text size="sm">

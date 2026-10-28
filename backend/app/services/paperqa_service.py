@@ -24,12 +24,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import time
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import AsyncIterator, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +42,14 @@ from app.config import get_settings
 from app.core.errors import DocumentProcessingError, UpstreamError
 from app.core.locks import locks
 from app.services.chunk_store import ChunkStore, SqliteChunkStore
+from app.services.pqa_persistence import PaperQA2Persistence
 from app.services.pqa_profile import (
     build_pqa_settings,
     get_embedding_model,
     settings_fingerprint,
 )
 from app.services.pqa_readers import install_utf8_parser
+from app.services.pqa_registry import GLOBAL_COLLECTION, collection_kind, normalize_collection
 from app.services.types import (
     SOURCE_MARK,
     AnswerResult,
@@ -64,23 +65,6 @@ log = logging.getLogger(__name__)
 # Парсинг документов — только в UTF-8: paperqa читает файлы в кодировке
 # локали (cp1251 на Windows), и кириллица превращается в «Р‘РёРѕРјР°ССЃР°».
 install_utf8_parser()
-
-GLOBAL_COLLECTION = "global"
-SESSION_PREFIX = "session:"
-
-
-def session_collection(session_id: str) -> str:
-    return f"{SESSION_PREFIX}{session_id}"
-
-
-def collection_kind(collection: str) -> SourceKind:
-    return SourceKind.SESSION if collection.startswith(SESSION_PREFIX) else SourceKind.GLOBAL
-
-
-def normalize_collection(collection: str) -> str:
-    if not collection or collection == GLOBAL_COLLECTION:
-        return GLOBAL_COLLECTION
-    return collection if collection.startswith(SESSION_PREFIX) else session_collection(collection)
 
 
 def _has_content(path: Path) -> bool:
@@ -511,88 +495,23 @@ class PaperQA2Service:
         max_sources: int | None = None,
     ) -> AnswerResult:
         """Схема RAG-fusion: сначала контекст, затем ответ по нему (без повторного поиска)."""
-        chunks, session = await self.get_evidence(query, k=k)
-        return await self.ask(session, mode=mode, max_sources=max_sources, evidence=chunks)
-
+        _chunks, _session = await self.get_evidence(query, k=k)
+        return await self.ask(_session, mode=mode, max_sources=max_sources, evidence=_chunks)
     # -------------------------------------------------------------- персистентность
     async def persist_state(self) -> int:
-        """Сохранить текущее состояние `Docs` в хранилище. Возвращает число документов."""
-        saved = 0
-        async with self.lock:
-            for dockey, doc in self.docs.docs.items():
-                texts = self._texts_of(str(dockey))
-                if not texts:
-                    continue
-                await self.store.save(self.collection, doc, texts, self.fingerprint)
-                saved += 1
-        log.info("persist_state: коллекция=%s документов=%d чанков=%d",
-                 self.collection, saved, len(self.docs.texts))
-        return saved
+        """Сохранить текущее состояние `Docs` в хранилище."""
+        return await PaperQA2Persistence(self).persist_state()
 
     async def restore_state(self, force: bool = False) -> int:
-        """Восстановить `Docs` из хранилища (чистый `Docs` + `aadd_texts`).
-
-        `force=False` — если коллекция уже загружена в память, ничего не делаем
-        (иначе вызов из API перетёр бы живое состояние).
-        """
-        stored = await self.store.load(self.collection)
-        if not stored:
-            return 0
-        if self.docs.docs and not force:
-            return 0
-        self.docs = Docs()
-        restored = 0
-        async with self.lock:
-            for item in stored:
-                if item.doc is None or not item.texts:
-                    continue
-                try:
-                    ok = await self.docs.aadd_texts(
-                        item.texts, item.doc, self.pqa_settings,
-                        **self._embedding_kwargs())
-                except Exception as exc:
-                    log.error("restore_state: %s пропущен: %s", item.docname, exc)
-                    continue
-                restored += bool(ok)
-        log.info("restore_state: коллекция=%s восстановлено=%d чанков=%d",
-                 self.collection, restored, len(self.docs.texts))
-        return restored
+        """Восстановить `Docs` из хранилища (см. :class:`PaperQA2Persistence`)."""
+        return await PaperQA2Persistence(self).restore_state(force=force)
 
     async def rebuild_index(self, drop_embeddings: bool = True) -> dict[str, Any]:
-        """Полная переиндексация: перечитать документы с нуля.
+        """Полная переиндексация (см. :class:`PaperQA2Persistence`)."""
+        return await PaperQA2Persistence(self).rebuild_index(drop_embeddings=drop_embeddings)
 
-        Чанки достаются из хранилища (там лежит исходный текст), эмбеддинги
-        пересчитываются, если `drop_embeddings=True`.
-        """
-        stored = await self.store.load(self.collection)
-        if not stored:
-            return {"documents": 0, "chunks": 0}
 
-        t0 = time.perf_counter()
-        self.docs = Docs()
-        documents = chunks = 0
-        async with self.lock:
-            for item in stored:
-                if item.doc is None or not item.texts:
-                    continue
-                texts = item.texts
-                if drop_embeddings:
-                    for text in texts:
-                        text.embedding = None
-                try:
-                    ok = await self.docs.aadd_texts(
-                        texts, item.doc, self.pqa_settings,
-                        **self._embedding_kwargs())
-                except Exception as exc:
-                    log.error("rebuild_index: %s пропущен: %s", item.docname, exc)
-                    continue
-                if ok:
-                    documents += 1
-                    chunks += len(texts)
-                    await self.store.save(self.collection, item.doc, texts, self.fingerprint)
-        elapsed = time.perf_counter() - t0
-        log.info("rebuild_index: документов=%d чанков=%d за %.1fс", documents, chunks, elapsed)
-        return {"documents": documents, "chunks": chunks, "seconds": round(elapsed, 1)}
+
 
     # ------------------------------------------------------------------ helpers
     def _settings_with_k(self, k: int | None,
@@ -739,7 +658,7 @@ class PaperQA2Service:
         prompt: str,
         *,
         name: str = "completion",
-    ):
+    ) -> AsyncIterator[str]:
         """Потоковый вызов LLM с произвольным промптом.
 
         Yield'ит текстовые фрагменты по мере генерации модели.
@@ -778,61 +697,3 @@ class ConflictDocument(Exception):
     def __init__(self, url: str) -> None:
         super().__init__(f"Документ по URL {url} уже загружен")
         self.url = url
-
-
-class ServiceRegistry:
-    """Реестр сервисов по коллекциям: один `Docs` на глобальную базу и на сессию."""
-
-    def __init__(self, app: AppSettings | None = None,
-                 store: ChunkStore | None = None) -> None:
-        self.app = app or get_settings()
-        self.store = store or SqliteChunkStore()
-        self._services: dict[str, PaperQA2Service] = {}
-        self._meta_lock = asyncio.Lock()
-
-    def get(self, collection: str = GLOBAL_COLLECTION) -> PaperQA2Service:
-        key = normalize_collection(collection)
-        service = self._services.get(key)
-        if service is None:
-            service = PaperQA2Service(
-                settings=self.app, collection=key, chunk_store=self.store)
-            self._services[key] = service
-        return service
-
-    def global_service(self) -> PaperQA2Service:
-        return self.get(GLOBAL_COLLECTION)
-
-    def session_service(self, session_id: str) -> PaperQA2Service:
-        return self.get(session_collection(session_id))
-
-    async def restore_all(self) -> dict[str, int]:
-        result: dict[str, int] = {}
-        for key, service in list(self._services.items()):
-            result[key] = await service.restore_state()
-        return result
-
-    async def persist_global(self) -> int:
-        """Сохранить состояние всех загруженных коллекций (остановка приложения)."""
-        total = 0
-        for service in list(self._services.values()):
-            total += await service.persist_state()
-        return total
-
-    async def close(self) -> None:
-        await self.persist_global()
-        self._services.clear()
-
-
-_registry: ServiceRegistry | None = None
-
-
-def get_registry(app: AppSettings | None = None) -> ServiceRegistry:
-    global _registry
-    if _registry is None:
-        _registry = ServiceRegistry(app)
-    return _registry
-
-
-def reset_registry() -> None:
-    global _registry
-    _registry = None

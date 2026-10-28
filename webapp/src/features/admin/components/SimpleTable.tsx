@@ -3,15 +3,15 @@
  * Не делает клиентскую фильтрацию/сортировку — ожидает, что data уже готов хуком.
  */
 
-import { useRef, useEffect, useMemo } from 'react'
-import { Table } from '@mantine/core'
+import { useRef, useEffect, useMemo, ReactNode } from 'react'
+import { Group, Table } from '@mantine/core'
 import { useSearchParams } from 'react-router-dom'
 
 export interface SimpleColumn<T> {
   id: string
   accessorKey?: string
   header: string
-  cell?: (row: T) => React.ReactNode
+  cell?: (row: T) => ReactNode
 }
 
 export interface SimpleTableProps<T> {
@@ -24,6 +24,12 @@ export interface SimpleTableProps<T> {
   filters: { id: string; value: unknown }[]
   onFiltersChange: (next: { id: string; value: unknown }[]) => void
   rowActions?: (row: { original: T }) => React.ReactNode
+  rowActionsHeaders?: {
+    label: string
+    width?: string | number
+    onSort?: () => void
+    sortDir?: 'asc' | 'desc' | null
+  }[]
   isLoading?: boolean
   emptyMessage?: string
 }
@@ -38,6 +44,7 @@ export function SimpleTable<T extends { id: string | number }>({
   filters,
   onFiltersChange,
   rowActions,
+  rowActionsHeaders,
   isLoading = false,
   emptyMessage = 'Нет данных',
 }: SimpleTableProps<T>) {
@@ -112,7 +119,7 @@ export function SimpleTable<T extends { id: string | number }>({
                     cursor: canSort ? 'pointer' : 'default',
                     userSelect: 'none',
                     whiteSpace: 'nowrap',
-                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    padding: '2px 4px',
                     borderBottom: '2px solid var(--mantine-color-default-border)',
                     textAlign: 'left',
                     background: 'var(--mantine-color-gray-0)',
@@ -144,16 +151,59 @@ export function SimpleTable<T extends { id: string | number }>({
               )
             })}
             {rowActions && (
-              <th
-                style={{
-                  padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
-                  borderBottom: '2px solid var(--mantine-color-default-border)',
-                  textAlign: 'right',
-                  background: 'var(--mantine-color-gray-0)',
-                  position: 'sticky',
-                  top: 0,
-                }}
-              ></th>
+              <>
+                {rowActionsHeaders?.map((h, i) => {
+                  const header = typeof h === 'string' ? { label: h } : h
+                  return (
+                    <th
+                      key={i}
+                      style={{
+                        padding: '2px 4px',
+                        borderBottom: '2px solid var(--mantine-color-default-border)',
+                        textAlign: 'left',
+                        background: 'var(--mantine-color-gray-0)',
+                        position: 'sticky',
+                        top: 0,
+                        width: header.width,
+                        cursor: header.onSort ? 'pointer' : 'default',
+                        userSelect: 'none',
+                      }}
+                      onClick={header.onSort}
+                    >
+                      <Group
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 'var(--mantine-spacing-xs)',
+                        }}
+                      >
+                        {header.label}
+                        {header.sortDir && (
+                          <span
+                            style={{
+                              fontSize: 'var(--mantine-font-size-xs)',
+                            }}
+                          >
+                            {header.sortDir === 'asc' ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </Group>
+                    </th>
+                  )
+                })}
+                {!rowActionsHeaders && (
+                  <th
+                    style={{
+                      padding: '2px 4px',
+                      borderBottom: '2px solid var(--mantine-color-default-border)',
+                      textAlign: 'right',
+                      background: 'var(--mantine-color-gray-0)',
+                      position: 'sticky',
+                      top: 0,
+                    }}
+                  ></th>
+                )}
+              </>
             )}
           </tr>
         </thead>
@@ -161,7 +211,7 @@ export function SimpleTable<T extends { id: string | number }>({
           {data.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length + (rowActions ? 1 : 0)}
+                colSpan={columns.length + (rowActionsHeaders?.length ?? (rowActions ? 1 : 0))}
                 style={{ textAlign: 'center', padding: 'var(--mantine-spacing-xl)', color: 'var(--mantine-color-dimmed)' }}
               >
                 {emptyMessage}
@@ -180,7 +230,7 @@ export function SimpleTable<T extends { id: string | number }>({
                   <td
                     key={col.id}
                     style={{
-                      padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                      padding: '2px 4px',
                       borderBottom: '1px solid var(--mantine-color-default-border)',
                     }}
                   >
@@ -194,15 +244,9 @@ export function SimpleTable<T extends { id: string | number }>({
                   </td>
                 ))}
                 {rowActions && (
-                  <td
-                    style={{
-                      whiteSpace: 'nowrap',
-                      textAlign: 'right',
-                      padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
-                    }}
-                  >
+                  <>
                     {rowActions({ original: row })}
-                  </td>
+                  </>
                 )}
               </tr>
             ))
@@ -223,7 +267,7 @@ export function SimpleTable<T extends { id: string | number }>({
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}>
           <button
             style={{
-              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              padding: '2px 4px',
               border: '1px solid var(--mantine-color-default-border)',
               background: 'var(--mantine-color-white)',
               borderRadius: 'var(--mantine-radius-xs)',
@@ -251,7 +295,7 @@ export function SimpleTable<T extends { id: string | number }>({
           </span>
           <button
             style={{
-              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              padding: '2px 4px',
               border: '1px solid var(--mantine-color-default-border)',
               background: 'var(--mantine-color-white)',
               borderRadius: 'var(--mantine-radius-xs)',
@@ -292,7 +336,7 @@ export function SimpleTable<T extends { id: string | number }>({
               })
             }
             style={{
-              padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+              padding: '2px 4px',
               border: '1px solid var(--mantine-color-default-border)',
               borderRadius: 'var(--mantine-radius-xs)',
             }}

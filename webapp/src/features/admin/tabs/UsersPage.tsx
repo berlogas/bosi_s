@@ -166,40 +166,89 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: an
     validateUsername(editUsername)
   }
 
-  return (
-    <Group gap="xs" wrap="nowrap">
+  return [
+    <td
+      key="login"
+      style={{
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        padding: '2px 4px',
+        width: 160,
+      }}
+    >
       <TextInput
         size="xs"
         value={editUsername}
         onChange={(e) => { setEditUsername(e.target.value); handleChange() }}
-        w={160}
+        style={{ width: 150 }}
         aria-label={`Логин: ${user.username}`}
       />
+    </td>,
+    <td
+      key="fullname"
+      style={{
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        padding: '2px 4px',
+        width: 200,
+      }}
+    >
       <TextInput
         size="xs"
         value={editFullName}
         onChange={(e) => { setEditFullName(e.target.value); handleChange() }}
-        w={200}
+        style={{ width: 190 }}
         aria-label={`ФИО: ${user.username}`}
       />
+    </td>,
+    <td
+      key="role"
+      style={{
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        padding: '2px 4px',
+        width: 150,
+      }}
+    >
       <Select
         size="xs"
         data={roleOptions(['researcher', 'admin'])}
         value={editRole}
         onChange={(v) => { v && setEditRole(v); handleChange() }}
         allowDeselect={false}
-        w={150}
+        style={{ width: 140 }}
         aria-label={`Роль: ${user.username}`}
       />
+    </td>,
+    <td
+      key="password"
+      style={{
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        padding: '2px 4px',
+        width: 150,
+      }}
+    >
       <TextInput
         size="xs"
         type="password"
         placeholder="Новый пароль"
         value={editPassword}
         onChange={(e) => { setEditPassword(e.target.value); handleChange() }}
+        style={{ width: 140 }}
         aria-label={`Новый пароль: ${user.username}`}
       />
-      <span style={{ textAlign: 'center', display: 'inline-block', width: 20 }}>
+    </td>,
+    <td
+      key="active"
+      style={{
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        padding: '2px 4px',
+        width: 40,
+      }}
+    >
+      <span style={{ textAlign: 'center', display: 'inline-block' }}>
         <input
           type="checkbox"
           checked={editIsActive}
@@ -211,21 +260,33 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: an
           aria-label={`Активен: ${user.username}`}
         />
       </span>
-      <Button size="xs" variant="default" disabled={!dirty || !!usernameError} onClick={handleSave}>Сохранить</Button>
-      {usernameError && <Text size="xs" c="red">{usernameError}</Text>}
-      <DangerZone
-        confirmText={user.username}
-        label="Удалить"
-        onConfirm={() => handleDelete(user.id)}
-        warning={
-          'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, '
-          + 'сообщения, документы и проекты. Восстановление возможно только из резервной копии. '
-          + 'Если достаточно закрыть доступ — снимите галочку активности вместо удаления.'
-        }
-        disabled={user.id === currentUserId}
-      />
-    </Group>
-  )
+    </td>,
+    <td
+      key="actions"
+      style={{
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        padding: '2px 4px',
+        width: 220,
+      }}
+    >
+      <Group gap="xs" wrap="nowrap">
+        <Button size="xs" variant="default" disabled={!dirty || !!usernameError} onClick={handleSave}>Сохранить</Button>
+        {usernameError && <Text size="xs" c="red">{usernameError}</Text>}
+        <DangerZone
+          confirmText={user.username}
+          label="Удалить"
+          onConfirm={() => handleDelete(user.id)}
+          warning={
+            'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, '
+            + 'сообщения, документы и проекты. Восстановление возможно только из резервной копии. '
+            + 'Если достаточно закрыть доступ — снимите галочку активности вместо удаления.'
+          }
+          disabled={user.id === currentUserId}
+        />
+      </Group>
+    </td>,
+  ]
 }
 
 export default function UsersPage() {
@@ -247,15 +308,46 @@ export default function UsersPage() {
     handleDelete,
   } = useUsersPage()
 
+  // Направление сортировки по ФИО (только клиентское состояние)
+  const [fullNameSortDir, setFullNameSortDir] = React.useState<'asc' | 'desc' | null>(
+    null
+  )
+
+  const handleSortByFullName = () => {
+    const nextDir = fullNameSortDir === 'asc' ? 'desc' : 'asc'
+    setFullNameSortDir(nextDir)
+  }
+
+  // Сортировка по ФИО на клиенте
+  const sortedUsers = React.useMemo(() => {
+    if (!fullNameSortDir) return data
+    const dir = fullNameSortDir === 'desc' ? -1 : 1
+    return [...data].sort((a, b) => {
+      const av = (a.full_name || '') as string
+      const bv = (b.full_name || '') as string
+      if (av < bv) return -dir
+      if (av > bv) return dir
+      return 0
+    })
+  }, [data, fullNameSortDir])
+
   // Все хуки и useMemo ДО early return
   // @ts-ignore
-  const customColumns = React.useMemo(() => [
-    { id: 'username', accessorKey: 'username', header: 'Логин', cell: (row: any) => row.username },
-    { id: 'full_name', accessorKey: 'full_name', header: 'ФИО', cell: (row: any) => row.full_name || '—' },
-    { id: 'role', accessorKey: 'role', header: 'Роль', cell: (row: any) => <Badge size="xs">{String(row.role ?? '—')}</Badge> },
-    { id: 'is_active', accessorKey: 'is_active', header: 'Активен', cell: (row: any) => row.is_active ? '✓' : '✗' },
-    { id: 'actions', header: '', cell: (row: any) => <UserRow user={row} handleUpdate={handleUpdate} handleDelete={handleDelete} currentUserId={currentUserId} /> },
-  ], [handleUpdate, handleDelete])
+  const customColumns = React.useMemo(() => [], [])
+
+  const actionsHeaders = React.useMemo(() => [
+    { label: 'Логин', width: 160 },
+    {
+      label: 'ФИО',
+      width: 200,
+      onSort: handleSortByFullName,
+      sortDir: fullNameSortDir,
+    },
+    { label: 'Роль', width: 150 },
+    { label: 'Пароль', width: 150 },
+    { label: 'Активен', width: 40 },
+    { label: 'Действия', width: 220 },
+  ], [fullNameSortDir, handleSortByFullName, setSorting])
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (isError) return <Alert color="red">{errorText(error, 'Ошибка загрузки')}</Alert>
@@ -274,14 +366,15 @@ export default function UsersPage() {
       ) : (
         <SimpleTable
           columns={customColumns as any}
-          data={data}
+          data={sortedUsers}
           pagination={pagination}
           onPaginationChange={setPagination}
           sorting={sorting}
           onSortingChange={setSorting}
           filters={filters}
           onFiltersChange={() => {}}
-          rowActions={({ original: _ }) => null}
+          rowActions={({ original: row }) => <UserRow user={row} handleUpdate={handleUpdate} handleDelete={handleDelete} currentUserId={currentUserId} />}
+          rowActionsHeaders={actionsHeaders}
           isLoading={isLoading}
           emptyMessage="Пользователей нет."
         />

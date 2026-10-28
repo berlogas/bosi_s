@@ -37,7 +37,8 @@ from app.schemas.api import (
     FileFailureOut,
     GlobalDocumentOut,
 )
-from app.services.paperqa_service import PaperQA2Service, get_registry
+from app.services.paperqa_service import PaperQA2Service
+from app.services.pqa_registry import get_registry
 from app.services.types import DocStatus
 
 log = logging.getLogger("boasi.api.documents")

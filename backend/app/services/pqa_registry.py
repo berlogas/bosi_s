@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.services.paperqa_service import PaperQA2Service
 
 from app.config import Settings, get_settings
 from app.services.chunk_store import ChunkStore, SqliteChunkStore
-from app.services.paperqa_service import PaperQA2Service
 
 log = logging.getLogger("boasi.services.pqa")
 
@@ -27,13 +29,21 @@ def session_collection(session_id: str) -> str:
 
 def collection_kind(collection: str) -> Any:
     from app.services.types import SourceKind
-    return SourceKind.SESSION if collection.startswith(SESSION_PREFIX) else SourceKind.GLOBAL
+
+    return (
+        SourceKind.SESSION
+        if collection.startswith(SESSION_PREFIX)
+        else SourceKind.GLOBAL
+    )
 
 
 def normalize_collection(collection: str) -> str:
     if not collection or collection == GLOBAL_COLLECTION:
         return GLOBAL_COLLECTION
-    return collection if collection.startswith(SESSION_PREFIX) else session_collection(collection)
+    return (
+        collection if collection.startswith(SESSION_PREFIX)
+        else session_collection(collection)
+    )
 
 
 class ServiceRegistry:
@@ -47,6 +57,9 @@ class ServiceRegistry:
         self._meta_lock = asyncio.Lock()
 
     def get(self, collection: str = GLOBAL_COLLECTION) -> PaperQA2Service:
+        # Ленивый импорт разрывает цикл paperqa_service <-> pqa_registry.
+        from app.services.paperqa_service import PaperQA2Service
+
         key = normalize_collection(collection)
         service = self._services.get(key)
         if service is None:

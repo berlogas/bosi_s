@@ -32,8 +32,8 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.models import SearchMode
 from app.services.answer_cache import AnswerCache, get_answer_cache, index_stamp
-from app.services.paperqa_service import ServiceRegistry, get_registry
 from app.services.pqa_profile import build_pqa_settings, settings_fingerprint
+from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.rag_citations import (
     REFUSAL_TEXT,
     apply_refusal,

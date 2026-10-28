@@ -22,10 +22,9 @@
 - `rag_retrieval.py` — evidence + merge
 - `rag_generation.py` — вызов `aquery` + пост-обработка
 
-### 3. `paperqa_service.py` — 812 строк, аналогичная проблема
+### 3. `paperqa_service.py` — разделён на модули ✅
 
-**Рекомендация:** Выделить `PaperQA2Persistence` (save/restore в `ChunkStore`) и `PaperQA2Registry` (управление коллекциями) в отдельные модули.
-
+`PaperQA2Persistence` вынесен в `app/services/pqa_persistence.py`, `ServiceRegistry` (бывший `PaperQA2Registry`) — в `app/services/pqa_registry.py`. В `paperqa_service.py` остались только тонкие делегат-методы, которые вызывают `PaperQA2Persistence(self)`. Циклический импорт разорван через `TYPE_CHECKING` + ленивый импорт в `ServiceRegistry.get()`.
 ---
 
 ## Соответствие требованиям PaperQA2

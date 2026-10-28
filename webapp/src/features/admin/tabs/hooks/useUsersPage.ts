@@ -84,14 +84,26 @@ export function useUsersPage() {
     { id: 'is_active', accessorKey: 'is_active', header: 'Активен', cell: (row: User) => row.is_active ? '✓' : '✗' },
   ], [])
 
-  // --- Данные ---
-  const data = usersQuery.data ?? []
+  // --- Данные с клиентской сортировкой ---
+  const sortedData = useMemo(() => {
+    const [first] = sorting
+    if (!first) return usersQuery.data ?? []
+    const dir = first.desc ? -1 : 1
+    return [...(usersQuery.data ?? [])].sort((a, b) => {
+      const av = (a as Record<string, unknown>)[first.id] ?? ''
+      const bv = (b as Record<string, unknown>)[first.id] ?? ''
+      if (av < bv) return -dir
+      if (av > bv) return dir
+      return 0
+    })
+  }, [usersQuery.data, sorting])
+
   const isLoading = usersQuery.isLoading
   const isError = usersQuery.isError
   const error = usersQuery.error
 
   // --- Пагинация ---
-  const pageCount = Math.max(1, Math.ceil(data.length / pageSize))
+  const pageCount = Math.max(1, Math.ceil(sortedData.length / pageSize))
 
   // --- Мутации ---
   const handleCreate = useCallback(
@@ -118,7 +130,7 @@ export function useUsersPage() {
   )
 
   return {
-    data,
+    data: sortedData,
     isLoading,
     isError,
     error,

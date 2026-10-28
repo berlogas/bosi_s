@@ -60,7 +60,7 @@ def _install_office_partition_patch() -> None:
     from unstructured.partition.pptx import partition_pptx
     from unstructured.partition.xlsx import partition_xlsx
 
-    def parse_office_doc_boasi(path: str | os.PathLike, **kwargs) -> ParsedText:
+    def parse_office_doc_boasi(path: str | os.PathLike, **kwargs: Any) -> ParsedText:
         """Parse office documents using specific unstructured partitioners (no auto)."""
         UNSTRUCTURED_VERSION = _dist_version("unstructured")
         ext = Path(str(path)).suffix.lower()

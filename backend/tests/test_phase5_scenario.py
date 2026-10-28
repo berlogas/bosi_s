@@ -31,7 +31,8 @@ from app.db.models import (
 from app.db.repositories import documents as docs_repo
 from app.db.repositories import sessions as sessions_repo
 from app.db.repositories.users import create_research_session, create_user
-from app.services.paperqa_service import PaperQA2Service, session_collection
+from app.services.paperqa_service import PaperQA2Service
+from app.services.pqa_registry import session_collection
 
 
 @pytest.fixture
@@ -57,9 +58,10 @@ def scenario(db_engine, service_app, chunk_store, stub_llm, monkeypatch):
     service_app.ensure_dirs()
 
     # reaper чистит чанки через глобальный реестр — он должен видеть то же хранилище
-    from app.services import paperqa_service as svc
+    from app.services import pqa_registry as svc
+    from app.services.pqa_registry import ServiceRegistry
 
-    monkeypatch.setattr(svc, "_registry", svc.ServiceRegistry(service_app, chunk_store))
+    monkeypatch.setattr(svc, "_registry", ServiceRegistry(service_app, chunk_store))
 
     leases.clear()
     yield {

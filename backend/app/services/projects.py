@@ -45,7 +45,7 @@ from app.services.generation import (
     validate_citations,
 )
 from app.services.journal_styles import style_prompt
-from app.services.paperqa_service import ServiceRegistry, get_registry
+from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.rag_service import RagFusionService
 
 log = logging.getLogger("boasi.services.projects")

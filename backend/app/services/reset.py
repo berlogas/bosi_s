@@ -280,7 +280,7 @@ def _clear_in_memory() -> None:
     from app.core.locks import locks
 
     try:
-        from app.services.paperqa_service import reset_registry
+        from app.services.pqa_registry import reset_registry
 
         reset_registry()
     except Exception:  # pragma: no cover - защитный код

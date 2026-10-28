@@ -36,8 +36,8 @@ from app.services.answer_cache import (
 from app.services.citation_guard import repair_markers
 from app.services.generation import parse_citations
 from app.services.grounding import check_grounding
-from app.services.paperqa_service import ServiceRegistry, get_registry
 from app.services.pqa_profile import build_pqa_settings
+from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.rag_citations import (
     apply_refusal,
     localize_headers,

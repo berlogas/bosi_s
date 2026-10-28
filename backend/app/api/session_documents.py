@@ -64,7 +64,7 @@ from app.schemas.api import (
     DocumentPatch,
     FileFailureOut,
 )
-from app.services.paperqa_service import get_registry
+from app.services.pqa_registry import get_registry
 from app.services.types import DocStatus, DocumentRef
 
 log = logging.getLogger("boasi.api.session_documents")

@@ -29,7 +29,7 @@ from app.db.repositories.sessions import purge_expired_archives
 from app.db.repositories.users import expire_due_sessions
 from app.db.repositories.users import prune_audit as prune_audit_repo
 from app.db.session import get_session_factory
-from app.services.paperqa_service import get_registry, session_collection
+from app.services.pqa_registry import get_registry, session_collection
 
 log = logging.getLogger("boasi.workers.reaper")
 

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.paperqa_service import PaperQA2Service, session_collection
+from app.services.paperqa_service import PaperQA2Service
+from app.services.pqa_registry import session_collection
 
 
 def _service(app, store, llm, collection="global") -> PaperQA2Service:

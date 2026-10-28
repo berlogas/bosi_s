@@ -10,14 +10,14 @@ from pathlib import Path
 import pytest
 
 from app.core.errors import DocumentProcessingError
-from app.services.paperqa_service import (
+from app.services.paperqa_service import PaperQA2Service
+from app.services.pqa_profile import build_pqa_settings
+from app.services.pqa_registry import (
     GLOBAL_COLLECTION,
-    PaperQA2Service,
     collection_kind,
     normalize_collection,
     session_collection,
 )
-from app.services.pqa_profile import build_pqa_settings
 from app.services.types import DocStatus, SourceKind
 
 

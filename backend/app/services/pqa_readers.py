@@ -47,15 +47,18 @@ def _install_office_partition_patch() -> None:
     except ImportError:
         return
 
-    from unstructured.partition.docx import partition_docx
-    from unstructured.partition.xlsx import partition_xlsx
-    from unstructured.partition.pptx import partition_pptx
-    from unstructured.documents.elements import Image, Table
-    from unstructured.documents.elements import Element  # noqa: F401
-
-    from paperqa.readers import ParsedMetadata, ParsedText, ParsedMedia
-    from paperqa.version import __version__ as pqa_version
     from importlib.metadata import version as _dist_version
+
+    from paperqa.readers import ParsedMedia, ParsedMetadata, ParsedText
+    from paperqa.version import __version__ as pqa_version
+    from unstructured.documents.elements import (
+        Element,  # noqa: F401
+        Image,
+        Table,
+    )
+    from unstructured.partition.docx import partition_docx
+    from unstructured.partition.pptx import partition_pptx
+    from unstructured.partition.xlsx import partition_xlsx
 
     def parse_office_doc_boasi(path: str | os.PathLike, **kwargs) -> ParsedText:
         """Parse office documents using specific unstructured partitioners (no auto)."""

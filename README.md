@@ -67,15 +67,27 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 
 ## Разработка
 
+Создать окружение один раз:
+
+```bash
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r backend/requirements.lock   # Windows
+# или: .venv/bin/python -m pip install -r backend/requirements.lock   # Linux/macOS
+```
+
+Запуск тестов и линтера:
+
 ```bash
 cd backend
-../.venv/Scripts/python.exe -m pytest -q        # 690 тестов
-../.venv/Scripts/python.exe -m ruff check app tests
+.venv/Scripts/python.exe -m pytest -q        # 690 тестов, ~3 минуты
+.venv/Scripts/python.exe -m ruff check app tests
 
 cd webapp
 npm test                                        # vitest: юнит-тесты UI
 npm run test:e2e                                # Playwright, нужен backend
 ```
+
+Подробнее о запуске — [docs/LAUNCH.md](docs/LAUNCH.md).
 
 Тесты не ходят в сеть: LLM подменяется заглушкой, эмбеддинги локальные.
 

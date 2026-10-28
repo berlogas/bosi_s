@@ -14,7 +14,6 @@ from typing import Any
 
 import anyio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.serializers import _enum_value, document_from_ref, document_from_row
@@ -150,7 +149,6 @@ def document_knowledge_view(doc: Document) -> GlobalDocumentOut:
         tags=list(doc.tags or []),
         source=doc.source,
         created_at=doc.created_at,
-        session_id=doc.session_id,
     )
 
 

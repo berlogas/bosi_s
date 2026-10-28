@@ -30,8 +30,10 @@ from app.db.models import (
     GenerationKind,
     Project,
     ProjectDocRole,
-    ProjectVersion as ProjectVersionModel,
     User,
+)
+from app.db.models import (
+    ProjectVersion as ProjectVersionModel,
 )
 from app.db.repositories import documents as docs_repo
 from app.db.repositories.users import audit, get_owned_session, touch_session
@@ -353,7 +355,7 @@ async def generate_section_async(
                 request=request_obj, kind=GenerationKind(request_obj.kind))
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception:
             log.exception("generate-async: ошибка генерации раздела %r",
                           request_obj.section)
             raise

@@ -313,6 +313,14 @@ export function AppLayout() {
 
           {/* Пользователь и выход — закреплены в самом низу панели */}
           <Box style={{ marginTop: 'auto' }}>
+            {/* Техническая информация о системе */}
+            <Box visibleFrom="sm">
+              <Text size="xs" c="dimmed" mb={4}>
+                Состояние системы
+              </Text>
+              <SystemStatus />
+            </Box>
+
             <Divider my="md" />
 
             <Text

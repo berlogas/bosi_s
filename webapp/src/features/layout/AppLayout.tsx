@@ -254,95 +254,83 @@ export function AppLayout() {
           </Group>
         </AppShellHeader>
 
-        <AppShellNavbar
-          id="main-nav"
-          p="md"
-          style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column' }}
-        >
-          <Group gap="xs" mb="xs" justify="space-between">
-            {bootPending && <SkeletonList count={1} />}
-          </Group>
+        <AppShellNavbar id="main-nav" p="md">
+          <Box style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Group gap="xs" mb="xs" justify="space-between">
+              {bootPending && <SkeletonList count={1} />}
+            </Group>
 
-          {/* Навигационные ссылки — скроллируемая область, отступ снизу под пользователем */}
-          <Stack gap={2} style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '140px' }}>
-            {!user ? (
-              <Text size="sm" c="dimmed">
-                Войдите, чтобы начать работу.
-              </Text>
-            ) : (
-              <>
-                {items.map((item) => {
-                  const active =
-                    item.enabled && isNavItemActive(location.pathname, item.to)
-                  if (!item.enabled) {
+            {/* Навигационные ссылки — скроллируемая область */}
+            <Stack gap={2} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {!user ? (
+                <Text size="sm" c="dimmed">
+                  Войдите, чтобы начать работу.
+                </Text>
+              ) : (
+                <>
+                  {items.map((item) => {
+                    const active =
+                      item.enabled && isNavItemActive(location.pathname, item.to)
+                    if (!item.enabled) {
+                      return (
+                        <NavLink
+                          key={item.label}
+                          label={item.label}
+                          disabled
+                          aria-current={undefined}
+                        />
+                      )
+                    }
                     return (
                       <NavLink
                         key={item.label}
+                        component={Link}
+                        to={item.to}
                         label={item.label}
-                        disabled
-                        aria-current={undefined}
+                        active={active}
+                        aria-current={active ? 'page' : undefined}
+                        onClick={() => setNavOpened(false)}
                       />
                     )
-                  }
-                  return (
-                    <NavLink
-                      key={item.label}
-                      component={Link}
-                      to={item.to}
-                      label={item.label}
-                      active={active}
-                      aria-current={active ? 'page' : undefined}
-                      onClick={() => setNavOpened(false)}
-                    />
-                  )
-                })}
-              </>
-            )}
-          </Stack>
+                  })}
+                </>
+              )}
+            </Stack>
 
-          {/* Пользователь и выход — закреплены в самом низу панели, НЕ скроллятся */}
-          <Box
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              padding: 'md',
-              background: 'var(--mantine-color-body)',
-              borderTop: '1px solid var(--mantine-color-gray-3)',
-            }}
-          >
-            <Box visibleFrom="sm">
-              <Text size="xs" c="dimmed" mb={4}>
-                Состояние системы
+            {/* Пользователь и выход — закреплены в самом низу панели */}
+            <Box style={{ marginTop: 'auto' }}>
+              <Box visibleFrom="sm">
+                <Text size="xs" c="dimmed" mb={4}>
+                  Состояние системы
+                </Text>
+                <SystemStatus />
+              </Box>
+
+              <Divider my="md" />
+
+              <Text
+                size="xs"
+                c="dimmed"
+                mb={4}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
+              >
+                <IconUser size={16} stroke={1.5} />
+                <span>
+                  {user ? displayName(user) : 'Профиль'}
+                  {user ? ` · ${roleLabel(user.role)}` : ''}
+                </span>
               </Text>
-              <SystemStatus />
+              <Button
+                variant="light"
+                fullWidth
+                leftSection={<IconLogout size={16} stroke={1.5} />}
+                onClick={() => {
+                  void logout().then(() => navigate('/login', { replace: true }))
+                }}
+              >
+                Выйти
+              </Button>
             </Box>
-
-            <Divider my="md" />
-
-            <Text
-              size="xs"
-              c="dimmed"
-              mb={4}
-              style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
-            >
-              <IconUser size={16} stroke={1.5} />
-              <span>
-                {user ? displayName(user) : 'Профиль'}
-                {user ? ` · ${roleLabel(user.role)}` : ''}
-              </span>
-            </Text>
-            <Button
-              variant="light"
-              fullWidth
-              leftSection={<IconLogout size={16} stroke={1.5} />}
-              onClick={() => {
-                void logout().then(() => navigate('/login', { replace: true }))
-              }}
-            >
-              Выйти
-            </Button>
           </Box>
         </AppShellNavbar>
 

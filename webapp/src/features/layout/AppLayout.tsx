@@ -33,6 +33,7 @@ import {
   IconSearch,
   IconSun,
   IconUser,
+  IconLogout,
 } from '@tabler/icons-react'
 import { Suspense, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -338,6 +339,7 @@ export function AppLayout() {
             <Button
               variant="light"
               fullWidth
+              leftSection={<IconLogout size={16} stroke={1.5} />}
               onClick={() => {
                 void logout().then(() => navigate('/login', { replace: true }))
               }}

@@ -22,9 +22,9 @@ export default defineConfig({
   server: {
     proxy: {
       // Dev: Vite отдаёт и код, и API с одного origin — CORS не нужен.
-      // Prod: FastAPI монтирует webapp/dist, прокси не участвует.
+      // В Docker цель задаётся через VITE_API_TARGET (по умолчанию http://localhost:8000).
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8000',
         changeOrigin: true,
         // Важно: проксировать Authorization заголовок на бэкенд
         configure: (proxy) => {

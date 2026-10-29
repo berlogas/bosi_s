@@ -550,13 +550,12 @@ class ApiClient {
     onDone?: () => void,
   ): Promise<void> {
     const access = tokens.getAccess()
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
     if (access) headers['Authorization'] = `Bearer ${access}`
 
-    const response = await fetch(buildUrl('/api/chat/stream', {
-      method: 'POST',
-      json: { session_id: sessionId, query, mode, k: 10, max_sources: 5 },
-    }), {
+    const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers,
       body: JSON.stringify({

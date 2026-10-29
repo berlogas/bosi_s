@@ -101,12 +101,21 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        def make_serializable(obj):
+            if isinstance(obj, bytes):
+                return obj.decode("utf-8", "replace")
+            if isinstance(obj, dict):
+                return {k: make_serializable(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple, set)):
+                return [make_serializable(v) for v in obj]
+            return obj
+
         return JSONResponse(
             status_code=422,
             content={
                 "error": "validation_error",
                 "detail": "Некорректные данные запроса",
-                "meta": {"errors": exc.errors()},
+                "meta": {"errors": make_serializable(exc.errors())},
             },
         )
 

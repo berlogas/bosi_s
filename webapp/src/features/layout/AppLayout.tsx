@@ -7,6 +7,7 @@
  */
 
 import {
+  ActionIcon,
   AppShell,
   AppShellHeader,
   AppShellNavbar,
@@ -20,13 +21,19 @@ import {
   NavLink,
   Popover,
   ScrollArea,
-  SegmentedControl,
   Stack,
   Text,
   Title,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconBook, IconSearch, IconUser } from '@tabler/icons-react'
+import {
+  IconBook,
+  IconDeviceDesktop,
+  IconMoonStars,
+  IconSearch,
+  IconSun,
+  IconUser,
+} from '@tabler/icons-react'
 import { Suspense, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -124,25 +131,26 @@ function PaletteTrigger({ visibleFrom }: { visibleFrom?: string }) {
   )
 }
 
-function ThemeSwitch() {
+function ThemeIconToggle() {
   const { colorScheme, setColorScheme } = useMantineColorScheme()
+
+  const toggle = () => {
+    setColorScheme(colorScheme === 'dark' ? 'light' : 'dark')
+  }
+
+  const isDark = colorScheme === 'dark'
+
   return (
-    <Group gap={4} mb="xs" wrap="nowrap">
-      <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-        Тема:
-      </Text>
-      <SegmentedControl
-        size="xs"
-        aria-label="Тема интерфейса"
-        value={colorScheme}
-        onChange={setColorScheme}
-        data={[
-          { value: 'light', label: 'Светлая' },
-          { value: 'auto', label: 'Системная' },
-          { value: 'dark', label: 'Тёмная' },
-        ]}
-      />
-    </Group>
+    <ActionIcon
+      size="sm"
+      variant="light"
+      color={isDark ? 'gray' : 'yellow'}
+      aria-label={`Текущая тема: ${colorScheme}. Нажмите для смены.`}
+      onClick={toggle}
+      title={`Тема: ${colorScheme}. Клик — сменить.`}
+    >
+      {isDark ? <IconSun size={16} stroke={1.5} /> : <IconMoonStars size={16} stroke={1.5} />}
+    </ActionIcon>
   )
 }
 
@@ -244,22 +252,23 @@ export function AppLayout() {
           </Group>
         </AppShellHeader>
 
-        <AppShellNavbar id="main-nav" p="md" component={ScrollArea}>
+        <AppShellNavbar
+          id="main-nav"
+          p="md"
+          style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+        >
           <Group gap="xs" mb="xs" justify="space-between">
-            <Title order={4} style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}>
-              <IconBook size={16} stroke={1.5} />
-              <span>boasi_s</span>
-            </Title>
             {bootPending && <SkeletonList count={1} />}
           </Group>
 
-          {!user ? (
-            <Text size="sm" c="dimmed">
-              Войдите, чтобы начать работу.
-            </Text>
-          ) : (
-            <>
-              <Stack gap={2}>
+          {/* Навигационные ссылки — забирают всё доступное место, скроллятся */}
+          <Stack gap={2} style={{ flex: 1, overflowY: 'auto' }}>
+            {!user ? (
+              <Text size="sm" c="dimmed">
+                Войдите, чтобы начать работу.
+              </Text>
+            ) : (
+              <>
                 {items.map((item) => {
                   // Подпути: `/s/<id>/chat`, `/s/<id>/documents`, ... Строгое
                   // равенство гасило «Текущую сессию» на всех вкладках, кроме
@@ -297,54 +306,59 @@ export function AppLayout() {
                     />
                   )
                 })}
-              </Stack>
+              </>
+            )}
+          </Stack>
 
-              <Divider my="md" />
-
-              <Text
-                size="xs"
-                c="dimmed"
-                mb={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
-              >
-                <IconUser size={16} stroke={1.5} />
-                <span>
-                  {displayName(user)} · {roleLabel(user.role)}
-                </span>
+          {/* Пользователь, тема и выход — закреплены в самом низу панели */}
+          <Box style={{ marginTop: 'auto' }}>
+            {/* Техническая информация о системе */}
+            <Box visibleFrom="sm">
+              <Text size="xs" c="dimmed" mb={4}>
+                Состояние системы
               </Text>
-              <ThemeSwitch />
-              <Button
-                variant="light"
-                fullWidth
-                onClick={() => {
-                  void logout().then(() => navigate('/login', { replace: true }))
-                }}
-              >
-                Выйти
-              </Button>
+              <SystemStatus />
+            </Box>
 
-              <Divider my="md" />
-              {/* На телефоне подробности не должны занимать пол-экрана:
-                свёрнуты в поповер, на desktop — как раньше. */}
-              <Box visibleFrom="sm">
-                <Text size="xs" c="dimmed" mb={4}>
-                  Состояние системы
-                </Text>
-                <SystemStatus />
-              </Box>
-              <Popover position="top" withArrow>
-                <Popover.Target>
-                  <Button hiddenFrom="sm" variant="subtle" size="xs" fullWidth>
-                    Состояние системы
-                  </Button>
-                </Popover.Target>
-                <Popover.Dropdown>
-                  <SystemStatus />
-                </Popover.Dropdown>
-              </Popover>
-            </>
-          )}
+            <Divider my="md" />
+
+            <Text
+              size="xs"
+              c="dimmed"
+              mb={4}
+              style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
+            >
+              <IconUser size={16} stroke={1.5} />
+              <span>
+                {user ? displayName(user) : 'Профиль'}
+                {user ? ` · ${roleLabel(user.role)}` : ''}
+              </span>
+            </Text>
+            <ThemeIconToggle />
+            <Button
+              variant="light"
+              fullWidth
+              onClick={() => {
+                void logout().then(() => navigate('/login', { replace: true }))
+              }}
+            >
+              Выйти
+            </Button>
+          </Box>
         </AppShellNavbar>
+
+        {/* На телефоне подробности не должны занимать пол-экрана:
+          свёрнуты в поповер, на desktop — как раньше. */}
+        <Popover position="top" withArrow>
+          <Popover.Target>
+            <Button hiddenFrom="sm" variant="subtle" size="xs" fullWidth>
+              Состояние системы
+            </Button>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <SystemStatus />
+          </Popover.Dropdown>
+        </Popover>
 
         <AppShell.Main>
           {/* Страницы под Suspense: будущий code-split (React.lazy) и

@@ -12,6 +12,7 @@
 
 import {
   Alert,
+  Box,
   Button,
   Group,
   Modal,
@@ -163,7 +164,10 @@ export function SessionPage() {
   }
 
   return (
-    <Stack gap="md">
+    <Stack
+      gap="md"
+      style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
       {/* Крошки только здесь: «Панель / Сессия / вкладка» — реальная иерархия.
           На остальных страницах PageHeader один, крошки дублировали бы его. */}
       <SessionBreadcrumb
@@ -253,8 +257,11 @@ export function SessionPage() {
       </Tabs>
 
       {/* вкладка рендерится маршрутом; sessionId пробрасывается через context
-          не стал — Outlet получает его из params */}
-      <Outlet context={{ session, readOnly }} />
+          не стал — Outlet получает его из params. flex: 1 — вкладка забирает
+          всё оставшееся место под чат/документы/проекты. */}
+      <Box style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <Outlet context={{ session, readOnly }} />
+      </Box>
 
       <Modal
         opened={confirmOpened}

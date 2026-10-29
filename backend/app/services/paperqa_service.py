@@ -666,18 +666,79 @@ class PaperQA2Service:
         """
         llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
 
-        # litellm.acompletion с stream=True возвращает async генератор чанков.
-        # Каждый чанк — объект с choices[].delta.content (новый текст).
-        async for chunk in llm.acompletion(
-            messages=[Message(content=prompt)],
-            stream=True,
-        ):
-            choices = getattr(chunk, "choices", None)
-            if choices:
-                for choice in choices:
-                    delta = getattr(choice, "delta", None)
-                    if delta and getattr(delta, "content", None):
-                        yield delta.content
+        # lmi.LLMModel.acompletion — КОРУТИНА (возвращает list[LLMResult]),
+        # итерировать её через `async for` нельзя (ошибка:
+        # "'async for' requires an object with __aiter__ method, got coroutine").
+        # `acompletion_iter` накапливает весь поток и отдаёт один итоговый
+        # LLMResult — токенным стримингом тоже не помогает. Поэтому стримим
+        # напрямую через litellm.acompletion(stream=True) с теми же параметрами
+        # модели, что использует lmi (spec из llm_config), — litellm уже
+        # пропатчен импортом lmi (retry/rate-limit), вызов проходит через него.
+        import litellm
+
+        try:
+            spec = llm.llm_config.models[0]
+            call_kwargs = spec.to_litellm_kwargs()
+        except AttributeError:  # тестовый двойник без llm_config
+            call_kwargs = {"model": llm.name}
+
+        call_kwargs["messages"] = [
+            m.model_dump(by_alias=True) for m in [Message(content=prompt)]
+        ]
+        call_kwargs["stream"] = True
+
+        stream = await litellm.acompletion(**call_kwargs)
+
+        # Провайдер (облачная Mistral) ломает SSE: шлёт контент пачкой в первую
+        # секунду, затем молчит ~150 с и рвёт соединение (часто посередине
+        # ответа; httpx: "peer closed ... incomplete chunked read").
+        # Стратегия: буферизуем чанки, а отдаём текст только когда поток
+        # закрылся ШТАТНО (StopAsyncIteration или finish=stop). Если же
+        # провайдер «затих» по idle-таймауту или уронил соединение — делаем
+        # один надёжный не-стриминговый перезапрос (обычный чат работает).
+        import asyncio as _asyncio
+
+        collected: list[str] = []
+        complete = False
+        try:
+            while True:
+                try:
+                    chunk = await _asyncio.wait_for(
+                        stream.__anext__(), timeout=12.0)
+                except StopAsyncIteration:
+                    complete = True
+                    break
+                except (_asyncio.TimeoutError, TimeoutError):
+                    # затих по idle: у этого провайдера конец потока не
+                    # приходит — считаем соединение потерянным
+                    break
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    finish_reason = getattr(choices[0], "finish_reason", None)
+                    delta = getattr(choices[0], "delta", None)
+                    text = getattr(delta, "content", None) if delta else None
+                    if text:
+                        collected.append(text)
+                    if finish_reason == "stop":
+                        complete = True
+                        break
+        except Exception:
+            complete = False
+        finally:
+            if hasattr(stream, "close"):
+                await stream.close()
+
+        if complete and collected:
+            # поток закрылся целым — отдаём накопленный текст
+            for text in collected:
+                yield text
+            return
+
+        # стрим оборван — гарантированный не-стриминговый перезапрос
+        retry = await litellm.acompletion(**{**call_kwargs, "stream": False})
+        text = (getattr(retry.choices[0].message, "content", "") or "").strip()
+        if text:
+            yield text
 
     async def _read_upload(self, uploaded: Any) -> bytes:
         read = getattr(uploaded, "read", None)

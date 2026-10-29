@@ -419,42 +419,45 @@ describe('переключатель темы', () => {
     localStorage.clear()
   })
 
-  it('по умолчанию системная (auto), клик по «Тёмная» пишет localStorage', async () => {
+  it('по умолчанию тёмная, клик переключает на светлую и пишет localStorage', async () => {
     const user = userEvent.setup()
     sessionStorage.clear()
     mockLayoutApi()
     renderPath('/')
 
-    const control = await screen.findByRole('radiogroup', { name: 'Тема интерфейса' })
-    // по умолчанию auto: активна «Системная»
-    expect(within(control).getByRole('radio', { name: 'Системная' })).toBeChecked()
+    const control = await screen.findByRole('button', {
+      name: /Текущая тема: dark\. Нажмите для смены\./,
+    })
+    // по умолчанию dark: иконка солнца (перейти к светлой)
+    expect(control).toHaveAttribute('title', 'Тема: dark. Клик — сменить.')
 
-    await user.click(within(control).getByRole('radio', { name: 'Тёмная' }))
-    expect(within(control).getByRole('radio', { name: 'Тёмная' })).toBeChecked()
-    // менеджер провайдера сохранил выбор — тема переживёт F5
-    expect(localStorage.getItem('mantine-color-scheme-value')).toBe('dark')
-    // и DOM-атрибут переключён: тёмная палитра активна
-    expect(document.documentElement).toHaveAttribute(
-      'data-mantine-color-scheme',
-      'dark',
-    )
-  })
-
-  it('выбор «Светлая» после тёмной возвращает light', async () => {
-    const user = userEvent.setup()
-    sessionStorage.clear()
-    mockLayoutApi()
-    localStorage.setItem('mantine-color-scheme-value', 'dark')
-    renderPath('/')
-
-    const control = await screen.findByRole('radiogroup', { name: 'Тема интерфейса' })
-    expect(within(control).getByRole('radio', { name: 'Тёмная' })).toBeChecked()
-
-    await user.click(within(control).getByRole('radio', { name: 'Светлая' }))
+    await user.click(control)
+    // после клика — светлая тема в localStorage
     expect(localStorage.getItem('mantine-color-scheme-value')).toBe('light')
+    // и DOM-атрибут переключён: светлая палитра активна
     expect(document.documentElement).toHaveAttribute(
       'data-mantine-color-scheme',
       'light',
+    )
+  })
+
+  it('повторный клик возвращает на тёмную', async () => {
+    const user = userEvent.setup()
+    sessionStorage.clear()
+    mockLayoutApi()
+    localStorage.setItem('mantine-color-scheme-value', 'light')
+    renderPath('/')
+
+    const control = await screen.findByRole('button', {
+      name: /Текущая тема: light\. Нажмите для смены\./,
+    })
+    expect(control).toHaveAttribute('title', 'Тема: light. Клик — сменить.')
+
+    await user.click(control)
+    expect(localStorage.getItem('mantine-color-scheme-value')).toBe('dark')
+    expect(document.documentElement).toHaveAttribute(
+      'data-mantine-color-scheme',
+      'dark',
     )
   })
 })

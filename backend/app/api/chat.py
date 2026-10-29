@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
@@ -94,61 +95,86 @@ async def chat_stream(
 
     Отправляет текст ответа фрагментами по мере генерации LLM.
     Формат: `data: {"token": "..."}\n\n`, в конце `data: [DONE]\n\n`.
+
+    Любая ошибка (включая до первого байта потока) возвращается как
+    SSE-сообщение `data: {"error": ...}`, а не как HTTP 500, чтобы браузер
+    мог прочитать её через EventSource / fetch + читатель потока.
     """
-    if not payload.session_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "session_id обязателен для chat/stream")
-    session = get_owned_session(db, payload.session_id, user)
-    ensure_writable(session)
+    sse_headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
 
-    service = get_registry().global_service()
+    async def error_stream(message: str) -> AsyncIterator[str]:
+        yield f'data: {json.dumps({"error": message})}\n\n'
+        yield 'data: [DONE]\n\n'
 
-    async def token_generator() -> AsyncIterator[str]:
-        # 1. Ищем контекст (чанки) без генерации ответа
-        chunks, _ = await service.get_evidence(
-            payload.query,
-            k=payload.k or 10,
+    try:
+        if not payload.session_id:
+            return StreamingResponse(
+                error_stream("session_id обязателен для chat/stream"),
+                media_type="text/event-stream",
+                headers=sse_headers,
+            )
+        session = get_owned_session(db, payload.session_id, user)
+        ensure_writable(session)
+
+        service = get_registry().global_service()
+
+        async def token_generator() -> AsyncIterator[str]:
+            # 1. Ищем контекст (чанки) без генерации ответа
+            try:
+                chunks, _ = await service.get_evidence(
+                    payload.query,
+                    k=payload.k or 10,
+                )
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+                yield 'data: [DONE]\n\n'
+                return
+            if not chunks:
+                yield f'data: {json.dumps({"token": "Не найдено подходящих источников в базе знаний."})}\n\n'
+                yield 'data: [DONE]\n\n'
+                return
+
+            # 2. Формируем промпт с контекстом
+            context_parts = []
+            for i, chunk in enumerate(chunks[:payload.max_sources or 5], start=1):
+                context_parts.append(f"[{i}] {chunk.text}")
+            context_text = "\n\n".join(context_parts)
+
+            prompt = (
+                "Ответь на вопрос пользователя, используя ТОЛЬКО информацию из "
+                "контекста ниже. Каждое утверждение снабжай ссылкой на источник "
+                "в формате [n], где n — номер источника из контекста. "
+                "Если информации недостаточно, скажи об этом честно.\n\n"
+                f"КОНТЕКСТ:\n{context_text}\n\n"
+                f"ВОПРОС: {payload.query}\n\n"
+                "ОТВЕТ:"
+            )
+
+            # 3. Стримим ответ по токенам
+            try:
+                async for token in service.stream_complete(prompt, name="chat_stream"):
+                    yield f'data: {json.dumps({"token": token})}\n\n'
+            except Exception as exc:  # нетокенная ошибка — передаём как SSE-ошибку
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+            finally:
+                yield 'data: [DONE]\n\n'
+
+        return StreamingResponse(
+            token_generator(),
+            media_type="text/event-stream",
+            headers=sse_headers,
         )
-        if not chunks:
-            yield 'data: {"token": "Не найдено подходящих источников в базе знаний."}\n\n'
-            yield 'data: [DONE]\n\n'
-            return
-
-        # 2. Формируем промпт с контекстом
-        context_parts = []
-        for i, chunk in enumerate(chunks[:payload.max_sources or 5], start=1):
-            context_parts.append(f"[{i}] {chunk.text}")
-        context_text = "\n\n".join(context_parts)
-
-        prompt = (
-            "Ответь на вопрос пользователя, используя ТОЛЬКО информацию из "
-            "контекста ниже. Каждое утверждение снабжай ссылкой на источник "
-            "в формате [n], где n — номер источника из контекста. "
-            "Если информации недостаточно, скажи об этом честно.\n\n"
-            f"КОНТЕКСТ:\n{context_text}\n\n"
-            f"ВОПРОС: {payload.query}\n\n"
-            "ОТВЕТ:"
+    except Exception as exc:
+        log.exception("Ошибка при создании стрима чата")
+        return StreamingResponse(
+            error_stream(str(exc)),
+            media_type="text/event-stream",
+            headers=sse_headers,
         )
-
-        # 3. Стримим ответ по токенам
-        try:
-            async for token in service.stream_complete(prompt, name="chat_stream"):
-                yield f'data: {{"token": {token!r}}}\n\n'
-        except Exception as exc:  # нетокенная ошибка — передаём как есть
-            yield f'data: {{"error": {str(exc)!r}}}\n\n'
-        finally:
-            yield 'data: [DONE]\n\n'
-
-    return StreamingResponse(
-        token_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
 
 @router.post("/query-async")
 async def chat_query_async(payload: ChatQueryRequest, request: Request,

@@ -17,9 +17,8 @@ import {
   Button,
   Group,
   Modal,
-  SegmentedControl,
+  Select,
   Stack,
-  Switch,
   Text,
   Textarea,
 } from '@mantine/core'
@@ -219,7 +218,10 @@ export function ChatTab({
           question,
           mode,
           (token) => setStreamingAnswer((prev) => prev + token),
-          (err) => setSendError(err),
+          (err) => {
+            setSendError(err)
+            setStreaming(false)
+          },
           () => {
             // поток завершён — добавляем ответ в историю
             if (streamingAnswer.trim()) {
@@ -250,6 +252,7 @@ export function ChatTab({
       setSendError(
         cause instanceof Error ? cause.message : 'Не удалось отправить вопрос',
       )
+      setStreaming(false)
       setQuery(question) // вернуть текст, чтобы не перепечатывать
     } finally {
       setSending(false)
@@ -353,12 +356,13 @@ export function ChatTab({
 
   // ---------------------------------------------------------------- рендер
   return (
-    <Box style={{ height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <Box style={{ height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {/* История — скроллится, имеет отступ снизу под фиксированный композитор */}
       <Box
-        style={{ flex: 1, overflowY: 'auto', position: 'relative' }}
+        style={{ flex: 1, overflowY: 'auto', position: 'relative', minHeight: 0, paddingBottom: '140px' }}
         ref={scrollRef}
       >
-        <Stack gap="sm" px="md" pt="md" pb="xl">
+        <Stack gap="sm" px="md" pt="md" pb="2xl">
           <Group justify="space-between">
             <Text fw={600}>Чат</Text>
             {!readOnly && !chatEmpty && (
@@ -574,8 +578,23 @@ export function ChatTab({
         </Stack>
       </Box>
 
-      {/* Закреплённый композитор — sticky bottom (план Волны 3, п. 1–2) */}
-      <Box style={{ position: 'sticky', bottom: 0, top: 'auto' }}>
+      {/* Композитор — fixed к viewport, всегда внизу.
+          left: 260px (navbar) + 16px (AppShell padding) = 276px.
+          На мобильном (< 640px) navbar схлопывается в drawer —
+          композитор на весь экран (left: 0), но на узких экранах
+          это не заметно, так как сайдбар скрыт. */}
+      <Box
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 276,
+          right: 16,
+          background: 'var(--mantine-color-body)',
+          borderTop: '1px solid var(--mantine-color-gray-3)',
+          zIndex: 100,
+          padding: 'md',
+        }}
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -594,18 +613,13 @@ export function ChatTab({
                 disabled={readOnly || sending}
                 style={{ flex: 1, minHeight: 'auto' }}
               />
-              <SegmentedControl
-                size="xs"
+              <Select
+                label="Источник"
                 data={MODE_OPTIONS}
                 value={mode}
                 onChange={(value) => setMode((value as SearchMode) ?? 'hybrid')}
-                disabled={readOnly || sending}
-              />
-              <Switch
-                label="Стриминг"
-                checked={streaming}
-                onChange={(checked) => setStreaming(checked)}
-                size="xs"
+                allowDeselect={false}
+                w={150}
                 disabled={readOnly || sending}
               />
               <Button
@@ -620,9 +634,16 @@ export function ChatTab({
         </form>
       </Box>
 
-      {/* Кнопка «К последнему» — когда пользователь прокрутил историю вверх (план Волны 3, п. 5) */}
+      {/* Кнопка «К последнему» — fixed над композитором (учитываем высоту ~120px) */}
       {scrolledFromBottom && (
-        <Box style={{ position: 'absolute', bottom: 20, right: 20, zIndex: 100 }}>
+        <Box
+          style={{
+            position: 'fixed',
+            bottom: '150px',
+            right: 20,
+            zIndex: 101,
+          }}
+        >
           <Button
             size="xs"
             variant="default"

@@ -248,6 +248,7 @@ export function AppLayout() {
               {/* Индикатор активных задач — виден с любой страницы */}
               <TaskIndicator />
             </Group>
+            <ThemeIconToggle />
             <UserMenu />
           </Group>
         </AppShellHeader>
@@ -334,7 +335,6 @@ export function AppLayout() {
                 {user ? ` · ${roleLabel(user.role)}` : ''}
               </span>
             </Text>
-            <ThemeIconToggle />
             <Button
               variant="light"
               fullWidth

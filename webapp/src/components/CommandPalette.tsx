@@ -3,12 +3,11 @@
  * Аналог палитры в v0.app: глобальный поиск по всему приложению.
  */
 
-import { useEffect, useState } from 'react'
-import { Spotlight } from '@mantine/spotlight'
+import { useEffect } from 'react'
+import { Spotlight, spotlight } from '@mantine/spotlight'
 import { useNavigate } from 'react-router-dom'
 import { Text } from '@mantine/core'
 import {
-  IconSearch,
   IconUsers,
   IconDatabase,
   IconListCheck,
@@ -37,18 +36,17 @@ export function openCommandPalette() {
 }
 
 export function CommandPalette() {
-  const [opened, setOpened] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
 
   // Регистрируем функцию открытия для внешнего вызова
   useEffect(() => {
-    openFn = () => setOpened(true)
+    openFn = () => spotlight.open()
 
     const handleKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
         event.preventDefault()
-        setOpened(true)
+        spotlight.toggle()
       }
     }
 
@@ -123,9 +121,6 @@ export function CommandPalette() {
 
   return (
     <Spotlight
-      opened={opened}
-      onClose={() => setOpened(false)}
-      withinPortal
       withOverlay
       zIndex={1000}
       actions={actions.map((action) => ({
@@ -133,16 +128,9 @@ export function CommandPalette() {
         title: action.title,
         description: action.description,
         icon: action.icon,
-        onSelect: () => {
-          setOpened(false)
-          action.onSelect()
-        },
+        onSelect: action.onSelect,
       }))}
       nothingFound={<Text c="dimmed">Ничего не найдено</Text>}
-      searchProps={{
-        placeholder: 'Поиск по разделам, сессиям, действиям…',
-        icon: <IconSearch size={16} color="dimmed" />,
-      }}
     />
   )
 }

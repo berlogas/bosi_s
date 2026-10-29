@@ -263,58 +263,47 @@ export function AppLayout() {
             {bootPending && <SkeletonList count={1} />}
           </Group>
 
-          {/* Навигационные ссылки — забирают всё доступное место, скроллятся */}
-          <Stack gap={2} style={{ flex: 1, overflowY: 'auto' }}>
-            {!user ? (
-              <Text size="sm" c="dimmed">
-                Войдите, чтобы начать работу.
-              </Text>
-            ) : (
-              <>
-                {items.map((item) => {
-                  // Подпути: `/s/<id>/chat`, `/s/<id>/documents`, ... Строгое
-                  // равенство гасило «Текущую сессию» на всех вкладках, кроме
-                  // корневой. Для `/` равенство остаётся строгим, иначе панель
-                  // была бы активна везде.
-                  const active =
-                    item.enabled && isNavItemActive(location.pathname, item.to)
-
-                  // Включённый пункт — настоящая ссылка: Mantine NavLink сам
-                  // рендерит `<a>`, но без `href` он не фокусируется с
-                  // клавиатуры и не даёт Ctrl-клик/«открыть в новой вкладке».
-                  // Поэтому `component={Link}`: адрес настоящий, активность
-                  // по-прежнему из предиката (`NavLink` из Mantine про роутер
-                  // не знает). Выключенному пункту `to` не нужен — он остаётся
-                  // неинтерактивным.
-                  if (!item.enabled) {
+          {/* Навигационные ссылки — скроллируемая область */}
+          <ScrollArea style={{ flex: 1 }}>
+            <Stack gap={2}>
+              {!user ? (
+                <Text size="sm" c="dimmed">
+                  Войдите, чтобы начать работу.
+                </Text>
+              ) : (
+                <>
+                  {items.map((item) => {
+                    const active =
+                      item.enabled && isNavItemActive(location.pathname, item.to)
+                    if (!item.enabled) {
+                      return (
+                        <NavLink
+                          key={item.label}
+                          label={item.label}
+                          disabled
+                          aria-current={undefined}
+                        />
+                      )
+                    }
                     return (
                       <NavLink
                         key={item.label}
+                        component={Link}
+                        to={item.to}
                         label={item.label}
-                        disabled
-                        aria-current={undefined}
+                        active={active}
+                        aria-current={active ? 'page' : undefined}
+                        onClick={() => setNavOpened(false)}
                       />
                     )
-                  }
-                  return (
-                    <NavLink
-                      key={item.label}
-                      component={Link}
-                      to={item.to}
-                      label={item.label}
-                      active={active}
-                      aria-current={active ? 'page' : undefined}
-                      onClick={() => setNavOpened(false)}
-                    />
-                  )
-                })}
-              </>
-            )}
-          </Stack>
+                  })}
+                </>
+              )}
+            </Stack>
+          </ScrollArea>
 
-          {/* Пользователь и выход — закреплены в самом низу панели */}
+          {/* Пользователь и выход — закреплены в самом низу панели, НЕ скроллятся */}
           <Box style={{ marginTop: 'auto' }}>
-            {/* Техническая информация о системе */}
             <Box visibleFrom="sm">
               <Text size="xs" c="dimmed" mb={4}>
                 Состояние системы

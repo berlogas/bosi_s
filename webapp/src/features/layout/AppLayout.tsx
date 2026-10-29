@@ -20,7 +20,6 @@ import {
   Group,
   NavLink,
   Popover,
-  ScrollArea,
   Stack,
   Text,
   Title,
@@ -264,43 +263,41 @@ export function AppLayout() {
           </Group>
 
           {/* Навигационные ссылки — скроллируемая область */}
-          <ScrollArea style={{ flex: 1 }}>
-            <Stack gap={2}>
-              {!user ? (
-                <Text size="sm" c="dimmed">
-                  Войдите, чтобы начать работу.
-                </Text>
-              ) : (
-                <>
-                  {items.map((item) => {
-                    const active =
-                      item.enabled && isNavItemActive(location.pathname, item.to)
-                    if (!item.enabled) {
-                      return (
-                        <NavLink
-                          key={item.label}
-                          label={item.label}
-                          disabled
-                          aria-current={undefined}
-                        />
-                      )
-                    }
+          <Stack gap={2} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {!user ? (
+              <Text size="sm" c="dimmed">
+                Войдите, чтобы начать работу.
+              </Text>
+            ) : (
+              <>
+                {items.map((item) => {
+                  const active =
+                    item.enabled && isNavItemActive(location.pathname, item.to)
+                  if (!item.enabled) {
                     return (
                       <NavLink
                         key={item.label}
-                        component={Link}
-                        to={item.to}
                         label={item.label}
-                        active={active}
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => setNavOpened(false)}
+                        disabled
+                        aria-current={undefined}
                       />
                     )
-                  })}
-                </>
-              )}
-            </Stack>
-          </ScrollArea>
+                  }
+                  return (
+                    <NavLink
+                      key={item.label}
+                      component={Link}
+                      to={item.to}
+                      label={item.label}
+                      active={active}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => setNavOpened(false)}
+                    />
+                  )
+                })}
+              </>
+            )}
+          </Stack>
 
           {/* Пользователь и выход — закреплены в самом низу панели, НЕ скроллятся */}
           <Box style={{ marginTop: 'auto' }}>

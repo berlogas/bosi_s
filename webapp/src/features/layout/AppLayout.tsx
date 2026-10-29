@@ -193,6 +193,7 @@ export function AppLayout() {
   return (
     <TaskEventsProvider>
       <AppShell
+        style={{ height: '100%' }}
         // Тонкая шапка (48px) вмещает триггер палитры, индикатор задач и
         // меню пользователя — без неё глобальным элементам негде жить.
         header={{ height: { base: 56, sm: 48 } }}
@@ -256,14 +257,14 @@ export function AppLayout() {
         <AppShellNavbar
           id="main-nav"
           p="md"
-          style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+          style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column' }}
         >
           <Group gap="xs" mb="xs" justify="space-between">
             {bootPending && <SkeletonList count={1} />}
           </Group>
 
-          {/* Навигационные ссылки — скроллируемая область */}
-          <Stack gap={2} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {/* Навигационные ссылки — скроллируемая область, отступ снизу под пользователем */}
+          <Stack gap={2} style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '140px' }}>
             {!user ? (
               <Text size="sm" c="dimmed">
                 Войдите, чтобы начать работу.
@@ -300,7 +301,17 @@ export function AppLayout() {
           </Stack>
 
           {/* Пользователь и выход — закреплены в самом низу панели, НЕ скроллятся */}
-          <Box style={{ marginTop: 'auto' }}>
+          <Box
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: 'md',
+              background: 'var(--mantine-color-body)',
+              borderTop: '1px solid var(--mantine-color-gray-3)',
+            }}
+          >
             <Box visibleFrom="sm">
               <Text size="xs" c="dimmed" mb={4}>
                 Состояние системы

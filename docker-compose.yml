@@ -66,6 +66,21 @@ services:
           cpus: "4.0"
           memory: 8G
 
+  webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    container_name: boasi-webapp
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Внутри Docker сети backend доступен по имени сервиса, а не localhost.
+      VITE_API_TARGET: http://backend:8000
+    ports:
+      - "127.0.0.1:5173:5173"
+
 volumes:
   ollama_models:
     name: boasi_ollama_models

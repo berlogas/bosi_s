@@ -61,6 +61,7 @@ export function AppProviders({
       colorSchemeManager={localStorageColorSchemeManager({
         key: 'mantine-color-scheme-value',
       })}
+      env={import.meta.env.TEST ? 'test' : undefined}
     >
       <Notifications position="top-right" />
       <QueryClientProvider client={queryClient}>

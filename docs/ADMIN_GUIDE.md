@@ -19,8 +19,7 @@ make create-admin
 Порт интерфейса задаётся переменной `WEBAPP_PORT` (по умолчанию 5173). Если он
 занят, скрипт не занимает соседний порт, а останавливается с ошибкой — освободите
 порт или запустите с другим: `WEBAPP_PORT=8600 ./scripts/start.sh`. В Docker
-веб-интерфейс запускается отдельно от compose: сам compose поднимает только
-backend (порт 8000) и Ollama (11434).
+веб-интерфейс поднимается compose вместе с backend и Ollama (см. раздел 10).
 
 ## 2. Пользователи
 
@@ -317,6 +316,113 @@ scripts\start.bat
 что в `LLM_MODEL` стоит ожидаемая модель, и посмотрите `make metrics` — если
 активных задач много, возможно, кто-то грузит большую пачку документов.
 
+## 10. Работа через Docker: запуск, обновление, бэкапы
+
+Если платформа развёрнута через Docker Compose ( `scripts\start-docker.bat` ),
+все операции обслуживания делаются консолью. Краткая шпаргалка ниже.
+
+### 10.1. Запуск и остановка стека
+
+```cmd
+scripts\start-docker.bat        # запустить стек (ollama + backend + webapp)
+scripts\start-docker.bat stop   # остановить
+scripts\start-docker.bat status # состояние контейнеров
+scripts\start-docker.bat logs   # логи backend (по умолчанию)
+scripts\start-docker.bat logs webapp   # логи интерфейса
+```
+
+Доступ после запуска: UI — `http://127.0.0.1:5173`, API — `http://127.0.0.1:8000/api/docs`.
+
+### 10.2. Обновление после правок кода
+
+| Команда | Когда использовать |
+|---------|-------------------|
+| `scripts\start-docker.bat rebuild` | Пересобрать всё (backend + webapp) |
+| `scripts\start-docker.bat rebuild-backend` | Только backend (изменения в `backend/app/`) |
+| `scripts\start-docker.bat rebuild-webapp` | Только интерфейс (изменения в `webapp/src/`) |
+| `scripts\start-docker.bat restart` | Перезапуск без пересборки (только `.env` / compose) |
+
+После пересборки backend подождите ответа `/api/health` — на первом старте грузится модель эмбеддингов и восстанавливается индекс (минуты, а не секунды).
+
+### 10.3. Бэкап в Docker-режиме
+
+Скрипт `scripts/backup.sh` автоматически определяет режим: если том `boasi_data` есть — работает с ним через `docker exec`. Не нужно указывать дополнительные флаги.
+
+```bash
+# Git Bash (из корня проекта)
+bash scripts/backup.sh
+
+# Сохранить ещё и .env (с SECRET_KEY) отдельным файлом
+CONFIG_BACKUP=1 bash scripts/backup.sh
+
+# Сохранить ещё и модели Ollama (много гигабайт)
+MODELS_BACKUP=1 bash scripts/backup.sh
+
+# Оставить только последние 14 архивов
+KEEP_BACKUPS=14 bash scripts/backup.sh
+```
+
+Архив пишется в `backups/boasi-YYYYmmdd-HHMMSS.tar.gz` рядом с контрольной суммой `*.sha256`.
+
+Посмотреть содержимое архива, не распаковывая:
+
+```bash
+bash scripts/restore.sh backups/boasi-YYYYmmdd-HHMMSS.tar.gz --list
+```
+
+Проверить архив без последствий:
+
+```bash
+bash scripts/verify_backup.sh backups/boasi-YYYYmmdd-HHMMSS.tar.gz
+```
+
+### 10.4. Восстановление из бэкапа в Docker
+
+**Важно:** перед восстановлением стек должен быть остановлен, иначе SQLite продолжит писать в удаляемые файлы.
+
+```cmd
+:: 1. Остановить стек
+scripts\start-docker.bat stop
+
+:: 2. Восстановить (Git Bash, ввести слово ВОССТАНОВИТЬ)
+bash scripts/restore.sh backups/boasi-YYYYmmdd-HHMMSS.tar.gz
+
+:: 3. Запустить стек снова (миграции пройдут автоматически)
+scripts\start-docker.bat start
+
+:: 4. Проверить статус
+scripts\start-docker.bat status
+```
+
+Если нужно восстановить не в том же месте, а в другой каталог:
+
+```bash
+bash scripts/restore.sh backups/boasi-YYYYmmdd-HHMMSS.tar.gz --target ./data-restored
+```
+
+Страховочная копия текущего состояния сохраняется в `backups/pre-restore/` перед чисткой.
+
+### 10.5. Администратор и пользователи в Docker
+
+Создание админа и сброс пароля делаются внутри контейнера backend:
+
+```cmd
+docker compose exec backend python scripts/create_admin.py <логин>
+docker compose exec backend python scripts/reset_password.py <логин>
+docker compose exec backend python scripts/reset_password.py --list
+```
+
+### 10.6. Где лежат данные
+
+| Том Docker | Содержимое |
+|------------|------------|
+| `boasi_data` | SQLite БД, сессии, документы, индекс, кэш эмбеддингов |
+| `boasi_backups` | Отдельный том под бэкапы (не используется скриптом напрямую) |
+| `boasi_ollama_models` | Модели Ollama |
+
+Архивы бэкапов пишутся на хост в папку `backups/`, поэтому при `docker compose down -v` они не удаляются.
+
+⚠️ `docker compose down -v` **удаляет тома вместе с базой и документами** — не используйте без необходимости.
 ## 9. Проверка перед боевым режимом
 
 - [ ] `SECRET_KEY` сгенерирован, не из шаблона

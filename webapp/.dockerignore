@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+*.log
+.git/
+.gitignore
+.gitattributes
+e2e/
+test-results/
+.playwright/
+.vscode/
+.idea/
+.DS_Store
+npm-debug.log*

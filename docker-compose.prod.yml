@@ -30,3 +30,11 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
+
+  webapp:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

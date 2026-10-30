@@ -1,0 +1,3 @@
+SECRET_KEY=-UaJfsUJu2OLu4Jt0PoJLzn7A5ZOrlNG_qOcYbfwKdeiFrOnQqLnfO9TgT9ybUsr
+APP_ENV=dev
+DB_PATH=data/boasi.sqlite3

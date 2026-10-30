@@ -48,7 +48,7 @@ export function CommandPalette() {
         id: `session-${session.id}`,
         group: 'Недавние сессии',
         title: session.title || 'Без названия',
-        description: 'Открыть сессию',
+        description: `Открыть сессию «${session.title || 'Без названия'}»`,
         leftSection: <IconBrain size={18} stroke={1.5} />,
         keywords: ['сессия', 'чат'],
         onClick: () => navigate(`/s/${session.id}/chat`),

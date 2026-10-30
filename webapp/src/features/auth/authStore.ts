@@ -13,7 +13,7 @@ import type { components } from '../../api/schema'
 import { hasStoredSession } from '../../api/tokens'
 import { clearLastSessionPath } from '../sessions/lastSession'
 
-type User = components['schemas']['UserOut']
+export type User = components['schemas']['UserOut']
 
 export type AuthStatus = 'boot' | 'anonymous' | 'authenticated'
 

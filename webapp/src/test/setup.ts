@@ -1,10 +1,12 @@
 import '@testing-library/jest-dom/vitest'
 
 // jsdom не реализует matchMedia — Mantine-компоненты зовут его при рендере.
+// Десктопное приложение: всегда возвращаем matches=true для десктопных брейкпоинтов
 if (!window.matchMedia) {
-  window.matchMedia = (query: string): MediaQueryList =>
-    ({
-      matches: false,
+  window.matchMedia = (query: string): MediaQueryList => {
+    const isDesktop = query.includes('min-width: 36em') || query.includes('min-width: 48em') || query.includes('min-width: 62em') || query.includes('min-width: 75em')
+    return {
+      matches: isDesktop,
       media: query,
       onchange: null,
       addListener: () => {},
@@ -12,7 +14,8 @@ if (!window.matchMedia) {
       addEventListener: () => {},
       removeEventListener: () => {},
       dispatchEvent: () => false,
-    }) as MediaQueryList
+    } as MediaQueryList
+  }
 }
 
 // ResizeObserver нужен AppShell/Mantine-овским хукам.
@@ -59,6 +62,14 @@ if (!globalThis.EventSource) {
     url = ''
     withCredentials = false
   } as unknown as typeof EventSource
+}
+
+// jsdom не реализует requestAnimationFrame — Mantine модальные окна (в т.ч.
+// Spotlight) используют его при переключении visible, и без шайма модалка
+// остаётся со стилем exiting (opacity: 0) между тестами.
+if (!window.requestAnimationFrame) {
+  window.requestAnimationFrame = (cb: FrameRequestCallback) =>
+    setTimeout(cb, 0) as unknown as number;
 }
 
 // react-router-dom useSearchParams не работает в jsdom — мокаем пустыми параметрами.

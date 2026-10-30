@@ -1,9 +1,6 @@
 /**
- * Боковая панель и общий layout — паритет `sidebar()` из Streamlit-версии app.py.
- *
- * Подписей «Навигация» и метки сборки в подвале нет: пунктов и так видно, по
- * одному взгляду, а «Навигация» над списком ссылок и дата сборки в углу —
- * шум, который занимает место и ничего не сообщает пользователю.
+ * Боковая панель и общий layout — десктопная версия.
+ * Единый header, навигация через menuConfig.ts + NavSection.tsx.
  */
 
 import {
@@ -13,12 +10,10 @@ import {
   AppShellNavbar,
   Badge,
   Box,
-  Burger,
   Button,
   Center,
   Divider,
   Group,
-  NavLink,
   Popover,
   Stack,
   Text,
@@ -27,14 +22,12 @@ import {
 } from '@mantine/core'
 import {
   IconBook,
-  IconDeviceDesktop,
   IconMoonStars,
   IconSearch,
   IconSun,
   IconUser,
-  IconLogout,
 } from '@tabler/icons-react'
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -44,11 +37,16 @@ import { displayName, roleLabel } from '../../lib/roles'
 import { useAuth } from '../auth/authStore'
 import { useCurrentSessionPath } from '../sessions/useCurrentSession'
 import { TaskEventsProvider } from '../tasks/TaskEventsProvider'
+import { LeftPanelUserMenu } from './LeftPanelUserMenu'
 import { TaskIndicator } from './TaskIndicator'
-import { UserMenu } from './UserMenu'
 import { CommandPalette, openCommandPalette } from '../../components/CommandPalette'
 import { SkeletonList } from '../../components/SkeletonList'
 import { Kbd } from '@mantine/core'
+import { getMenuSections, isItemActive as isNavItemActive } from './menuConfig'
+import { NavSection } from './NavSection'
+
+// Реэкспорт для совместимости с тестами
+export { isNavItemActive }
 
 function SystemStatus() {
   const { data, error, isPending } = useQuery({
@@ -88,69 +86,73 @@ function SystemStatus() {
 }
 
 /**
- * Активен ли пункт меню для текущего адреса.
- *
- * Подпути включают пункт (`/s/<id>/chat` → «Текущая сессия»), но `/` — только
- * сам корень: иначе панель была бы активна на всех страницах.
+ * Десктопный header.
  */
-export function isNavItemActive(pathname: string, to: string): boolean {
-  if (to === '/') return pathname === '/'
-  return pathname === to || pathname.startsWith(`${to}/`)
-}
-
-/**
- * Переключатель темы: светлая / системная / тёмная.
- *
- * `setColorScheme('auto')` — «Системная»: тема следует за настройками ОС,
- * пока пользователь не выбрал явно. Менеджер провайдера
- * (localStorageColorSchemeManager) сохраняет выбор — тема живёт до F5,
- * а inline-скрипт в index.html применяет её до первого кадра, без вспышки.
- */
-/**
- * Триггер палитры в шапке: на узких экранах — только иконка, на широких —
- * с подсказкой хоткея. Открывает того же Spotlight, что Ctrl/Cmd+K.
- */
-function PaletteTrigger({ visibleFrom }: { visibleFrom?: string }) {
-  return (
-    <Button
-      variant="default"
-      size="compact-sm"
-      visibleFrom={visibleFrom}
-      leftSection={<IconSearch size={14} stroke={1.5} />}
-      onClick={openCommandPalette}
-      aria-label="Поиск по разделам и сессиям (Ctrl+K)"
-    >
-      <Group gap={6} wrap="nowrap">
-        <span>Поиск</span>
-        <Group visibleFrom="md" gap={4} wrap="nowrap">
-          <Kbd size="xs">Ctrl</Kbd>
-          <Kbd size="xs">K</Kbd>
-        </Group>
-      </Group>
-    </Button>
-  )
-}
-
-function ThemeIconToggle() {
+function DesktopHeader({ bootPending }: { bootPending: boolean }) {
   const { colorScheme, setColorScheme } = useMantineColorScheme()
 
-  const toggle = () => {
+  const toggleTheme = () => {
     setColorScheme(colorScheme === 'dark' ? 'light' : 'dark')
   }
 
   const isDark = colorScheme === 'dark'
 
   return (
-    <ActionIcon
-      size="sm"
-      variant="light"
-      color={isDark ? 'gray' : 'yellow'}
-      aria-label={`Текущая тема: ${colorScheme}. Нажмите для смены.`}
-      onClick={toggle}
-      title={`Тема: ${colorScheme}. Клик — сменить.`}
+    <AppShellHeader
+      h={56}
+      px="md"
+      style={{
+        borderBottom: `1px solid var(--mantine-color-default-border)`,
+        display: 'flex',
+        alignItems: 'center',
+      }}
     >
-      {isDark ? <IconSun size={16} stroke={1.5} /> : <IconMoonStars size={16} stroke={1.5} />}
-    </ActionIcon>
+      <Group gap="sm" justify="space-between" w="100%" style={{ alignItems: 'center' }}>
+        <Group gap="sm">
+          <Title
+            order={4}
+            style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
+          >
+            <IconBook size={16} stroke={1.5} />
+            <span>boasi_s</span>
+          </Title>
+        </Group>
+
+        <Group gap="sm" style={{ marginLeft: 'auto' }}>
+          {bootPending && <SkeletonList count={1} />}
+          {/* Триггер палитры: Ctrl/Cmd+K */}
+          <Button
+            variant="default"
+            size="compact-sm"
+            leftSection={<IconSearch size={14} stroke={1.5} />}
+            onClick={openCommandPalette}
+            aria-label="Поиск по разделам и сессиям (Ctrl+K)"
+          >
+            <Group gap={6} wrap="nowrap">
+              <span>Поиск</span>
+              <Group gap={4} wrap="nowrap">
+                <Kbd size="xs">Ctrl</Kbd>
+                <Kbd size="xs">K</Kbd>
+              </Group>
+            </Group>
+          </Button>
+
+          {/* Индикатор активных задач — виден с любой страницы */}
+          <TaskIndicator />
+
+          <ActionIcon
+            size="sm"
+            variant="light"
+            color={isDark ? 'gray' : 'yellow'}
+            aria-label={`Текущая тема: ${colorScheme}. Нажмите для смены.`}
+            onClick={toggleTheme}
+            title={`Тема: ${colorScheme}. Клик — сменить.`}
+          >
+            {isDark ? <IconSun size={16} stroke={1.5} /> : <IconMoonStars size={16} stroke={1.5} />}
+          </ActionIcon>
+        </Group>
+      </Group>
+    </AppShellHeader>
   )
 }
 
@@ -158,101 +160,21 @@ export function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  // Крутилка в подвале сайдбара, пока идёт восстановление сессии после F5.
   const bootPending = useAuth((state) => state.status === 'boot')
-  // Мобильный drawer: на узком экране сайдбар скрыт, Burger — в шапке.
-  const [navOpened, setNavOpened] = useState(false)
-
-  // Переход закрывает drawer, иначе он накрывает только что открытый раздел.
-  useEffect(() => {
-    setNavOpened(false)
-  }, [location.pathname])
-
-  // Текущая сессия — не из адресной строки, а последняя открытая: стоило уйти
-  // в меню, пункт серел, хотя сессия никуда не делась, и вернуться можно было
-  // только через дашборд. Хранится в sessionStorage (useCurrentSession).
   const currentSessionPath = useCurrentSessionPath()
 
-  const items = [
-    { to: '/', label: 'Информационная панель', enabled: true },
-    // Глобальная база на чтение — всем вошедшим, включая исследователя:
-    // наполняет её администратор, но видеть состав корпуса нужно каждому,
-    // иначе ссылки в ответах ведут в никуда.
-    { to: '/knowledge', label: 'База знаний', enabled: true },
-    // «Текущая сессия» — та, что открыта сейчас (в Streamlit — state.current_session_id())
-    {
-      to: currentSessionPath ?? '',
-      label: 'Текущая сессия',
-      enabled: currentSessionPath !== null,
-    },
-    ...(user?.role === 'admin'
-      ? [{ to: '/admin', label: 'Администрирование', enabled: true }]
-      : []),
-  ]
+  const sections = getMenuSections(user)
 
   return (
     <TaskEventsProvider>
       <AppShell
         style={{ height: '100%' }}
-        // Тонкая шапка (48px) вмещает триггер палитры, индикатор задач и
-        // меню пользователя — без неё глобальным элементам негде жить.
-        header={{ height: { base: 56, sm: 48 } }}
-        navbar={{
-          width: 260,
-          breakpoint: 'sm',
-          collapsed: { mobile: !navOpened },
-        }}
+        header={{ height: 56 }}
+        navbar={{ width: 260, breakpoint: 'xs' }}
         padding="md"
       >
-        <AppShellHeader hiddenFrom="sm">
-          <Group h="100%" px="md" gap="sm" justify="space-between">
-            <Group gap="sm">
-              <Burger
-                opened={navOpened}
-                onClick={() => setNavOpened((value) => !value)}
-                aria-label="Меню"
-                aria-expanded={navOpened}
-                aria-controls="main-nav"
-              />
-              <Title
-                order={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
-              >
-                <IconBook size={16} stroke={1.5} />
-                <span>boasi_s</span>
-              </Title>
-            </Group>
-            {bootPending && <SkeletonList count={1} />}
-          </Group>
-        </AppShellHeader>
-
-        <AppShellHeader
-          visibleFrom="sm"
-          h={60}
-          px="md"
-          pt="md"
-          style={{
-            borderBottom: `1px solid var(--mantine-color-default-border)`,
-          }}
-        >
-          <Group gap="sm" justify="space-between" w="100%">
-            <Group gap="sm">
-              <Title
-                order={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
-              >
-                <IconBook size={16} stroke={1.5} />
-                <span>boasi_s</span>
-              </Title>
-              {/* Триггер палитры: Ctrl/Cmd+K тем, кто не в курсе хоткея */}
-              <PaletteTrigger visibleFrom="xs" />
-              {/* Индикатор активных задач — виден с любой страницы */}
-              <TaskIndicator />
-            </Group>
-            <ThemeIconToggle />
-            <UserMenu />
-          </Group>
-        </AppShellHeader>
+        {/* Десктопный header */}
+        <DesktopHeader bootPending={bootPending} />
 
         <AppShellNavbar id="main-nav" p="md">
           <Box style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -267,39 +189,15 @@ export function AppLayout() {
                   Войдите, чтобы начать работу.
                 </Text>
               ) : (
-                <>
-                  {items.map((item) => {
-                    const active =
-                      item.enabled && isNavItemActive(location.pathname, item.to)
-                    if (!item.enabled) {
-                      return (
-                        <NavLink
-                          key={item.label}
-                          label={item.label}
-                          disabled
-                          aria-current={undefined}
-                        />
-                      )
-                    }
-                    return (
-                      <NavLink
-                        key={item.label}
-                        component={Link}
-                        to={item.to}
-                        label={item.label}
-                        active={active}
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => setNavOpened(false)}
-                      />
-                    )
-                  })}
-                </>
+                sections.map((section) => (
+                  <NavSection key={section.id} section={section} user={user} />
+                ))
               )}
             </Stack>
 
             {/* Пользователь и выход — закреплены в самом низу панели */}
             <Box style={{ marginTop: 'auto' }}>
-              <Box visibleFrom="sm">
+              <Box>
                 <Text size="xs" c="dimmed" mb={4}>
                   Состояние системы
                 </Text>
@@ -320,36 +218,12 @@ export function AppLayout() {
                   {user ? ` · ${roleLabel(user.role)}` : ''}
                 </span>
               </Text>
-              <Button
-                variant="light"
-                fullWidth
-                leftSection={<IconLogout size={16} stroke={1.5} />}
-                onClick={() => {
-                  void logout().then(() => navigate('/login', { replace: true }))
-                }}
-              >
-                Выйти
-              </Button>
+              <LeftPanelUserMenu />
             </Box>
           </Box>
         </AppShellNavbar>
 
-        {/* На телефоне подробности не должны занимать пол-экрана:
-          свёрнуты в поповер, на desktop — как раньше. */}
-        <Popover position="top" withArrow>
-          <Popover.Target>
-            <Button hiddenFrom="sm" variant="subtle" size="xs" fullWidth>
-              Состояние системы
-            </Button>
-          </Popover.Target>
-          <Popover.Dropdown>
-            <SystemStatus />
-          </Popover.Dropdown>
-        </Popover>
-
         <AppShell.Main>
-          {/* Страницы под Suspense: будущий code-split (React.lazy) и
-            любые транзиентные suspends не должны ронять layout */}
           <Suspense
             fallback={
               <Center mih="40vh">

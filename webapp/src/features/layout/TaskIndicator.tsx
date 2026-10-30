@@ -36,9 +36,10 @@ export function TaskIndicator() {
           label={count || undefined}
         >
           <Button
-            variant="subtle"
+            variant="default"
             size="compact-sm"
             px="xs"
+            c="dimmed"
             leftSection={<IconListCheck size={16} stroke={1.5} />}
             aria-label={
               count > 0 ? `Активных задач: ${count}. Открыть список задач` : 'Задачи'

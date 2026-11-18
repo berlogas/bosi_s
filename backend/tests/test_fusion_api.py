@@ -727,3 +727,35 @@ async def test_identity_fast_path_respects_trivial_query_switch(
     body = await _quick(client, researcher, query="ты кто?", no_cache=True)
 
     assert body["stats"].get("identity") is None
+
+
+# --------------------------------------------------------------------------- без базы
+# Жалоба 2026-11-18: на содержательный вопрос в сессии с документами чат
+# ответил «база пуста». Причина была в индексе, но промпт усугублял: он
+# требовал говорить о пустой базе даже когда документы есть.
+
+
+@pytest.mark.parametrize("base_empty", [True, False])
+def test_no_base_prompt_matches_actual_base_state(base_empty) -> None:
+    from app.services.rag_generation import AnswerGenerator
+
+    prompt = AnswerGenerator._no_base_prompt("хлорофилл-а", base_empty=base_empty)
+
+    if base_empty:
+        assert "ПУСТА" in prompt
+        assert "загрузить документы" in prompt
+    else:
+        assert "ПУСТА" not in prompt
+        assert "Не говори, что база пуста" in prompt
+        assert "документы, но по этому запросу ничего не нашлось" in prompt
+
+
+def test_no_base_prompt_has_no_typos() -> None:
+    from app.services.rag_generation import AnswerGenerator
+
+    prompt = AnswerGenerator._no_base_prompt("вопрос", base_empty=False)
+
+    assert "по-русски" in prompt
+    assert "Сообщение пользователя" in prompt
+    assert "по-усски" not in prompt
+    assert "Сосообщение" not in prompt

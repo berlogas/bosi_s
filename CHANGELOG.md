@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Контракт OpenAPI (`webapp/openapi/spec.json`) перегенерирован и совпадает с кодом
 
 ### Fixed
+- Чат отвечал «база данных пуста» при полной базе: отпечаток чанков теперь версионирован (`v2:`), а записи старого формата восстанавливаются и пересохраняются вместо того, чтобы молча считаться устаревшими (`pqa_persistence.restore_state`)
+- Ответ без RAG-контекста больше не утверждает «база пуста», если документы в базе есть: промпт и флаг `base_empty` говорят о том, что нашлось по запросу
 - Исправление F821: `ProjectVersion` → `ProjectVersionModel` в `projects.py`
 - Исправление ANN202: `token_generator` добавлена возвращаемая аннотип типа `AsyncIterator[str]`
 - Исправление ANN003: `**kwargs: Any` добавлен в `pqa_readers.py`

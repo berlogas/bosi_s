@@ -156,6 +156,43 @@ async def test_settings_md5_recorded(
     assert stored[0].settings_md5 == service.fingerprint
 
 
+async def test_legacy_fingerprint_rows_are_restored_and_migrated(
+    service_app, chunk_store, stub_llm, sample_text
+) -> None:
+    """Записи без префикса версии — легаси, а не «устаревшие».
+
+    До появления `v2:` в `settings_md5` лежал хеш всей конфигурации (или
+    вовсе dockey). Если считать такие записи устаревшими, после обновления
+    весь индекс молча пропадает из поиска и чат отвечает «база пуста» при
+    полной базе. Поэтому легаси-записи восстанавливаются и пересохраняются
+    с текущим отпечатком.
+    """
+    from app.services.pqa_profile import CHUNK_FINGERPRINT_PREFIX
+
+    service = _service(service_app, chunk_store, stub_llm)
+    await service.add_file(sample_text)
+    assert service.fingerprint.startswith(CHUNK_FINGERPRINT_PREFIX)
+
+    for item in chunk_store._data["global"].values():
+        item.settings_md5 = "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0"  # старый формат
+
+    restored_service = _service(service_app, chunk_store, stub_llm)
+    restored, stale = await restored_service.restore_state()
+    assert restored == 1
+    assert stale == 0
+    assert restored_service.list_documents()
+
+    stored = await chunk_store.list_documents("global")
+    assert stored[0].settings_md5 == restored_service.fingerprint
+
+    chunks, _ = await restored_service.get_evidence("биомасса")
+    assert chunks
+
+    # Повторное восстановление уже не считает запись легаси.
+    third = _service(service_app, chunk_store, stub_llm)
+    assert await third.restore_state() == (1, 0)
+
+
 async def test_llm_change_keeps_chunks_valid(
     service_app, chunk_store, stub_llm, sample_text
 ) -> None:

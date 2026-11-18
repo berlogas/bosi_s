@@ -278,6 +278,15 @@ def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Sett
     return settings
 
 
+CHUNK_FINGERPRINT_PREFIX = "v2:"
+"""Префикс схемы отпечатка чанков.
+
+Записи без него — легаси (старый `settings_fingerprint` или dockey):
+их нельзя считать устаревшими только из-за смены формата, иначе после
+обновления весь индекс молча пропадает из поиска.
+"""
+
+
 def chunk_fingerprint(settings: Settings) -> str:
     """Отпечаток того, что влияет на СОДЕРЖИМОЕ сохранённых чанков.
 
@@ -292,6 +301,12 @@ def chunk_fingerprint(settings: Settings) -> str:
     `settings.md5` попадают абсолютные пути (`agent.index.paper_directory`,
     `agent.index.index_directory`) и ключ API, а они у хостового и
     контейнерного запуска разные.
+
+    Значение пишется с префиксом версии (`v2:`). Записи без префикса —
+    легаси: до появления этого отпечатка в `settings_md5` лежал хеш всей
+    конфигурации (или вовсе dockey). Сравнивать их напрямую нельзя —
+    иначе после обновления весь индекс молча станет «устаревшим» и поиск
+    будет отвечать, что база пуста (см. `restore_state`).
     """
     payload = {
         "embedding": settings.embedding,
@@ -304,7 +319,8 @@ def chunk_fingerprint(settings: Settings) -> str:
             "page_size_limit": settings.parsing.page_size_limit,
         },
     }
-    return hexdigest(json.dumps(payload, sort_keys=True, default=str))
+    return CHUNK_FINGERPRINT_PREFIX + hexdigest(
+        json.dumps(payload, sort_keys=True, default=str))
 
 
 def settings_fingerprint(settings: Settings) -> str:

@@ -20,6 +20,7 @@ import {
 import { useAuth } from '../features/auth/authStore'
 import { client } from '../api/client'
 import { useQuery } from '@tanstack/react-query'
+import type { SessionOut } from '../api/types'
 
 interface CommandAction {
   id: string
@@ -72,7 +73,7 @@ function makeGroup(groupTitle: string, actions: CommandAction[]): CommandGroup {
 export function CommandPalette() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [recentSessions, setRecentSessions] = useState<any[]>([])
+  const [recentSessions, setRecentSessions] = useState<SessionOut[]>([])
 
   // Загружаем недавние сессии пользователя (только активные, последние 10)
   const { data: sessionsData } = useQuery({

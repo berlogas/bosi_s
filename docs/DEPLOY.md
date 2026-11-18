@@ -336,7 +336,7 @@ docker compose logs -f ollama  # логи Ollama
 Удалить **включая данные** (безвозвратно):
 ```bash
 docker compose down -v
-docker volume rm boasi_ollama_models boasi_data boasi_backups
+docker volume rm boasi_ollama_models
 ```
 
 ---
@@ -347,7 +347,7 @@ docker volume rm boasi_ollama_models boasi_data boasi_backups
 
 | Том Docker | Путь внутри контейнера | Содержимое |
 |------------|------------------------|------------|
-| `boasi_data` | `/data` | Основное хранилище: SQLite БД, сессии, документы, индекс, кэш моделей |
+| каталог `data/` | `/data` | Основное хранилище: SQLite БД, сессии, документы, индекс, кэш моделей (bind-mount на хоста) |
 | `boasi_backups` | `/backups` | Архивы бэкапов (ротацией управляет backend, `BACKUP_KEEP`) |
 | `boasi_ollama_models` | `/root/.ollama` | Модели Ollama (скачаны через `ollama pull`) |
 

@@ -12,6 +12,7 @@ import {
   TextInput,
   Button,
   Alert,
+  Modal,
   Progress,
   UnstyledButton,
 } from '@mantine/core'
@@ -42,6 +43,7 @@ export default function DocumentsPage() {
     handleUpload,
     handleDelete,
     handleReindex,
+    handleReindexDocument,
     addPath,
     upload,
     remove,
@@ -55,6 +57,8 @@ export default function DocumentsPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [reindexDone, setReindexDone] = useState(false)
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  /** Окно подтверждения замены прежних версий документов с теми же именами. */
+  const [replaceOpen, setReplaceOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   // --- Колонки с рендерингом ячеек ---
@@ -98,8 +102,18 @@ export default function DocumentsPage() {
     {
       id: 'actions',
       header: '',
-      cell: (row: { id: string | number }) => (
+      cell: (row: { id: string | number; path?: string | null }) => (
         <Group gap="xs" wrap="nowrap">
+          {row.path && (
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => handleReindexDocument(String(row.path))}
+              title="Переиндексировать документ (после смены настроек индексации)"
+            >
+              Переиндексировать
+            </Button>
+          )}
           <DangerZone
             confirmText="УДАЛИТЬ"
             onConfirm={() => handleDelete(String(row.id))}
@@ -112,7 +126,14 @@ export default function DocumentsPage() {
         </Group>
       ),
     },
-  ], [handleDelete])
+  ], [handleDelete, handleReindexDocument])
+
+  // Об успешном добавлении сообщаем сами: мутация молча уходила в сервер,
+  // и админ не видел, что документ добавился. Эффект — до ранних возвратов,
+  // иначе порядок хуков ломается при перерисовке.
+  React.useEffect(() => {
+    if (addPath.isSuccess && addPath.data) setMessage('Добавлено.')
+  }, [addPath.isSuccess, addPath.data])
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (isError) return <Alert color="red">{errorTextLocal(error, 'Ошибка загрузки')}</Alert>
@@ -124,11 +145,33 @@ export default function DocumentsPage() {
     setPath('')
   }
 
-  const handleUploadFiles = () => {
-    if (files.length === 0) return
+  /**
+   * Файлы с теми же именами, что уже есть в базе.
+   *
+   * Дедуп PaperQA идёт по содержимому: изменённый файл получил бы другой
+   * dockey и лёг бы вторым документом, а старая версия осталась бы в индексе.
+   * Поэтому перед загрузкой спрашиваем, заменять ли прежние версии.
+   */
+  const conflictingNames = files
+    .map((file) => file.name)
+    .filter((name) => data.some((doc) => doc.filename === name))
+
+  const startUpload = (replace: boolean) => {
     setMessage(null)
     setUploadPercent(0)
-    handleUpload(files, '', setUploadPercent)
+    handleUpload(files, '', setUploadPercent, replace)
+    setFiles([])
+    setReplaceOpen(false)
+  }
+
+  const handleUploadFiles = () => {
+    if (files.length === 0) return
+    // Есть файлы с именами, которые уже в базе: спросим, заменять ли их.
+    if (conflictingNames.length > 0) {
+      setReplaceOpen(true)
+      return
+    }
+    startUpload(false)
   }
 
   const onDrop = (event: React.DragEvent) => {
@@ -149,6 +192,62 @@ export default function DocumentsPage() {
       {message && (
         <Alert color="success" role="status">{message}</Alert>
       )}
+
+      {/* Итог загрузки: сколько добавили, сколько дубликатов и что не разобрали. */}
+      {upload.data && (
+        <Alert
+          color={upload.data.failed?.length ? 'yellow' : 'success'}
+          title="Итог загрузки"
+          role="status"
+        >
+          <Stack gap={2}>
+            <Text size="sm">
+              {`Добавлено: ${upload.data.added?.length ?? 0}`}
+              {upload.data.duplicates?.length
+                ? `, дубликатов: ${upload.data.duplicates.length}`
+                : ''}
+              {upload.data.failed?.length
+                ? `, с ошибкой: ${upload.data.failed.length}`
+                : ''}
+            </Text>
+            {(upload.data.failed ?? []).map((item) => (
+              <Text key={item.name} size="xs" c="dimmed">
+                {`${item.name}: ${item.error}`}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      )}
+
+      {/* Замена прежней версии документа с тем же именем. */}
+      <Modal
+        opened={replaceOpen}
+        onClose={() => setReplaceOpen(false)}
+        title="Заменить прежние версии?"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            В базе уже есть файлы с теми же именами. Загрузка заменит их:
+            прежние версии исчезнут из индекса, новые займут их место.
+          </Text>
+          <Stack gap={2}>
+            {conflictingNames.map((name) => (
+              <Text key={name} size="sm" fw={500}>
+                {name}
+              </Text>
+            ))}
+          </Stack>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setReplaceOpen(false)}>
+              Отмена
+            </Button>
+            <Button onClick={() => startUpload(true)}>
+              Заменить и загрузить
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       {addPath.isError && (
         <Alert color="error" role="alert">
           {errorTextLocal(addPath.error, 'Ошибка запроса')}

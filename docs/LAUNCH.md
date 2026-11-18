@@ -213,4 +213,4 @@ API_PORT=9000 WEBAPP_PORT=8600 ./scripts/start.sh
   <http://127.0.0.1:8000/api/docs> для Swagger.
 * Метрики: <http://127.0.0.1:8000/api/metrics.json>.
 * Полное состояние проекта, архитектура и известные ограничения —
-  [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md).
+  [docs/wip/PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md).

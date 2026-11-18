@@ -14,6 +14,7 @@ import { axe } from 'vitest-axe'
 import { describe, expect, it } from 'vitest'
 import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 
 import { SimpleTable, DangerZone } from '../features/admin/components'
 import { EmptyState } from '../components/EmptyState'
@@ -25,11 +26,14 @@ const queryClient = new QueryClient({
   },
 })
 
+// SimpleTable синхронизирует страницу с URL — ему нужен роутер.
 const renderWithProviders = (ui: React.ReactNode) =>
   render(
-    <QueryClientProvider client={queryClient}>
-      <MantineProvider>{ui}</MantineProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MantineProvider>{ui}</MantineProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 
 describe('SimpleTable a11y', () => {

@@ -38,6 +38,7 @@ import { sessionStatusLabel, ttlLabel } from '../../lib/format'
 import { TABS, sessionTabPath, tabFromState, tabIdFromPath } from './tabPaths'
 import type { TabId } from './tabPaths'
 import { SessionBreadcrumb } from '../layout/Breadcrumb'
+import { BreadcrumbProvider } from '../layout/BreadcrumbProvider'
 
 const TAB_LABELS: Record<TabId, string> = {
   documents: 'Документы',
@@ -164,10 +165,11 @@ export function SessionPage() {
   }
 
   return (
-    <Stack
-      gap="md"
-      style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
-    >
+    <BreadcrumbProvider>
+      <Stack
+        gap="md"
+        style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+      >
       {/* Крошки только здесь: «Панель / Сессия / вкладка» — реальная иерархия.
           На остальных страницах PageHeader один, крошки дублировали бы его. */}
       <SessionBreadcrumb
@@ -288,6 +290,7 @@ export function SessionPage() {
           </Group>
         </Stack>
       </Modal>
-    </Stack>
+      </Stack>
+    </BreadcrumbProvider>
   )
 }

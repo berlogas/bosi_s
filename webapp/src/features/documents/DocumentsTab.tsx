@@ -15,6 +15,7 @@ import {
   Alert,
   Badge,
   Button,
+  Checkbox,
   Group,
   Modal,
   Progress,
@@ -24,7 +25,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
-import { Dropzone } from '@mantine/dropzone'
+import { Dropzone, type FileRejection, type FileWithPath } from '@mantine/dropzone'
 import { TagsInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useMemo, useState, useRef } from 'react'
@@ -38,7 +39,7 @@ import {
   useDeleteDocument,
   useSessionDocuments,
   useSessionIndexingTasks,
-  useUploadDocuments,
+  useUploadDocumentsAsync,
 } from './queries'
 
 /** CATEGORIES workspace.py (без глобальной — та только у админа). */
@@ -48,12 +49,24 @@ export const CATEGORIES = [
   'project_draft',
   'notes',
   'supplementary',
+  'style_guide',
 ] as const
 
 const CATEGORY_OPTIONS = CATEGORIES.map((value) => ({
   value,
   label: categoryLabel(value),
 }));
+
+/**
+ * Итог фоновой индексации — то, что сервер кладёт в `result` задачи.
+ * Заполняется по мере готовности: на frontend приходит вместе с задачей.
+ */
+interface IndexingResult {
+  added?: Array<{ id: string; docname: string; chunks: number }>
+  duplicates?: string[]
+  failed?: Array<{ name: string; error: string }>
+  total?: number
+}
 
 /** Допустимые расширения — синхронно с backend config.py allowed_extensions. */
 const ALLOWED_EXTENSIONS = [
@@ -122,8 +135,9 @@ function DocumentsTable({
 }) {
   // Сортировка
   const sorted = [...documents].sort((a, b) => {
-    const aVal = (a as any)[sortId] ?? ''
-    const bVal = (b as any)[sortId] ?? ''
+    // sortId приходит из шапки таблицы — ключ поля объекта документа.
+    const aVal = (a as unknown as Record<string, unknown>)[sortId] ?? ''
+    const bVal = (b as unknown as Record<string, unknown>)[sortId] ?? ''
     const comparison = String(aVal).localeCompare(String(bVal))
     return sortDesc ? -comparison : comparison
   })
@@ -408,11 +422,15 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** Документ, детали которого показываются в Drawer справа. */
   const [selectedDoc, setSelectedDoc] = useState<DocumentOut | null>(null)
+  /** Окно подтверждения замены прежних версий документов с теми же именами. */
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  /** Переиндексировать документ по пути, даже если он уже в индексе. */
+  const [forceReindex, setForceReindex] = useState(false)
 
   const documents = useSessionDocuments(sessionId)
   const tasks = useSessionIndexingTasks(sessionId)
   const addByPath = useAddDocumentByPath(sessionId)
-  const upload = useUploadDocuments(sessionId)
+  const upload = useUploadDocumentsAsync(sessionId)
   const remove = useDeleteDocument(sessionId)
 
   // ---------------------------------------------------------------- добавить по пути
@@ -421,8 +439,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     addByPath.mutate(
       {
         path: path.trim(),
-        category: (category === 'all' ? undefined : category) as any,
+        category: category === 'all' ? undefined : category,
         tags,
+        forceReindex,
       },
       {
         onSuccess: () => {
@@ -438,25 +457,32 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
   }
 
   // ---------------------------------------------------------------- загрузка файлов
-  function handleUpload() {
-    if (files.length === 0) return
+  /** Имена выбранных файлов, которые уже есть в сессии. */
+  const conflictingNames = files
+    .map((file) => file.name)
+    .filter((name) => (documents.data ?? []).some((doc) => doc.filename === name))
+
+  const startUpload = (replace: boolean) => {
     setFormError(null)
     setUploadResult(null)
     setUploadPercent(0)
     upload.mutate(
       {
         files,
-        category: (category === 'all' ? undefined : category) as any,
+        category: category === 'all' ? undefined : category,
         tags: tags.join(', '),
         onProgress: setUploadPercent,
+        replace,
       },
       {
         onSuccess: (result) => {
+          // Индексация идёт в фоне: итог придёт вместе с задачей.
           setUploadResult(
-            `Добавлено: ${result.added?.length ?? 0}, ошибок: ${result.failed?.length ?? 0}`,
+            `Файлов сохранено: ${result.total}. Индексация идёт в фоне — прогресс ниже.`,
           )
           setFiles([])
           setRejectErrors({})
+          setReplaceOpen(false)
         },
         onError: (cause) =>
           setFormError(
@@ -465,6 +491,17 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         onSettled: () => setUploadPercent(null),
       },
     )
+  }
+
+  function handleUpload() {
+    if (files.length === 0) return
+    // Файл с тем же именем уже есть: без вопроса он лёг бы вторым
+    // документом (дедуп PaperQA идёт по содержимому, а не по имени).
+    if (conflictingNames.length > 0) {
+      setReplaceOpen(true)
+      return
+    }
+    startUpload(false)
   }
 
   // ---------------------------------------------------------------- удаление с undo-тостом
@@ -545,10 +582,11 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     return map
   }
 
-  const onReject = (fileRejections: any) => {
+  const onReject = (fileRejections: FileRejection[]) => {
     const next: Record<string, string> = {}
-    for (const { file, reason } of fileRejections) {
-      next[file.name] = reason
+    for (const { file, errors } of fileRejections) {
+      // react-dropzone отдаёт массив ошибок, а Mantine — одну строку.
+      next[file.name] = errors.map((error) => error.message).join('; ')
     }
     setRejectErrors((prev) => ({ ...prev, ...next }))
   }
@@ -578,6 +616,23 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
     (task) => task.status === 'running' || task.status === 'queued',
   )
 
+  /**
+   * Итог фоновой индексации: сервер кладёт счётчики в `result` задачи.
+   *
+   * Показываем, что именно произошло с каждым файлом: сколько проиндексировано,
+   * сколько было дубликатов и какие файлы не удалось разобрать.
+   */
+  const indexingSummary = useMemo(() => {
+    for (const task of tasks.data ?? []) {
+      if (task.kind !== 'indexing') continue
+      if (task.status !== 'done' && task.status !== 'error') continue
+      const result = task.result as IndexingResult | null
+      if (!result) continue
+      return result
+    }
+    return null
+  }, [tasks.data])
+
   const showEmpty = filteredDocs.length === 0 && documents.isSuccess
   const showAccordion = filteredDocs.length > 0 && filteredDocs.length <= 20
   const showTable = filteredDocs.length > 20
@@ -597,6 +652,61 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         </Text>
       )}
       {uploadResult && <Alert color="success">{uploadResult}</Alert>}
+
+      {indexingSummary && (
+        <Alert
+          color={indexingSummary.failed?.length ? 'yellow' : 'success'}
+          title="Итог индексации"
+          role="status"
+        >
+          <Stack gap={2}>
+            <Text size="sm">
+              {`Проиндексировано: ${indexingSummary.added?.length ?? 0}`}
+              {indexingSummary.duplicates?.length
+                ? `, дубликатов: ${indexingSummary.duplicates.length}`
+                : ''}
+              {indexingSummary.failed?.length
+                ? `, с ошибкой: ${indexingSummary.failed.length}`
+                : ''}
+            </Text>
+            {(indexingSummary.failed ?? []).map((item) => (
+              <Text key={item.name} size="xs" c="dimmed">
+                {`${item.name}: ${item.error}`}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      )}
+
+      {/* Замена прежней версии документа с тем же именем. */}
+      <Modal
+        opened={replaceOpen}
+        onClose={() => setReplaceOpen(false)}
+        title="Заменить прежние версии?"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            В сессии уже есть файлы с теми же именами. Загрузка заменит их:
+            прежние версии исчезнут из индекса, новые займут их место.
+          </Text>
+          <Stack gap={2}>
+            {conflictingNames.map((name) => (
+              <Text key={name} size="sm" fw={500}>
+                {name}
+              </Text>
+            ))}
+          </Stack>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setReplaceOpen(false)}>
+              Отмена
+            </Button>
+            <Button onClick={() => startUpload(true)}>
+              Заменить и загрузить
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {Object.values(rejectErrors).length > 0 && (
         <Alert color="yellow" role="alert">
@@ -646,7 +756,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         <TagsInput
           label="Теги"
           placeholder="Теги через запятую"
-          data={tags as any}
+          data={tags}
           onChange={(values) => setTags(values as string[])}
           disabled={readOnly}
           style={{ flex: 1 }}
@@ -660,11 +770,19 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         </Button>
       </Group>
 
+      <Checkbox
+        label="Переиндексировать, если документ уже есть в индексе"
+        description="Нужно после смены настроек индексации: старые чанки устарели."
+        checked={forceReindex}
+        onChange={(event) => setForceReindex(event.currentTarget.checked)}
+        disabled={readOnly}
+      />
+
       <Dropzone
         accept={getAccept()}
         maxSize={MAX_FILE_SIZE}
-        onReject={(fileRejections: any) => onReject(fileRejections)}
-        onDrop={(acceptedFiles: any) => {
+        onReject={(fileRejections: FileRejection[]) => onReject(fileRejections)}
+        onDrop={(acceptedFiles: FileWithPath[]) => {
           if (readOnly) return
           const newFiles: File[] = []
           for (const file of acceptedFiles) {
@@ -804,7 +922,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           <Text size="sm" c="dimmed">
             {uploadPercent !== null && uploadPercent < 100
               ? `Отправляю файлы: ${uploadPercent}%…`
-              : 'Файлы отправлены. Индексирую — это может занять минуты…'}
+              : 'Файлы отправлены, индексация идёт в фоне…'}
           </Text>
         </Stack>
       )}

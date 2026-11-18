@@ -44,32 +44,42 @@ export function useTasksPage() {
 
   // --- Локальные фильтры (статус + пользователь) ---
   const [status, setStatusState] = useState<string>(
-    getParam(searchParams, 'status') ?? 'all'
+    getParam(searchParams, 'status') ?? 'all',
   )
   const [userId, setUserIdState] = useState<string>(
-    getParam(searchParams, 'user') ?? 'all'
+    getParam(searchParams, 'user') ?? 'all',
   )
 
   const setStatus = useCallback(
     (v: string) => {
       setStatusState(v)
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'status', v)
-      setParam(params, 'page', '1')
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'status', v)
+          setParam(params, 'page', '1')
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setUserId = useCallback(
     (v: string) => {
       setUserIdState(v)
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'user', v)
-      setParam(params, 'page', '1')
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'user', v)
+          setParam(params, 'page', '1')
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- URL state для таблицы ---
@@ -86,32 +96,47 @@ export function useTasksPage() {
 
   const setPagination = useCallback(
     (next: { pageIndex: number; pageSize: number; pageCount: number }) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', String(next.pageIndex + 1))
-      setParam(params, 'size', String(next.pageSize))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', String(next.pageIndex + 1))
+          setParam(params, 'size', String(next.pageSize))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setSorting = useCallback(
     (next: { id: string; desc: boolean }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'sort', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'sort', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setFilters = useCallback(
     (next: { id: string; value: unknown }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'filters', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'filters', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- Имена пользователей ---
@@ -146,7 +171,7 @@ export function useTasksPage() {
     (taskId: string) => {
       cancel.mutate(taskId)
     },
-    [cancel]
+    [cancel],
   )
 
   const handleClearFinished = useCallback(() => {

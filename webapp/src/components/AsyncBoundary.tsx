@@ -21,8 +21,7 @@
  * Это критерий приёмки Волны 6, п.4: «Единый QueryState/AsyncBoundary».
  */
 
-import { Alert, Button, Group, Stack, Text } from '@mantine/core'
-import { useCallback } from 'react'
+import { Alert, Button, Group, Text } from '@mantine/core'
 import { EmptyState } from './EmptyState'
 import { SkeletonList } from './SkeletonList'
 

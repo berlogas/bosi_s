@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from app.services import journal_styles as js
@@ -176,12 +177,13 @@ def test_описание_стиля_берётся_из_промпта() -> Non
     assert any(line.startswith("TONE:") for line in highlights)
 
 
-def test_у_группы_без_аудитории_остаётся_тон() -> None:
-    """Не у каждого промпта есть TARGET AUDIENCE — это не повод падать."""
+def test_у_группы_с_аудиторией_есть_оба_поля() -> None:
+    """Промпт может содержать и TARGET AUDIENCE, и TONE."""
     engineering = js.find_style("NeurIPS")
 
-    assert [line.split(":", 1)[0] for line in engineering.highlights()] \
-        == ["TONE"]
+    highlight_labels = [line.split(":", 1)[0] for line in engineering.highlights()]
+    assert "TONE" in highlight_labels
+    assert "TARGET AUDIENCE" in highlight_labels
 
 
 def test_справочник_для_интерфейса_собран_из_файлов() -> None:
@@ -197,24 +199,52 @@ def test_справочник_для_интерфейса_собран_из_фа
 
 def test_правка_файла_пересобирает_кэш(tmp_path: Path, monkeypatch) -> None:
     """Справочник перечитывается без перезапуска — точечный кэш по mtime."""
-    monkeypatch.setattr(js, "PROMPTS_ROOT", tmp_path)
-    group = tmp_path / "demo"
-    group.mkdir()
-    (group / "meta.toml").write_text(
-        'key = "demo"\ntitle = "Демо"\ndefault_template = "a.md"\n'
-        '[[templates]]\nfile = "a.md"\nlabel = "A"\nsections = ["a"]\n',
+    # Создаём временный styles.toml
+    styles_toml = tmp_path / "styles.toml"
+    styles_toml.write_text(
+        '[[styles]]\n'
+        'key = "demo"\n'
+        'title = "Демо"\n'
+        'default_template = "a.md"\n'
+        '[[styles.templates]]\n'
+        'file = "a.md"\n'
+        'label = "A"\n'
+        'sections = ["a"]\n',
         encoding="utf-8")
-    (group / "a.md").write_text("Первый текст.\n", encoding="utf-8")
+    
+    # Создаём файл шаблона
+    (tmp_path / "a.md").write_text("Первый текст.\n", encoding="utf-8")
+
+    # Подменяем пути
+    import app.services.journal_styles as js_module
+    monkeypatch.setattr(js_module, "STYLES_TOML", styles_toml)
+    monkeypatch.setattr(js_module, "PROMPTS_ROOT", tmp_path)
     js.reload_styles()
 
     assert js.style_prompt("demo", "a").startswith("Первый текст")
 
-    # Правка шаблона видна без перезапуска процесса.
-    path = group / "a.md"
-    path.write_text("Второй текст.\n", encoding="utf-8")
-    os.utime(path, (0, 0))
-
+    # Правка файла пересобирает кэш: перезапуск не нужен.
+    (tmp_path / "a.md").write_text("Второй текст.\n", encoding="utf-8")
+    # Подсигнатуру считаем по mtime — поднимаем время файла, чтобы тест
+    # не зависел от точности таймера файловой системы.
+    future = time.time() + 2
+    os.utime(tmp_path / "a.md", (future, future))
     assert js.style_prompt("demo", "a").startswith("Второй текст")
+
+    # Правка TOML тоже пересобирает справочник.
+    styles_toml.write_text(
+        '[[styles]]\n'
+        'key = "demo"\n'
+        'title = "Демо"\n'
+        'default_template = "a.md"\n'
+        '[[styles.templates]]\n'
+        'file = "a.md"\n'
+        'label = "A"\n'
+        'sections = ["b"]\n',
+        encoding="utf-8")
+    future = time.time() + 4
+    os.utime(styles_toml, (future, future))
+    assert js.style_prompt("demo", "b").startswith("Второй текст")
     js.reload_styles()
 
 

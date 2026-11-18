@@ -26,6 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   temp_literature: 'Временная литература',
   notes: 'Заметки',
   supplementary: 'Дополнительные материалы',
+  style_guide: 'Правила оформления журнала',
   global_knowledge: 'Глобальная база',
 }
 

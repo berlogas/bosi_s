@@ -40,8 +40,8 @@ UI: <http://127.0.0.1:5173> (React) · API: <http://127.0.0.1:8000/api/docs>
 
 | Документ | О чём |
 | --- | --- |
-| [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | **Точка входа**: архитектура, статус, ключевые решения, ограничения |
-| [PLAN.md](PLAN.md) | План работ по фазам и статус каждой |
+| [docs/wip/PROJECT_CONTEXT.md](docs/wip/PROJECT_CONTEXT.md) | **Точка входа**: архитектура, статус, ключевые решения, ограничения |
+| [docs/wip/PLAN.md](docs/wip/PLAN.md) | План работ по фазам и статус каждой |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Исследователю: сессии, категории документов, режимы поиска, проекты |
 | [docs/DEMO_ARTICLE.md](docs/DEMO_ARTICLE.md) | **Демо-статья целиком**: готовые данные и литература + пошаговый прогон |
 | [docs/REACT_UI_CHECKLIST.md](docs/REACT_UI_CHECKLIST.md) | Регрессия React-интерфейса: чек-лист приёмки (Streamlit → React) |
@@ -94,5 +94,5 @@ npm run test:e2e                                # Playwright, нужен backend
 ## Статус
 
 Фазы 0–9 завершены, фаза 10 (приёмка по сценарию) не начата.
-Подробности и ограничения — в [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)."# bosi_s2" 
+Подробности и ограничения — в [docs/wip/PROJECT_CONTEXT.md](docs/wip/PROJECT_CONTEXT.md)."# bosi_s2" 
 "# bosi_s2" 

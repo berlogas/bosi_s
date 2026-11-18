@@ -41,9 +41,6 @@ describe('AsyncBoundary a11y', () => {
       </AsyncBoundary>,
     )
     const result = await axe(container)
-    if (result.violations.length > 0) {
-      console.log('A11y violations:', JSON.stringify(result.violations, null, 2))
-    }
     expect(result.violations).toHaveLength(0)
     expect(screen.getByRole('alert')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeVisible()

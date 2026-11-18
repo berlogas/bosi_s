@@ -135,6 +135,35 @@ async def test_list_and_patch_project(client, researcher, project_id,
     assert patched.json()["target_journal"] == "Ocean Science"
 
 
+async def test_projects_keep_user_order(client, researcher, session_id) -> None:
+    """Порядок из перетаскивания сохраняется и в списке."""
+    ids = []
+    for i in range(3):
+        response = await client.post(
+            f"/api/sessions/{session_id}/projects",
+            json={"title": f"Проект {i}"},
+            headers=researcher)
+        assert response.status_code == 201, response.text
+        ids.append(response.json()["id"])
+
+    listed = await client.get(f"/api/sessions/{session_id}/projects",
+                              headers=researcher)
+    # Новые проекты уходят в конец списка.
+    assert [p["id"] for p in listed.json()] == ids
+
+    # Перетаскивание: первый проект уходит вниз.
+    await client.patch(f"/api/sessions/{session_id}/projects/{ids[0]}",
+                       json={"order": 10}, headers=researcher)
+    listed = await client.get(f"/api/sessions/{session_id}/projects",
+                              headers=researcher)
+    assert [p["id"] for p in listed.json()] == [ids[1], ids[2], ids[0]]
+
+    # Порядок виден в ответе самого проекта.
+    one = await client.get(f"/api/sessions/{session_id}/projects/{ids[0]}",
+                           headers=researcher)
+    assert one.json()["order"] == 10
+
+
 async def test_foreign_project_is_404(client, researcher, session_id,
                                       project_id, db_engine) -> None:
     from sqlalchemy.orm import sessionmaker
@@ -267,6 +296,63 @@ async def test_discussion_cites_both_data_and_literature(client, researcher,
     assert "session" in scopes, "нет ссылки на собственные данные"
 
 
+async def test_manual_edit_is_saved_and_visible(client, researcher,
+                                            project_id, session_id) -> None:
+    """Правка в редакторе сохраняется в обе модели и видна в плане."""
+    created = await client.post(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
+        json={"name": "Introduction"},
+        headers=researcher)
+    assert created.status_code == 201, created.text
+    plan = created.json()
+
+    response = await client.put(
+        f"/api/sessions/{session_id}/projects/{project_id}"
+        f"/section-plans/{plan['id']}/content",
+        json={"content_md": "Свой текст раздела [1]."},
+        headers=researcher)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["content_md"] == "Свой текст раздела [1]."
+    assert body["word_count"] == 4
+
+    # текст виден в плане (current_version) — интерфейс читает оттуда
+    plans2 = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
+        headers=researcher)
+    current = plans2.json()[0]["current_version"]
+    assert current["content_md"] == "Свой текст раздела [1]."
+
+    # и в старой модели — её читают прогресс и выгрузка
+    sections = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/sections",
+        headers=researcher)
+    written = [s for s in sections.json() if s["written"]]
+    assert written, "правка не попала в project.sections"
+    assert written[0]["content_md"] == "Свой текст раздела [1]."
+
+
+async def test_generate_v2_accepts_kind(client, researcher, project_id,
+                                        session_id, docs) -> None:
+    """Вид генерации едет в запрос и попадает в тип плана раздела."""
+    response = await client.post(
+        f"/api/sessions/{session_id}/projects/{project_id}/generate-v2",
+        json={"section": "Discussion", "question": "Сопоставление",
+              "kind": "discussion"},
+        headers=researcher)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["section_plan_id"]
+
+    plans = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
+        headers=researcher)
+    discussion = next(p for p in plans.json() if p["name"] == "Discussion")
+    assert discussion["kind"] == "discussion"
+
+
 async def test_generation_writes_into_section_plan(client, researcher,
                                                     project_id, session_id,
                                                     docs) -> None:
@@ -387,6 +473,49 @@ async def test_export_markdown(client, researcher, project_id, session_id,
     text = response.content.decode("utf-8")
     assert "# Биомасса Баренцева моря" in text
     assert "## References" in text
+
+
+async def test_manuscript_get_does_not_write_plans(client, researcher,
+                                            project_id, session_id) -> None:
+    """GET /manuscript не пишет в базу: перенос — явное действие.
+
+    Раньше сборка манускрипта сама создавала планы разделов, и обычный
+    просмотр менял состояние проекта.
+    """
+    before = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
+        headers=researcher)
+    assert before.json() == []
+
+    response = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/manuscript",
+        headers=researcher)
+    assert response.status_code == 200
+    assert "full_text" in response.json()
+
+    after = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
+        headers=researcher)
+    assert after.json() == [], "GET создал планы разделов"
+
+
+async def test_export_reads_current_version_of_plan(client, researcher,
+                                                   project_id, session_id,
+                                                   docs) -> None:
+    """Выгрузка берёт текст из текущей версии плана, а не из старого JSON."""
+    await client.put(
+        f"/api/sessions/{session_id}/projects/{project_id}/sections/Methods",
+        json={"content_md": "Пробы отбирали батернет-граблями [1]."},
+        headers=researcher)
+
+    response = await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/export?fmt=markdown",
+        headers=researcher)
+
+    assert response.status_code == 200
+    text = response.content.decode("utf-8")
+    assert "## Methods" in text
+    assert "Пробы отбирали батернет-граблями" in text
 
 
 async def test_export_docx_opens_as_ooxml(client, researcher, project_id,

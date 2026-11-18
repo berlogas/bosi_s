@@ -5,13 +5,13 @@
 #   ./scripts/bootstrap.sh                              # полный цикл, пароль спросит
 #   ADMIN_USERNAME=admin ADMIN_PASSWORD=... ./scripts/bootstrap.sh   # без ввода
 #
-# Шаги: .env и SECRET_KEY -> том данных -> модели -> стек -> здоровье -> админ.
+# Шаги: .env и SECRET_KEY -> каталог данных -> модели -> стек -> здоровье -> админ.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 ENV_FILE="${ROOT}/.env"
-DATA_VOLUME="${BOASI_DATA_VOLUME:-boasi_data}"
+DATA_DIR_HOST="${BOASI_DATA_DIR:-./data}"
 API_URL="${BOASI_API_URL:-http://127.0.0.1:8000}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 PYTHON_BIN="$(command -v python3 || command -v python || true)"
@@ -53,12 +53,13 @@ else
   log "SECRET_KEY уже задан - оставляю как есть"
 fi
 
-# --------------------------------------------------------------------- 2. тома
-log "создаю том данных ${DATA_VOLUME}"
-docker volume inspect "$DATA_VOLUME" >/dev/null 2>&1 || docker volume create "$DATA_VOLUME" >/dev/null
+# ---------------------------------------------------------------- 2. каталог данных
+# Каталог общий для хоста и контейнера: compose монтирует его
+# bind-mount'ом (см. docker-compose.yml), поэтому данные лежат на одном и имеют и контейнер.
+log "готовю каталог данных ${DATA_DIR_HOST}"
+mkdir -p "$DATA_DIR_HOST"
 
-if docker run --rm -v "${DATA_VOLUME}:/data:ro" alpine:3.20 \
-     test -f /data/.install-state.json >/dev/null 2>&1; then
+if [ -f "${DATA_DIR_HOST}/.install-state.json" ]; then
   log "том уже развёрнут (есть .install-state.json) - данные НЕ сбрасываются"
 else
   log "первичная установка: том пуст"
@@ -109,9 +110,10 @@ fi
 
 # ---------------------------------------------------------- 7. маркер установки
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-docker run --rm -v "${DATA_VOLUME}:/data" alpine:3.20 sh -c \
-  "printf '{\"installed_at\":\"${STAMP}\",\"admin\":\"${ADMIN_USERNAME}\",\"tool\":\"bootstrap.sh\"}' > /data/.install-state.json"
+printf '{"installed_at":"%s","admin":"%s","tool":"bootstrap.sh"}\n' \
+  "$STAMP" "$ADMIN_USERNAME" > "${DATA_DIR_HOST}/.install-state.json"
 
+warn "DATA_DIR=/data — bind-mount на каталог ${DATA_DIR_HOST} хоста."
 warn "DATA_DIR=/data содержит ещё и кэш моделей (HF_HOME, TORCH_HOME)."
 warn "Обычный сброс данных их не трогает: make reset-plan"
 warn "Полная очистка тома (включая модели): make reset-all"

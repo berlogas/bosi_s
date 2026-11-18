@@ -47,10 +47,20 @@ def research_session(db, user):
 
 
 def _doc(db, session, dockey: str, size: int = 1024,
-         category: DocumentCategory = DocumentCategory.temp_literature):
+         category: DocumentCategory = DocumentCategory.temp_literature,
+         path: str | None = None):
+    """Документ сессии.
+
+    Путь по умолчанию — внутри каталога сессии: только такие файлы сессия
+    имеет право удалять при purge (см. `services/session_cleanup.py`).
+    """
+    if path is None:
+        from app.core.safety import session_root
+
+        path = str(session_root(session.id) / "uploads" / f"{dockey[:8]}.pdf")
     return docs_repo.upsert_document(
         db, dockey=dockey, docname=dockey[:8], title=f"Документ {dockey[:6]}",
-        filename=f"{dockey[:8]}.pdf", path=f"/data/{dockey[:8]}.pdf",
+        filename=f"{dockey[:8]}.pdf", path=path,
         size_bytes=size, category=category, visibility=DocumentVisibility.session,
         session_id=session.id, owner_user_id=session.user_id, added_by=session.user_id,
     )
@@ -333,15 +343,35 @@ def test_purge_keeps_fresh_archive(db, research_session) -> None:
 
 
 def test_purge_reports_file_paths(db, research_session) -> None:
+    from app.core.safety import session_root
+
     _doc(db, research_session, "d1")
     _archive_long_ago(db, research_session, days=100)
 
     purged = sessions_repo.purge_expired_archives(db, retention_days=30)
-    assert purged[0]["paths"] == ["/data/d1.pdf"]
+    expected = str(session_root(research_session.id) / "uploads" / "d1.pdf")
+    assert purged[0]["paths"] == [expected]
     assert purged[0]["title"] == research_session.title
 
 
+def test_purge_does_not_report_foreign_files(db, research_session) -> None:
+    """Файл общей библиотеки в сессии purge не удаляет.
+
+    Исследователь вправе добавить в сессию файл из глобальной базы: его путь
+    лежит в `documents_dir`, и удалять его вместе с сессией нельзя.
+    """
+    foreign = "/data/documents/library/global.pdf"
+    _doc(db, research_session, "g1", path=foreign)
+    _archive_long_ago(db, research_session, days=100)
+
+    purged = sessions_repo.purge_expired_archives(db, retention_days=30)
+
+    assert purged[0]["paths"] == []
+
+
 def test_hard_delete_removes_session_and_children(db, research_session) -> None:
+    from app.core.safety import session_root
+
     _doc(db, research_session, "d1")
     db.add(Message(user_id=research_session.user_id, session_id=research_session.id,
                    role="user", content="Вопрос про биомассу"))
@@ -349,7 +379,8 @@ def test_hard_delete_removes_session_and_children(db, research_session) -> None:
 
     info = sessions_repo.hard_delete_session(db, research_session)
 
-    assert info["paths"] == ["/data/d1.pdf"]
+    expected = str(session_root(research_session.id) / "uploads" / "d1.pdf")
+    assert info["paths"] == [expected]
     assert db.get(type(research_session), research_session.id) is None
     assert db.query(Message).count() == 0
 

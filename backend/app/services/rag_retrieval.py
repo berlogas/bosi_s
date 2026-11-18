@@ -22,7 +22,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db.models import SearchMode
+from app.db.models import DocumentCategory, DocumentStatus, SearchMode
 from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.rag_fusion import (
     Candidate,
@@ -157,13 +157,21 @@ class EvidenceRetriever:
                 continue
             contexts = result[1].contexts
             await self._restore_relevance(service, query, contexts)
-            candidates.extend(build_candidates(contexts, scope, catalog))
+            scope_candidates = build_candidates(contexts, scope, catalog)
+            # Документы «Правила оформления» нужны только для требований к оформлению
+            # (project.style_guide_document_id) и не должны попадать в
+            # полнотекстовый поиск / источники генерации.
+            scope_candidates = [
+                c for c in scope_candidates
+                if c.meta.category != DocumentCategory.style_guide.value
+            ]
+            candidates.extend(scope_candidates)
             log.info(
                 "fusion: retrieval[%s] вернул %d кандидатов (%s)",
                 scope.value,
                 len(contexts),
                 [c.docname or (c.context.text.doc.dockey or "")[:12]
-                 for c in candidates if c.scope is scope][:10],
+                 for c in scope_candidates if c.scope is scope][:10],
             )
         return candidates
 

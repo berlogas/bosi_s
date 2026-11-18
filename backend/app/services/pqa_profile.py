@@ -25,8 +25,18 @@ from typing import Any
 from paperqa import Settings
 from paperqa.prompts import CANNOT_ANSWER_PHRASE
 from paperqa.settings import MultimodalOptions, PromptSettings
+from paperqa.utils import hexdigest
 
 from app.config import Settings as AppSettings
+
+# Счётчик реальных загрузок модели эмбеддингов с диска (промахи kэша _cached_embedding_model).
+# Инкрементируется только когда lru_cache не сработал и вызывается embedding_model_factory.
+_embedding_model_loads: int = 0
+
+
+def embedding_model_load_count() -> int:
+    """Сколько раз модель эмбеддингов загружалась с диска за сессию."""
+    return _embedding_model_loads
 
 
 @lru_cache(maxsize=8)
@@ -39,6 +49,8 @@ def _cached_embedding_model(embedding: str, config_json: str) -> Any:
     Ключ кэша — имя модели плюс её конфиг, поэтому смена `EMBEDDING_MODEL`
     или `embedding_config` даёт новый экземпляр.
     """
+    global _embedding_model_loads
+    _embedding_model_loads += 1
     from lmi.embeddings import embedding_model_factory
 
     return embedding_model_factory(embedding, **json.loads(config_json))
@@ -246,6 +258,7 @@ def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Sett
             },
         },
         "agent": {
+            "agent_type": app.agent_type,
             "agent_llm": app.llm_model,
             "agent_llm_config": llm_config,
             "timeout": app.llm_timeout_seconds,
@@ -265,6 +278,70 @@ def build_pqa_settings(app: AppSettings | None = None, **overrides: Any) -> Sett
     return settings
 
 
+def chunk_fingerprint(settings: Settings) -> str:
+    """Отпечаток того, что влияет на СОДЕРЖИМОЕ сохранённых чанков.
+
+    Чанк — это текст документа и его вектор. На них влияют только модель
+    эмбеддингов и нарезка на фрагменты; LLM, промпты и правила ответа
+    на них не влияют. Поэтому смена LLM (например, переход с облака на
+    Ollama) НЕ должна требовать переиндексации: индекс остаётся годным,
+    меняется только генерация ответа.
+
+    Отпечаток не должен зависеть от машины, иначе одна и та же база,
+    открытая с хоста и из контейнера, будет считать чанки устаревшими: в
+    `settings.md5` попадают абсолютные пути (`agent.index.paper_directory`,
+    `agent.index.index_directory`) и ключ API, а они у хостового и
+    контейнерного запуска разные.
+    """
+    payload = {
+        "embedding": settings.embedding,
+        "embedding_config": _stable(settings.embedding_config),
+        "parsing": {
+            "chunk_chars": settings.parsing.reader_config.get("chunk_chars"),
+            "overlap": settings.parsing.reader_config.get("overlap"),
+            "multimodal": str(settings.parsing.multimodal),
+            "use_doc_details": settings.parsing.use_doc_details,
+            "page_size_limit": settings.parsing.page_size_limit,
+        },
+    }
+    return hexdigest(json.dumps(payload, sort_keys=True, default=str))
+
+
 def settings_fingerprint(settings: Settings) -> str:
-    """Отпечаток конфигурации: смена модели/чанков требует переиндексации."""
-    return settings.md5
+    """Отпечаток конфигурации ответа: смена промпта или модели требует
+    пересчёта кэша.
+
+    Кэш ответов хранит уже готовые формулировки. Правка промпта или смена
+    модели делает их недействительными: пользователь продолжил бы получать
+    ответ по прежним правилам. В отпечаток входит всё, что влияет на ответ,
+    — включая модель эмбеддингов: с ней меняется и сам состав источников.
+    """
+    payload = {
+        "chunks": chunk_fingerprint(settings),
+        "prompts": _stable(settings.prompts),
+        "answer": {
+            "answer_length": settings.answer.answer_length,
+            "answer_max_sources": settings.answer.answer_max_sources,
+            "evidence_k": settings.answer.evidence_k,
+            "evidence_skip_summary": settings.answer.evidence_skip_summary,
+            "evidence_relevance_score_cutoff":
+                settings.answer.evidence_relevance_score_cutoff,
+        },
+        "llm": settings.llm,
+        "summary_llm": settings.summary_llm,
+    }
+    return hexdigest(json.dumps(payload, sort_keys=True, default=str))
+
+
+def _stable(value: Any) -> Any:
+    """Привести значение к JSON-совместимому виду (для отпечатка)."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _stable(v) for k, v in sorted(value.items())}
+    if isinstance(value, (list, tuple)):
+        return [_stable(v) for v in value]
+    dump = getattr(value, "model_dump", None)
+    if callable(dump):
+        return _stable(dump(mode="json"))
+    return str(value)

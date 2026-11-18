@@ -6,7 +6,7 @@
 #
 #   local  — backend запущен из репозитория (scripts/start.sh), DATA_DIR=./data.
 #            Это режим по умолчанию на машине разработки. Ни Docker, ни тома.
-#   docker — backend в контейнере, данные в томе boasi_data (/data).
+#   docker — backend в контейнере, данные в каталоге ./data хоста (собранён в /data).
 #
 # Прежние версии скриптов умели только docker и падали с «Том boasi_data не
 # найден», хотя данные лежат рядом, в ./data. Теперь режим определяется сам
@@ -109,11 +109,8 @@ detect_mode() {
       ;;
   esac
 
-  if [ "$MODE" = "local" ]; then
-    DATA_PATH="$data_dir"
-  else
-    DATA_PATH="$volume"
-  fi
+  # Источник один и тем папка данных: в обоих режимах — один и тот же.
+  DATA_PATH="$data_dir"
 }
 
 # Что описывает источник данных — для сообщений и проверок.
@@ -121,27 +118,18 @@ describe_source() {
   if [ "$MODE" = "local" ]; then
     printf 'локальный каталог %s' "$DATA_PATH"
   else
-    printf 'том Docker %s' "$DATA_PATH"
+    printf 'каталог %s (backend в Docker)' "$DATA_PATH"
   fi
 }
 
 # Есть ли в источнике хоть какие-то данные.
 source_exists() {
-  if [ "$MODE" = "local" ]; then
-    [ -d "$DATA_PATH" ]
-  else
-    command -v docker >/dev/null 2>&1 && docker volume inspect "$DATA_PATH" >/dev/null 2>&1
-  fi
+  # Источник один и тем папка данных: в обоих режимах — один и тот же.
+  [ -d "$DATA_PATH" ]
 }
 
 source_has_files() {
-  if [ "$MODE" = "local" ]; then
-    [ -n "$(ls -A "$DATA_PATH" 2>/dev/null || true)" ]
-  else
-    command -v docker >/dev/null 2>&1 \
-      && [ -n "$(docker run --rm -v "$DATA_PATH:/data:ro" alpine:3.20 \
-               sh -c 'ls -A /data 2>/dev/null' 2>/dev/null)" ]
-  fi
+  [ -n "$(ls -A "$DATA_PATH" 2>/dev/null || true)" ]
 }
 
 # Путь к БД внутри источника (для локального режима — на хосте).

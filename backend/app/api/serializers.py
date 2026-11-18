@@ -36,6 +36,7 @@ def document_from_ref(ref: DocumentRef) -> DocumentOut:
         dockey=ref.dockey,
         docname=ref.docname,
         title=ref.title,
+        filename=ref.filename,
         citation=ref.citation,
         path=ref.path,
         url=ref.url,
@@ -129,16 +130,19 @@ def session_resume(session: Any, summary: dict[str, Any], state: dict[str, Any],
 
 def project_out(project: Any) -> ProjectOut:
     """ORM `Project` -> DTO с нормализованным планом разделов."""
-    from app.services.generation import normalize_sections
+    from app.services.project_sections import project_sections
 
-    sections = normalize_sections(project.sections)
+    sections = project_sections(project)
     return ProjectOut(
         id=project.id,
         session_id=project.session_id,
         title=project.title,
         target_journal=project.target_journal,
+        style_guide_document_id=project.style_guide_document_id,
+        language=project.language,
         status=getattr(project.status, "value", str(project.status)),
         sections=sections,
+        order=getattr(project, "order", 0) or 0,
         created_at=project.created_at,
         updated_at=project.updated_at,
     )

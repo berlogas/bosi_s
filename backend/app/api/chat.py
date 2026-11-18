@@ -76,6 +76,11 @@ async def chat_query(payload: ChatQueryRequest, request: Request,
           seconds=result.answer.seconds)
     leases.touch(session.id, 600)
 
+    # Сохранить отчёт о цитировании для эндпоинта /api/citation-report
+    citations = result.stats.get("citations") if result.stats else None
+    if citations:
+        get_registry().set_citation_report(citations)
+
     return ChatQueryResponse(
         answer=result.answer.formatted_answer,
         sources=result.sources, references=result.references,

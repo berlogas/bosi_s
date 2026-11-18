@@ -1,0 +1,16 @@
+timestamp=2026-11-17T16:42:39.594Z level=INFO run=c54dda9c message="creating instance" directory="N:\\Development\\boasi_s"
+timestamp=2026-11-17T16:42:39.597Z level=INFO run=c54dda9c message=fromDirectory directory="N:\\Development\\boasi_s"
+timestamp=2026-11-17T16:42:40.114Z level=INFO run=c54dda9c message=bootstrapping directory="N:\\Development\\boasi_s"
+timestamp=2026-11-17T16:42:40.131Z level=INFO run=c54dda9c message=loading path="C:\\Users\\Homo\\.config\\opencode\\config.json"
+timestamp=2026-11-17T16:42:40.142Z level=INFO run=c54dda9c message=loading path="C:\\Users\\Homo\\.config\\opencode\\opencode.json"
+timestamp=2026-11-17T16:42:40.149Z level=INFO run=c54dda9c message=loading path="C:\\Users\\Homo\\.config\\opencode\\opencode.jsonc"
+timestamp=2026-11-17T16:42:40.254Z level=INFO run=c54dda9c message="all LSPs are disabled"
+timestamp=2026-11-17T16:42:40.255Z level=INFO run=c54dda9c message="all formatters are disabled"
+timestamp=2026-11-17T16:42:40.255Z level=INFO run=c54dda9c message=init
+timestamp=2026-11-17T16:42:43.479Z level=INFO run=c54dda9c message=init count=1
+timestamp=2026-11-17T16:42:43.942Z level=INFO run=c54dda9c message="watcher backend" directory="N:\\Development\\boasi_s" platform=win32 backend=windows
+timestamp=2026-11-17T16:42:43.955Z level=INFO run=c54dda9c message="project copy refresh started" projectID=79669a513e15af84b4cdeb956a4995d25f5c1235
+timestamp=2026-11-17T16:42:45.064Z level=INFO run=c54dda9c message="project copy refresh done" projectID=79669a513e15af84b4cdeb956a4995d25f5c1235 updated=[] removed=[]
+timestamp=2026-11-17T16:42:45.243Z level=INFO run=c54dda9c message="booting location services" directory="N:\\Development\\boasi_s" workspaceID=undefined
+timestamp=2026-11-17T16:43:32.119Z level=INFO run=c54dda9c message="disposing all instances"
+timestamp=2026-11-17T16:43:32.120Z level=INFO run=c54dda9c message="disposing instance" directory="N:\\Development\\boasi_s"

@@ -178,6 +178,9 @@ def upsert_document(
             dockey=dockey,
         )
         db.add(doc)
+    else:
+        # Повторная индексация того же документа — увеличиваем версию
+        doc.doc_version = (doc.doc_version or 0) + 1
     doc.docname = docname
     doc.title = title or doc.title or docname
     doc.filename = filename or doc.filename or docname
@@ -315,9 +318,18 @@ def documents_summary(db: Session, session_id: str | None) -> dict[str, Any]:
 
 
 def session_document_paths(db: Session, session_id: str) -> list[str]:
-    """Пути файлов сессии — нужны reaper'у при purge (удаляем с диска)."""
-    return [d.path for d in db.scalars(
+    """Пути файлов сессии — нужны reaper'у при purge (удаляем с диска).
+
+    Возвращаются только файлы, принадлежащие сессии (лежащие в
+    `sessions/<id>/`). Исследователь вправе добавить в сессию файл из общей
+    библиотеки — его путь ведёт в глобальную базу, и purge сессии не должен
+    трогать чужие файлы (см. `services/session_cleanup.py`).
+    """
+    from app.services.session_cleanup import owned_paths
+
+    raw = [d.path for d in db.scalars(
         select(Document).where(Document.session_id == session_id)) if d.path]
+    return [str(path) for path in owned_paths(session_id, raw)]
 
 
 def owned_session_or_none(db: Session, session_id: str) -> ResearchSession | None:

@@ -13,7 +13,9 @@ import json
 
 import pytest
 
-from app.api.tasks import _task_event_stream
+# Импортируем модуль, а не имя: подмена атрибута модуля (monkeypatch) иначе
+# не видна в уже импортированной ссылке — тесты читали бы настоящий поток.
+from app.api import tasks as tasks_api
 from app.services.tasks import Task, TaskRegistry, TaskStatus, event_manager
 from tests.conftest import login_headers
 
@@ -35,7 +37,8 @@ def finite_stream(monkeypatch):
     буферизует тело до конца. Авторизацию и роутинг проверяем на конечной
     заглушке, а бесконечность — прямой проверкой генератора ниже.
     """
-    async def stream(user_id: str):
+    # Сигнатура совпадает с вызовом эндпоинта: он передаёт ещё и last_seq.
+    async def stream(user_id: str, last_seq: int | None = None):
         yield 'data: {"id": "t-sse"}\n\n'
 
     monkeypatch.setattr("app.api.tasks._task_event_stream", stream)
@@ -51,7 +54,7 @@ async def _read_stream(client, url: str, user_id: str,
 async def _collect_events(user_id: str, tasks: list[Task],
                           count: int) -> list[str]:
     """Прямой проход по генератору: поток не должен закрыться на `finished`."""
-    stream = _task_event_stream(user_id)
+    stream = tasks_api._task_event_stream(user_id)
 
     async def publish_when_subscribed() -> None:
         for _ in range(200):
@@ -67,7 +70,9 @@ async def _collect_events(user_id: str, tasks: list[Task],
     events: list[str] = []
     try:
         async for event in stream:
-            if not event.startswith("data: "):
+            # Кадр SSE — это "id: …\ndata: …\n\n": номер нужен для
+            # Last-Event-ID, поэтому ищем "data: " внутри кадра, а не в начале.
+            if "data: " not in event:
                 continue
             events.append(event)
             if len(events) >= count:
@@ -161,7 +166,7 @@ async def test_registry_publishes_progress_events(client, researcher_user) -> No
             await asyncio.sleep(0.02)
 
     registry = TaskRegistry()
-    stream = _task_event_stream(user_id)
+    stream = tasks_api._task_event_stream(user_id)
 
     async def pump() -> None:
         # Ждём, пока генератор подпишется, и только потом запускаем задачу.
@@ -176,7 +181,8 @@ async def test_registry_publishes_progress_events(client, researcher_user) -> No
     events: list[str] = []
     try:
         async for event in stream:
-            if not event.startswith("data: "):
+            # Кадр SSE начинается с "id: " (номер для Last-Event-ID).
+            if "data: " not in event:
                 continue
             events.append(event)
             if '"progress": 50' in event:
@@ -186,7 +192,9 @@ async def test_registry_publishes_progress_events(client, researcher_user) -> No
         pump_task.cancel()
 
     # `json.dumps` экранирует кириллицу, поэтому разбираем, а не ищем строку.
-    payloads = [json.loads(event[len("data: "):]) for event in events]
+    # Кадр начинается с "id: " (номер для Last-Event-ID), поэтому JSON лежит
+    # после первой подстроки "data: ".
+    payloads = [json.loads(event.split("data: ", 1)[1]) for event in events]
     assert any(p["progress"] == 50 for p in payloads)
     assert any(p["step"] == "шаг 50" for p in payloads)
 

@@ -18,7 +18,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.db.models import Document, Project
-from app.services.generation import normalize_sections, parse_citations
+from app.services.generation import parse_citations
+from app.services.project_sections import (
+    citation_entries,
+    current_version,
+    project_sections,
+)
 
 CITE_RE = re.compile(r"\[(\d+(?:\s*[,\-–]\s*\d+)*)\]")
 
@@ -116,15 +121,32 @@ def _section_number_maps(project: Project,
                          ) -> dict[str, dict[int, str]]:
     """Карта `номер -> dockey` для текста каждого раздела.
 
-    Раздел опирается на ту версию, чей текст стал его содержимым: ручная
-    правка сохраняет текст, но не версию, поэтому при отсутствии точного
-    совпадения берётся последняя версия этого раздела — номера в ней те же,
-    с которыми исследователь работал.
+    Основной источник — текущая версия раздела в новой модели. Старые
+    версии (`project_versions`) перебираются вторым: разделы, написанные
+    до перехода, хранят карту цитат только там.
     """
-    versions = list(project.versions or [])
     maps: dict[str, dict[int, str]] = {}
+    for plan in getattr(project, "section_plans", None) or []:
+        version = current_version(plan)
+        if version is None:
+            continue
+        numbers: dict[int, str] = {}
+        for entry in version.citation_map or []:
+            index = entry.get("index")
+            key = str(entry.get("dockey") or "").strip()
+            if index is None or not key:
+                continue
+            numbers[int(index)] = key
+        if numbers:
+            maps[plan.name] = numbers
+
+    # Откат на старые версии: раздел может быть написан до перехода,
+    # и тогда карта цитат лежит только в project_versions.
+    versions = list(project.versions or [])
     for section in sections:
         name = str(section.get("name") or "")
+        if maps.get(name):
+            continue
         content = section.get("content_md") or ""
         same_section = [v for v in versions
                         if str(getattr(v, "section_name", "") or "").lower()
@@ -132,14 +154,15 @@ def _section_number_maps(project: Project,
         exact = [v for v in same_section
                  if (getattr(v, "content_md", "") or "") == content]
         chosen = exact[-1] if exact else (same_section[-1] if same_section else None)
-        numbers: dict[int, str] = {}
+        numbers = {}
         for entry in getattr(chosen, "citation_map", None) or []:
             index = entry.get("index")
             key = str(entry.get("dockey") or "").strip()
             if index is None or not key:
                 continue
             numbers[int(index)] = key
-        maps[name] = numbers
+        if numbers:
+            maps[name] = numbers
     return maps
 
 
@@ -204,9 +227,14 @@ def plan_citations(project: Project,
     (там ключом служит `text.name`, здесь — `dockey`).
     """
     sections = list(sections if sections is not None
-                    else normalize_sections(project.sections))
+                    else project_sections(project))
     number_maps = _section_number_maps(project, sections)
     label_by_key: dict[str, str] = {}
+    # Подписи источников: сначала новая модель, потом старые версии.
+    for entry in citation_entries(project):
+        key = str(entry.get("dockey") or "").strip()
+        if key:
+            label_by_key.setdefault(key, _source_label(entry))
     for version in project.versions or []:
         for entry in version.citation_map or []:
             key = str(entry.get("dockey") or "").strip()

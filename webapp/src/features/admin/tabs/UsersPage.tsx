@@ -4,12 +4,14 @@
  */
 
 import React, { useState } from 'react'
-import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Badge, Modal } from '@mantine/core'
+import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Modal } from '@mantine/core'
 import { useForm } from '@mantine/form'
+import type { FormErrors, UseFormReturnType } from '@mantine/form'
 import { z } from 'zod'
 import { notifications } from '@mantine/notifications'
 import { useUsersPage } from './hooks/useUsersPage'
 import { SimpleTable, DangerZone } from '../components'
+import type { SimpleColumn } from '../components/SimpleTable'
 import { EmptyState } from '../../../components/EmptyState'
 import { roleOptions } from '../../../lib/roles'
 import { useAuth } from '../../auth/authStore'
@@ -34,31 +36,52 @@ const createUserSchema = z.object({
   role: z.string().min(1, 'Выберите роль'),
 })
 
-function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: string; password: string; role: string; full_name?: string }) => void }) {
+interface CreateUserState {
+  isPending: boolean
+  error: unknown
+}
+
+/** Форма создания пользователя с zod-валидацией. */
+type CreateUserForm = UseFormReturnType<
+  CreateUserFormValues,
+  CreateUserFormValues,
+  (values: CreateUserFormValues) => FormErrors
+>
+
+function CreateUserForm({ handleCreate, createState }: {
+  handleCreate: (fields: { username: string; password: string; role: string; full_name?: string }) => Promise<unknown>
+  createState: CreateUserState
+}) {
   const [createOpen, setCreateOpen] = useState(false)
 
-  const form = useForm<CreateUserFormValues>({
+  const form = useForm<CreateUserFormValues, CreateUserFormValues, FormErrors>({
     initialValues: { username: '', password: '', fullName: '', role: 'researcher' },
-    validate: (values) => {
+    validate: (values): FormErrors => {
       const parsed = createUserSchema.safeParse(values)
       if (!parsed.success) {
-        const errors: Partial<CreateUserFormValues> = {}
+        const errors: FormErrors = {}
         for (const [key, err] of Object.entries(parsed.error.flatten().fieldErrors)) {
-          errors[key as keyof CreateUserFormValues] = err[0] as string
+          errors[key] = err[0] as string
         }
         return errors
       }
       return {}
     },
-  }) as any
+  })
 
-  const handleSubmit = (values: CreateUserFormValues) => {
-    handleCreate({
-      username: values.username.trim(),
-      password: values.password,
-      role: values.role,
-      full_name: values.fullName?.trim() || undefined,
-    })
+  const handleSubmit = async (values: CreateUserFormValues) => {
+    try {
+      await handleCreate({
+        username: values.username.trim(),
+        password: values.password,
+        role: values.role,
+        full_name: values.fullName?.trim() || undefined,
+      })
+    } catch {
+      // Ошибка — рядом с полями (createState.error); окно остаётся открытым,
+      // чтобы админ поправил данные и повторил.
+      return
+    }
     notifications.show({ title: 'Пользователь создан.', message: '', color: 'green' })
     setCreateOpen(false)
     form.reset()
@@ -81,7 +104,7 @@ function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: s
           <ModalForm
             form={form}
             handleSubmit={handleSubmit}
-            onClose={() => setCreateOpen(false)}
+            createState={createState}
           />
         </Modal>
       )}
@@ -89,10 +112,19 @@ function CreateUserForm({ handleCreate }: { handleCreate: (fields: { username: s
   )
 }
 
-function ModalForm({ form, handleSubmit, onClose }: { form: ReturnType<typeof useForm<CreateUserFormValues>>; handleSubmit: (values: CreateUserFormValues) => void; onClose: () => void }) {
+function ModalForm({ form, handleSubmit, createState }: {
+  form: CreateUserForm
+  handleSubmit: (values: CreateUserFormValues) => void | Promise<void>
+  createState: CreateUserState
+}) {
   return (
     <form onSubmit={form.onSubmit(handleSubmit)}>
       <Stack gap="sm">
+        {createState.error && (
+          <Alert color="red" role="alert">
+            {errorText(createState.error, 'Не удалось создать пользователя')}
+          </Alert>
+        )}
         <Group align="flex-end" wrap="nowrap" gap="xs">
           <TextInput
             label="Логин"
@@ -122,16 +154,43 @@ function ModalForm({ form, handleSubmit, onClose }: { form: ReturnType<typeof us
             allowDeselect={false}
             w={150}
           />
-          <Button type="submit" disabled={!form.isValid}>Создать</Button>
+          {/* form.isValid в Mantine v9 — функция: без скобок кнопка
+              никогда не блокировалась. */}
+          <Button type="submit" disabled={!form.isValid() || createState.isPending}>Создать</Button>
         </Group>
       </Stack>
     </form>
   )
 }
 
+/** Строка таблицы пользователей: правка полей и удаление. */
+interface UserRowData {
+  id: string
+  username: string
+  full_name?: string | null
+  role: string
+  is_active: boolean
+}
+
+interface UserFields {
+  role?: string
+  username?: string
+  full_name?: string
+  password?: string
+  is_active?: boolean
+}
+
 // --- UserRow с редактированием и удалением (вынесен наружу) ---
-function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: any; handleUpdate: (id: string, fields: any) => void; handleDelete: (id: string) => void; currentUserId: string }) {
+function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
+  user: UserRowData
+  handleUpdate: (id: string, fields: UserFields) => void
+  handleDelete: (id: string) => Promise<unknown>
+  currentUserId: string
+}) {
   const [editUsername, setEditUsername] = React.useState(user.username)
+  // Ошибка удаления (409 «нельзя удалить себя») показывается в окне
+  // подтверждения — раньше она просто терялась.
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [editFullName, setEditFullName] = React.useState(user.full_name || '')
   const [editRole, setEditRole] = React.useState(user.role)
   const [editPassword, setEditPassword] = React.useState('')
@@ -150,7 +209,7 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: an
 
   const handleSave = () => {
     if (!validateUsername(editUsername)) return
-    const fields: any = { role: editRole }
+    const fields: UserFields = { role: editRole }
     if (editUsername !== user.username) fields.username = editUsername
     if (editFullName !== user.full_name) fields.full_name = editFullName
     if (editPassword) fields.password = editPassword
@@ -214,7 +273,10 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: an
         size="xs"
         data={roleOptions(['researcher', 'admin'])}
         value={editRole}
-        onChange={(v) => { v && setEditRole(v); handleChange() }}
+        onChange={(v) => {
+          if (v) setEditRole(v)
+          handleChange()
+        }}
         allowDeselect={false}
         style={{ width: 140 }}
         aria-label={`Роль: ${user.username}`}
@@ -276,7 +338,16 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: { user: an
         <DangerZone
           confirmText={user.username}
           label="Удалить"
-          onConfirm={() => handleDelete(user.id)}
+          error={deleteError}
+          onConfirm={async () => {
+            setDeleteError(null)
+            try {
+              await handleDelete(user.id)
+            } catch (cause) {
+              setDeleteError(errorText(cause, 'Не удалось удалить пользователя'))
+              throw cause
+            }
+          }}
           warning={
             'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, '
             + 'сообщения, документы и проекты. Восстановление возможно только из резервной копии. '
@@ -306,6 +377,7 @@ export default function UsersPage() {
     handleCreate,
     handleUpdate,
     handleDelete,
+    createUser,
   } = useUsersPage()
 
   // Направление сортировки по ФИО (только клиентское состояние)
@@ -313,10 +385,9 @@ export default function UsersPage() {
     null
   )
 
-  const handleSortByFullName = () => {
-    const nextDir = fullNameSortDir === 'asc' ? 'desc' : 'asc'
-    setFullNameSortDir(nextDir)
-  }
+  const handleSortByFullName = React.useCallback(() => {
+    setFullNameSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'))
+  }, [])
 
   // Сортировка по ФИО на клиенте
   const sortedUsers = React.useMemo(() => {
@@ -332,8 +403,7 @@ export default function UsersPage() {
   }, [data, fullNameSortDir])
 
   // Все хуки и useMemo ДО early return
-  // @ts-ignore
-  const customColumns = React.useMemo(() => [], [])
+  const customColumns = React.useMemo<SimpleColumn<UserRowData>[]>(() => [], [])
 
   const actionsHeaders = React.useMemo(() => [
     { label: 'Логин', width: 160 },
@@ -347,7 +417,7 @@ export default function UsersPage() {
     { label: 'Пароль', width: 150 },
     { label: 'Активен', width: 40 },
     { label: 'Действия', width: 220 },
-  ], [fullNameSortDir, handleSortByFullName, setSorting])
+  ], [fullNameSortDir, handleSortByFullName])
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (isError) return <Alert color="red">{errorText(error, 'Ошибка загрузки')}</Alert>
@@ -355,7 +425,10 @@ export default function UsersPage() {
   return (
     <Stack gap="md">
       <Title order={3}>Пользователи</Title>
-      <CreateUserForm handleCreate={handleCreate} />
+      <CreateUserForm
+        handleCreate={handleCreate}
+        createState={{ isPending: createUser.isPending, error: createUser.error }}
+      />
       {data.length === 0 && !isLoading ? (
         <EmptyState
           title="Пользователей нет"
@@ -365,8 +438,8 @@ export default function UsersPage() {
         />
       ) : (
         <SimpleTable
-          columns={customColumns as any}
-          data={sortedUsers}
+          columns={customColumns}
+          data={sortedUsers as UserRowData[]}
           pagination={pagination}
           onPaginationChange={setPagination}
           sorting={sorting}

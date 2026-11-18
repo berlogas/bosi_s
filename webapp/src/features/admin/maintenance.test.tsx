@@ -83,20 +83,20 @@ function routes(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function renderAdmin() {
+function renderAdmin(path = '/admin') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   })
   return render(
-    <AppProviders initialPath="/admin" queryClient={queryClient}>
+    <AppProviders initialPath={path} queryClient={queryClient}>
       <AppRoutes />
     </AppProviders>,
   )
 }
 
+/** Вкладка «Обслуживание» открывается адресом: табов в админке больше нет. */
 async function openServiceTab() {
-  renderAdmin()
-  await userEvent.click(await screen.findByRole('tab', { name: 'Обслуживание' }))
+  renderAdmin('/admin/maintenance')
 }
 
 beforeEach(() => sessionStorage.clear())
@@ -130,14 +130,13 @@ describe('раздел «Обслуживание»', () => {
     mockApi(routes())
     await openServiceTab()
 
-    expect(screen.getByText(/2.3 МБ/)).toBeInTheDocument()
-    expect(screen.getByText(/2.3 МБ/)).toBeInTheDocument()
-    expect(screen.getByText(/последние 14/)).toBeInTheDocument()
-    expect(screen.getByText('boasi-20261008-120000.tar.gz')).toBeInTheDocument()
-    expect(screen.getByText('374.6 КБ')).toBeInTheDocument()
+    expect(await screen.findByText(/2.3 МБ/)).toBeInTheDocument()
+    expect(await screen.findByText(/последние 14/)).toBeInTheDocument()
+    expect(await screen.findByText('boasi-20261008-120000.tar.gz')).toBeInTheDocument()
+    expect(await screen.findByText('374.6 КБ')).toBeInTheDocument()
   })
 
-  it('копия создаётся без ввода фразы — обычное подтверждение', async () => {
+  it('копия создаётся после подтверждения — без ввода фразы', async () => {
     loginAs(TEST_ADMIN)
     const calls: { url: string; init: RequestInit }[] = []
     mockApi(
@@ -156,25 +155,57 @@ describe('раздел «Обслуживание»', () => {
     )
     await openServiceTab()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
-
-    // никаких полей для ввода фразы — только кнопки
+    // Снятие копии не разрушает данные — фразы подтверждения не требуется.
     expect(screen.queryByTestId('backup-confirm-input')).toBeNull()
 
-    const submit = await screen.findByRole('button', { name: 'Создать' })
-    expect(submit).toBeEnabled()
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
 
-    await userEvent.click(submit)
+    // До подтверждения запрос на сервер не уходит.
+    expect(calls).toHaveLength(0)
+    expect(await screen.findByText('Создать резервную копию?')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Да, создать копию' }))
     await waitFor(() => expect(calls).toHaveLength(1))
   })
 
-  it('после создания окно закрывается и список обновляется', async () => {
+  it('отмена в окне подтверждения оставляет базу нетронутой', async () => {
     loginAs(TEST_ADMIN)
     const calls: { url: string; init: RequestInit }[] = []
     mockApi(
       routes({
         'POST /api/admin/backup': (url: string, init: RequestInit) => {
           calls.push({ url, init })
+          return Promise.resolve(json({ entry: BACKUP, deleted_old: [] }))
+        },
+      }),
+    )
+    await openServiceTab()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Отмена' }))
+
+    expect(calls).toHaveLength(0)
+    expect(screen.queryByText('Создать резервную копию?')).toBeNull()
+  })
+
+  it('после создания список обновляется', async () => {
+    loginAs(TEST_ADMIN)
+    const calls: { url: string; init: RequestInit }[] = []
+    let created = false
+    mockApi(
+      routes({
+        'GET /api/admin/backup': () =>
+          Promise.resolve(
+            json({
+              backups: created
+                ? [{ ...BACKUP, name: 'boasi-20261008-130000.tar.gz' }, BACKUP]
+                : [BACKUP],
+              plan: PLAN,
+            }),
+          ),
+        'POST /api/admin/backup': (url: string, init: RequestInit) => {
+          calls.push({ url, init })
+          created = true
           return Promise.resolve(
             json({
               entry: {
@@ -191,11 +222,16 @@ describe('раздел «Обслуживание»', () => {
     await openServiceTab()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Да, создать копию' }),
+    )
 
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ keep: undefined })
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // список копий перечитывается сам
+    await waitFor(() =>
+      expect(screen.queryByText('boasi-20261008-130000.tar.gz')).not.toBeNull(),
+    )
   })
 
   it('восстановление предлагает только скрипт', async () => {
@@ -227,6 +263,12 @@ describe('раздел «Обслуживание»', () => {
     const row = (await screen.findByText('boasi-20261008-120000.tar.gz')).closest('tr')
     const button = within(row as HTMLElement).getByRole('button', { name: 'Удалить' })
     await userEvent.click(button)
+    // Подтверждение удаления — модалка DangerZone с вводом имени копии.
+    await userEvent.type(
+      await screen.findByLabelText('Введите "boasi-20261008-120000.tar.gz"'),
+      'boasi-20261008-120000.tar.gz',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Подтвердить' }))
 
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]).toContain('/api/admin/backup/boasi-20261008-120000.tar.gz')
@@ -241,8 +283,7 @@ describe('раздел «Обслуживание»', () => {
     )
     await openServiceTab()
 
-    expect(screen.getByRole('button', { name: 'Создать копию…' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Создать копию…' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Создать копию…' })).toBeDisabled()
   })
 
   it('показывает ошибку создания копии', async () => {
@@ -256,7 +297,9 @@ describe('раздел «Обслуживание»', () => {
     await openServiceTab()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Да, создать копию' }),
+    )
 
     expect(await screen.findByText('Не хватает места')).toBeInTheDocument()
   })
@@ -267,9 +310,11 @@ describe('раздел «Обслуживание»', () => {
     await openServiceTab()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Сбросить…' }))
-    const input = await screen.findByTestId('reset-confirm-input')
+    // Фраза подтверждения вводится в модалке DangerZone.
+    const input = await screen.findByLabelText('Введите "СБРОС ДАННЫХ"')
+    expect(screen.getByRole('button', { name: 'Подтвердить' })).toBeDisabled()
     await userEvent.type(input, 'СБРОС ДАННЫХ')
-    expect(screen.getByRole('button', { name: 'Выполнить сброс' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Подтвердить' })).toBeEnabled()
   })
 
   it('не-админ не видит раздел', async () => {
@@ -330,10 +375,10 @@ describe('раздел «Обслуживание»', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Сбросить…' }))
     await userEvent.type(
-      await screen.findByTestId('reset-confirm-input'),
+      await screen.findByLabelText('Введите "СБРОС ДАННЫХ"'),
       'СБРОС ДАННЫХ',
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Выполнить сброс' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Подтвердить' }))
 
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]?.url).toBe('/api/admin/reset')
@@ -415,17 +460,18 @@ describe('раздел «Обслуживание»', () => {
 
     const queryClient = createQueryClient()
     render(
-      <AppProviders initialPath="/admin" queryClient={queryClient}>
+      <AppProviders initialPath="/admin/maintenance" queryClient={queryClient}>
         <AppRoutes />
       </AppProviders>,
     )
-    await userEvent.click(await screen.findByRole('tab', { name: 'Обслуживание' }))
 
     expect(await screen.findByText(BACKUP.name)).toBeInTheDocument()
     expect(screen.queryByText(NEW.name)).toBeNull()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Создать копию…' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Да, создать копию' }),
+    )
 
     await waitFor(() => expect(screen.getByText(NEW.name)).toBeInTheDocument())
     expect(gets).toBeGreaterThan(1)

@@ -417,6 +417,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/inbox/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Inbox Clear Journal
+         * @description Очистить весь журнал добавления (все прогоны и строки файлов).
+         *
+         *     Файлы в библиотеке и в папке inbox не трогаются — только записи в БД.
+         */
+        delete: operations["inbox_clear_journal_api_admin_inbox_journal_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions": {
         parameters: {
             query?: never;
@@ -614,7 +636,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload */
+        /**
+         * Upload
+         * @description Загрузка файлов в глобальную базу.
+         *
+         *     `replace` — заменить прежние версии документов с теми же именами: без
+         *     этого изменённый файл лёг бы вторым документом, а старая версия осталась
+         *     бы в индексе (дедуп PaperQA идёт по содержимому, а не по имени).
+         */
         post: operations["upload_api_admin_documents_upload_post"];
         delete?: never;
         options?: never;
@@ -636,6 +665,30 @@ export interface paths {
          * @description Массовое добавление: `{"paths": [...], "tags": [...]}` (лимит 200 файлов).
          */
         post: operations["bulk_add_api_admin_documents_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/documents/bulk-upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Upload
+         * @description Прямая загрузка файлов через multipart/form-data.
+         *
+         *     Принимает офисные форматы (.docx, .xlsx, .pptx), PDF, TXT, MD и другие
+         *     из `allowed_extensions`. Файлы пишутся во временное хранилище и
+         *     индексируются через `add_uploads`.
+         */
+        post: operations["bulk_upload_api_admin_documents_bulk_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -814,8 +867,44 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload Documents */
+        /**
+         * Upload Documents
+         * @description Загрузка файлов в сессию.
+         *
+         *     `replace` — заменить прежние версии документов с теми же именами: без
+         *     этого изменённый файл лёг бы вторым документом, а старая версия осталась
+         *     бы в индексе (дедуп PaperQA идёт по содержимому, а не по имени).
+         */
         post: operations["upload_documents_api_sessions__session_id__documents_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/documents/upload-async": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Documents Async
+         * @description Фоновая индексация загруженных файлов.
+         *
+         *     Индексация PDF на CPU занимает секунды-минуты: держать открытым
+         *     HTTP-запрос нельзя — интерфейс «висит спиннером» и не может отменить
+         *     операцию (ТЗ, приёмка Фазы 10: «индексация запускается асинхронно,
+         *     progress visible в UI»). Поэтому отвечаем сразу `task_id`, а прогресс и
+         *     отмена идут через `/api/tasks/{id}`.
+         *
+         *     Файлы сохраняются на диск прямо в запросе: объект загрузки FastAPI
+         *     закрывается вместе с ответом, а задача живёт дольше.
+         */
+        post: operations["upload_documents_async_api_sessions__session_id__documents_upload_async_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -833,7 +922,11 @@ export interface paths {
         put?: never;
         /**
          * Add Document Path
-         * @description Добавление файла с диска: `{"path": ..., "category": ..., "tags": [...]}`.
+         * @description Добавление файла с диска.
+         *
+         *     Тело: `{"path": ..., "category": ..., "tags": [...], "force_reindex": bool}`.
+         *     `force_reindex` — переиндексировать документ, даже если он уже в индексе
+         *     (нужно после смены настроек: чанки со старым отпечатком устарели).
          */
         post: operations["add_document_path_api_sessions__session_id__documents_path_post"];
         delete?: never;
@@ -945,6 +1038,37 @@ export interface paths {
         put?: never;
         /** Chat Query */
         post: operations["chat_query_api_chat_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat Stream
+         * @description Стриминг ответа по токенам через SSE.
+         *
+         *         Отправляет текст ответа фрагментами по мере генерации LLM.
+         *         Формат: `data: {"token": "..."}
+         *
+         *     `, в конце `data: [DONE]
+         *
+         *     `.
+         *
+         *         Любая ошибка (включая до первого байта потока) возвращается как
+         *         SSE-сообщение `data: {"error": ...}`, а не как HTTP 500, чтобы браузер
+         *         мог прочитать её через EventSource / fetch + читатель потока.
+         */
+        post: operations["chat_stream_api_chat_stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1185,6 +1309,360 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/projects/{project_id}/style-guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Project Style Guide
+         * @description Привязать документ «Правила оформления» к проекту как стиль оформления.
+         */
+        post: operations["set_project_style_guide_api_sessions__session_id__projects__project_id__style_guide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/sections/{name}/translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Translate Section
+         * @description Перевести раздел статьи на целевой язык через LLM.
+         */
+        post: operations["translate_section_api_sessions__session_id__projects__project_id__sections__name__translate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Section Plans
+         * @description Список планов разделов (новая система SectionPlan).
+         *
+         *     Вместе с планом отдаём текущую версию **и её текст** — иначе
+         *     интерфейс после перезагрузки страницы не может показать сохранённый
+         *     текст раздела.
+         */
+        get: operations["list_section_plans_api_sessions__session_id__projects__project_id__section_plans_get"];
+        put?: never;
+        /**
+         * Create Section Plan
+         * @description Создать новый план раздела.
+         */
+        post: operations["create_section_plan_api_sessions__session_id__projects__project_id__section_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Section Content
+         * @description Сохранить текст раздела, набранный в редакторе.
+         *
+         *     Правка попадает в новую модель (новая версия раздела) и зеркалится
+         *     в старую (`project.sections`) — её читают прогресс проекта и выгрузка.
+         */
+        put: operations["save_section_content_api_sessions__session_id__projects__project_id__section_plans__plan_id__content_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Section Versions
+         * @description Все версии разделов проекта — реальная история генераций.
+         *
+         *     Старая модель (`project_versions`) пишется только старым генератором;
+         *     генерация через SectionAgent кладёт версии в `section_versions`,
+         *     поэтому отдельная выдача нужна для панели «История».
+         */
+        get: operations["list_section_versions_api_sessions__session_id__projects__project_id__section_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Section Plan
+         * @description Удалить план раздела.
+         */
+        delete: operations["delete_section_plan_api_sessions__session_id__projects__project_id__section_plans__plan_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Section Plan
+         * @description Обновить план раздела.
+         */
+        patch: operations["update_section_plan_api_sessions__session_id__projects__project_id__section_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Sections To Plans
+         * @description Синхронизировать старый JSON project.sections в новые SectionPlan.
+         */
+        post: operations["sync_sections_to_plans_api_sessions__session_id__projects__project_id__section_plans_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/generate-v2": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Section V2
+         * @description Новая генерация раздела через SectionAgent (возвращает SectionVersion).
+         *
+         *     В теле — `kind`: вид генерации (обычный раздел, обзор литературы,
+         *     сверка с данными, обсуждение, пробелы, отчёт, разбор черновика).
+         */
+        post: operations["generate_section_v2_api_sessions__session_id__projects__project_id__generate_v2_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}/translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Translate Section V2
+         * @description Перевести раздел на целевой язык (новая система).
+         */
+        post: operations["translate_section_v2_api_sessions__session_id__projects__project_id__section_plans__plan_id__translate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Section History
+         * @description История версий раздела: дерево + плоский список, с текстом версий.
+         */
+        get: operations["get_section_history_api_sessions__session_id__projects__project_id__section_plans__plan_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-versions/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Section Versions
+         * @description Сравнить две версии раздела (семантический diff).
+         */
+        get: operations["diff_section_versions_api_sessions__session_id__projects__project_id__section_versions_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollback Section
+         * @description Откатить раздел к указанной версии.
+         */
+        post: operations["rollback_section_api_sessions__session_id__projects__project_id__section_plans__plan_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Section
+         * @description Одобрить версию раздела.
+         */
+        post: operations["approve_section_api_sessions__session_id__projects__project_id__section_plans__plan_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/language-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Language Policy
+         * @description Получить языковую политику проекта.
+         */
+        get: operations["get_language_policy_api_sessions__session_id__projects__project_id__language_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Language Policy
+         * @description Обновить языковую политику проекта.
+         */
+        patch: operations["update_language_policy_api_sessions__session_id__projects__project_id__language_policy_patch"];
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/glossary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Glossary
+         * @description Получить глоссарий терминов проекта.
+         */
+        get: operations["get_glossary_api_sessions__session_id__projects__project_id__glossary_get"];
+        put?: never;
+        /**
+         * Add Glossary Entry
+         * @description Добавить термин в глоссарий.
+         */
+        post: operations["add_glossary_entry_api_sessions__session_id__projects__project_id__glossary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/glossary/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Glossary Entry
+         * @description Удалить термин из глоссария.
+         */
+        delete: operations["delete_glossary_entry_api_sessions__session_id__projects__project_id__glossary__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Glossary Entry
+         * @description Обновить термин в глоссарии.
+         */
+        patch: operations["update_glossary_entry_api_sessions__session_id__projects__project_id__glossary__entry_id__patch"];
+        trace?: never;
+    };
     "/api/sessions/{session_id}/projects/{project_id}/documents": {
         parameters: {
             query?: never;
@@ -1268,6 +1746,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/projects/{project_id}/generate-async": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Section Async
+         * @description Фоновая генерация раздела: возвращает task_id, UI опрашивает /api/tasks/{id}.
+         *
+         *     Генерация может занимать минуты, поэтому синхронный POST /generate
+         *     (для скриптов и тестов) дополняется фоновым режимом.
+         */
+        post: operations["generate_section_async_api_sessions__session_id__projects__project_id__generate_async_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/eta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project Generate Eta
+         * @description ETA генерации раздела: среднее время по типу документа.
+         *
+         *     Возвращает медиану и среднее время (секунд) по уже сгенерированным
+         *     версиям этого проекта, сгруппированное по kind. Если данных ещё нет —
+         *     возвращает оценочный диапазон 120–240 с.
+         */
+        get: operations["project_generate_eta_api_sessions__session_id__projects__project_id__eta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/projects/{project_id}/versions": {
         parameters: {
             query?: never;
@@ -1325,6 +1850,147 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/projects/{project_id}/batch-regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Regenerate Sections
+         * @description Пакетная перегенерация устаревших разделов.
+         *
+         *     Payload:
+         *     - force: bool (default false) — перегенерировать всё принудительно
+         */
+        post: operations["batch_regenerate_sections_api_sessions__session_id__projects__project_id__batch_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/section-plans/{plan_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Section Versions
+         * @description Слить две версии раздела (LLM-ассистированное слияние).
+         *
+         *     Payload:
+         *     - target_version_id: str — базовая версия
+         *     - source_version_id: str — вливаемая версия
+         *     - strategy: str = "llm" — "llm" или "manual"
+         */
+        post: operations["merge_section_versions_api_sessions__session_id__projects__project_id__section_plans__plan_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/terminology-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Terminology Consistency
+         * @description Проверить согласованность терминологии по всем разделам проекта.
+         */
+        get: operations["check_terminology_consistency_api_sessions__session_id__projects__project_id__terminology_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/style-compliance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Style Compliance
+         * @description Проверить соответствие стилю журнала (style guide) для раздела.
+         *
+         *     Payload:
+         *     - section_plan_id: str
+         *     - version_id: str (optional, default: current)
+         */
+        post: operations["check_style_compliance_api_sessions__session_id__projects__project_id__style_compliance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/pre-generation-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pre Generation Check
+         * @description Предварительная проверка перед генерацией раздела (checklist).
+         *
+         *     Payload:
+         *     - section_name: str
+         *     - question: str
+         *     - required_sources: int (optional, default: 3)
+         */
+        post: operations["pre_generation_check_api_sessions__session_id__projects__project_id__pre_generation_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/projects/{project_id}/manuscript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compile Manuscript
+         * @description Собрать полный манускрипт из версий разделов.
+         *
+         *     Query params:
+         *     - language: целевой язык (default: project.language)
+         *     - include_unapproved: включать не одобренные разделы
+         */
+        get: operations["compile_manuscript_api_sessions__session_id__projects__project_id__manuscript_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/projects/{project_id}/export": {
         parameters: {
             query?: never;
@@ -1361,6 +2027,29 @@ export interface paths {
          *     поэтому новая группа появляется без правки кода.
          */
         get: operations["list_journal_styles_api_journal_styles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/journal-styles/{style_key}/suggested-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Suggested Section Plan
+         * @description Получить предложенный план разделов для стиля журнала.
+         *
+         *     Возвращает список разделов на основе шаблонов выбранного стиля.
+         *     Можно использовать для предзаполнения плана разделов проекта.
+         */
+        get: operations["get_suggested_section_plan_api_journal_styles__style_key__suggested_plan_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1420,6 +2109,9 @@ export interface paths {
          *     Браузерный EventSource не умеет задавать HTTP-заголовки, поэтому токен
          *     разрешено передавать в query: `?access_token=...`. Это единственный
          *     маршрут, принимающий токен из query, — заголовок тоже поддерживается.
+         *
+         *     `Last-Event-ID` — seq последнего полученного события. При переподключении
+         *     сервер пришлёт пропущенные события из буфера.
          */
         get: operations["task_events_api_tasks_events_get"];
         put?: never;
@@ -1608,6 +2300,16 @@ export interface components {
             /** Restore Hint */
             restore_hint: string;
         };
+        /** Body_bulk_upload_api_admin_documents_bulk_upload_post */
+        Body_bulk_upload_api_admin_documents_bulk_upload_post: {
+            /** Files */
+            files: string[];
+            /**
+             * Tags
+             * @default
+             */
+            tags: string;
+        };
         /** Body_upload_api_admin_documents_upload_post */
         Body_upload_api_admin_documents_upload_post: {
             /** Files */
@@ -1617,6 +2319,16 @@ export interface components {
              * @default
              */
             tags: string;
+            /**
+             * Force Reindex
+             * @default false
+             */
+            force_reindex: boolean;
+            /**
+             * Replace
+             * @default false
+             */
+            replace: boolean;
         };
         /** Body_upload_documents_api_sessions__session_id__documents_upload_post */
         Body_upload_documents_api_sessions__session_id__documents_upload_post: {
@@ -1629,6 +2341,28 @@ export interface components {
              * @default
              */
             tags: string;
+            /**
+             * Replace
+             * @default false
+             */
+            replace: boolean;
+        };
+        /** Body_upload_documents_async_api_sessions__session_id__documents_upload_async_post */
+        Body_upload_documents_async_api_sessions__session_id__documents_upload_async_post: {
+            /** Files */
+            files: string[];
+            /** @default temp_literature */
+            category: components["schemas"]["DocumentCategory"];
+            /**
+             * Tags
+             * @default
+             */
+            tags: string;
+            /**
+             * Replace
+             * @default false
+             */
+            replace: boolean;
         };
         /** ChatQueryRequest */
         ChatQueryRequest: {
@@ -1713,7 +2447,7 @@ export interface components {
          * DocumentCategory
          * @enum {string}
          */
-        DocumentCategory: "project_draft" | "project_data" | "temp_literature" | "notes" | "supplementary" | "global_knowledge";
+        DocumentCategory: "project_draft" | "project_data" | "temp_literature" | "notes" | "supplementary" | "style_guide" | "global_knowledge";
         /** DocumentLinkIn */
         DocumentLinkIn: {
             /** Project Id */
@@ -1857,6 +2591,8 @@ export interface components {
             template_md?: string | null;
             /** Data Document Ids */
             data_document_ids?: string[] | null;
+            /** Language */
+            language?: string | null;
         };
         /** GenerateResultOut */
         GenerateResultOut: {
@@ -2177,6 +2913,11 @@ export interface components {
             /** Target Journal */
             target_journal?: string | null;
             /**
+             * Language
+             * @default ru
+             */
+            language: string;
+            /**
              * Status
              * @default planning
              */
@@ -2208,12 +2949,24 @@ export interface components {
             title: string;
             /** Target Journal */
             target_journal?: string | null;
+            /** Style Guide Document Id */
+            style_guide_document_id?: string | null;
+            /**
+             * Language
+             * @default ru
+             */
+            language: string;
             /** Status */
             status: string;
             /** Sections */
             sections?: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Order
+             * @default 0
+             */
+            order: number;
             /**
              * Created At
              * Format: date-time
@@ -2231,12 +2984,18 @@ export interface components {
             title?: string | null;
             /** Target Journal */
             target_journal?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Style Guide Document Id */
+            style_guide_document_id?: string | null;
             /** Status */
             status?: string | null;
             /** Sections */
             sections?: {
                 [key: string]: unknown;
             }[] | null;
+            /** Order */
+            order?: number | null;
         };
         /** ProjectSectionOut */
         ProjectSectionOut: {
@@ -2288,6 +3047,17 @@ export interface components {
             word_target?: number | null;
             /** Required */
             required?: boolean | null;
+        };
+        /**
+         * ProjectStyleGuideRequest
+         * @description Привязать/отвязать документ «Правила оформления» журнала к проекту как стиль оформления.
+         */
+        ProjectStyleGuideRequest: {
+            /**
+             * Document Id
+             * @description ID документа «Правила оформления». None — отвязать текущий стиль.
+             */
+            document_id?: string | null;
         };
         /** ProjectVersionOut */
         ProjectVersionOut: {
@@ -2424,7 +3194,141 @@ export interface components {
          * SearchMode
          * @enum {string}
          */
-        SearchMode: "hybrid" | "project_focus" | "session_only" | "global_only";
+        SearchMode: "hybrid" | "project_focus" | "session_only" | "global_only" | "agent";
+        /**
+         * SectionPlanOut
+         * @description План раздела — вместе с текущей версией и её текстом.
+         */
+        SectionPlanOut: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+            /** Kind */
+            kind: string;
+            /** Order */
+            order: number;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Word Target
+             * @default 500
+             */
+            word_target: number;
+            /**
+             * Word Min
+             * @default 0
+             */
+            word_min: number;
+            /**
+             * Word Max
+             * @default 0
+             */
+            word_max: number;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /**
+             * Language
+             * @default ru
+             */
+            language: string;
+            /** Depends On */
+            depends_on?: string[];
+            /** Status */
+            status: string;
+            /** Current Version Id */
+            current_version_id?: string | null;
+            current_version?: components["schemas"]["SectionVersionOut"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * SectionVersionOut
+         * @description Версия раздела — полная сериализация для интерфейса.
+         *
+         *     `content_md` — сам текст раздела. Без него в ответе интерфейс не может
+         *     показать сохранённый текст после перезагрузки страницы: он знает только
+         *     метаданные версии.
+         */
+        SectionVersionOut: {
+            /** Id */
+            id: string;
+            /** Section Plan Id */
+            section_plan_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Session Id */
+            session_id?: string | null;
+            /**
+             * Content Md
+             * @default
+             */
+            content_md: string;
+            /**
+             * Language
+             * @default ru
+             */
+            language: string;
+            /** Source Language */
+            source_language?: string | null;
+            /**
+             * Word Count
+             * @default 0
+             */
+            word_count: number;
+            /** Citation Map */
+            citation_map?: {
+                [key: string]: unknown;
+            }[];
+            /** Generation Params */
+            generation_params?: {
+                [key: string]: unknown;
+            };
+            /** Seconds */
+            seconds?: number | null;
+            /** Cost Usd */
+            cost_usd?: number | null;
+            /** Token Counts */
+            token_counts?: {
+                [key: string]: unknown;
+            };
+            /** Quality Report */
+            quality_report?: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Parent Version Id */
+            parent_version_id?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** SessionCreate */
         SessionCreate: {
             /** Title */
@@ -2647,6 +3551,43 @@ export interface components {
             /** Expires In */
             expires_in: number;
         };
+        /**
+         * TranslateSectionRequest
+         * @description Параметры перевода раздела статьи на другой язык.
+         */
+        TranslateSectionRequest: {
+            /**
+             * Target Language
+             * @description Код целевого языка (например, 'en', 'ru', 'de', 'fr')
+             */
+            target_language: string;
+            /**
+             * Source Language
+             * @description Код исходного языка. Если не задан — берется из ANSWER_LANGUAGE или 'ru'
+             */
+            source_language?: string | null;
+        };
+        /**
+         * TranslateSectionResultOut
+         * @description Результат перевода раздела.
+         */
+        TranslateSectionResultOut: {
+            /** Name */
+            name: string;
+            /** Target Language */
+            target_language: string;
+            /** Source Language */
+            source_language: string | null;
+            /** Content Md */
+            content_md: string;
+            /** Words */
+            words: number;
+            /**
+             * Written
+             * @default true
+             */
+            written: boolean;
+        };
         /** UserOut */
         UserOut: {
             /** Id */
@@ -2705,6 +3646,29 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * VersionNodeOut
+         * @description Узел дерева версий: сама версия и её потомки.
+         */
+        VersionNodeOut: {
+            version: components["schemas"]["SectionVersionOut"];
+            /** Children */
+            children?: components["schemas"]["VersionNodeOut"][];
+        };
+        /**
+         * VersionTreeOut
+         * @description Дерево версий раздела + плоский список всех версий.
+         */
+        VersionTreeOut: {
+            /** Section Plan Id */
+            section_plan_id: string;
+            /** Section Name */
+            section_name: string;
+            /** Roots */
+            roots?: components["schemas"]["VersionNodeOut"][];
+            /** All Versions */
+            all_versions?: components["schemas"]["SectionVersionOut"][];
         };
     };
     responses: never;
@@ -3417,6 +4381,28 @@ export interface operations {
             };
         };
     };
+    inbox_clear_journal_api_admin_inbox_journal_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
     list_sessions_api_sessions_get: {
         parameters: {
             query?: never;
@@ -3889,6 +4875,39 @@ export interface operations {
             };
         };
     };
+    bulk_upload_api_admin_documents_bulk_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_bulk_upload_api_admin_documents_bulk_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentBatchResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     bulk_async_api_admin_documents_bulk_async_post: {
         parameters: {
             query?: never;
@@ -4222,6 +5241,43 @@ export interface operations {
             };
         };
     };
+    upload_documents_async_api_sessions__session_id__documents_upload_async_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_documents_async_api_sessions__session_id__documents_upload_async_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     add_document_path_api_sessions__session_id__documents_path_post: {
         parameters: {
             query?: never;
@@ -4475,6 +5531,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatQueryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_stream_api_chat_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -4995,6 +6084,783 @@ export interface operations {
             };
         };
     };
+    set_project_style_guide_api_sessions__session_id__projects__project_id__style_guide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectStyleGuideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    translate_section_api_sessions__session_id__projects__project_id__sections__name__translate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslateSectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslateSectionResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_section_plans_api_sessions__session_id__projects__project_id__section_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionPlanOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_section_plan_api_sessions__session_id__projects__project_id__section_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_section_content_api_sessions__session_id__projects__project_id__section_plans__plan_id__content_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionVersionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_section_versions_api_sessions__session_id__projects__project_id__section_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionVersionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_section_plan_api_sessions__session_id__projects__project_id__section_plans__plan_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_section_plan_api_sessions__session_id__projects__project_id__section_plans__plan_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_sections_to_plans_api_sessions__session_id__projects__project_id__section_plans_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_section_v2_api_sessions__session_id__projects__project_id__generate_v2_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    translate_section_v2_api_sessions__session_id__projects__project_id__section_plans__plan_id__translate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_section_history_api_sessions__session_id__projects__project_id__section_plans__plan_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionTreeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diff_section_versions_api_sessions__session_id__projects__project_id__section_versions_diff_get: {
+        parameters: {
+            query: {
+                from_version: string;
+                to_version: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_section_api_sessions__session_id__projects__project_id__section_plans__plan_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_section_api_sessions__session_id__projects__project_id__section_plans__plan_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_language_policy_api_sessions__session_id__projects__project_id__language_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_language_policy_api_sessions__session_id__projects__project_id__language_policy_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_glossary_api_sessions__session_id__projects__project_id__glossary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_glossary_entry_api_sessions__session_id__projects__project_id__glossary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_glossary_entry_api_sessions__session_id__projects__project_id__glossary__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_glossary_entry_api_sessions__session_id__projects__project_id__glossary__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_project_documents_api_sessions__session_id__projects__project_id__documents_get: {
         parameters: {
             query?: never;
@@ -5164,6 +7030,78 @@ export interface operations {
             };
         };
     };
+    generate_section_async_api_sessions__session_id__projects__project_id__generate_async_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_generate_eta_api_sessions__session_id__projects__project_id__eta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_versions_api_sessions__session_id__projects__project_id__versions_get: {
         parameters: {
             query?: never;
@@ -5267,6 +7205,238 @@ export interface operations {
             };
         };
     };
+    batch_regenerate_sections_api_sessions__session_id__projects__project_id__batch_regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_section_versions_api_sessions__session_id__projects__project_id__section_plans__plan_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_terminology_consistency_api_sessions__session_id__projects__project_id__terminology_check_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_style_compliance_api_sessions__session_id__projects__project_id__style_compliance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pre_generation_check_api_sessions__session_id__projects__project_id__pre_generation_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compile_manuscript_api_sessions__session_id__projects__project_id__manuscript_get: {
+        parameters: {
+            query?: {
+                language?: string | null;
+                include_unapproved?: boolean;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_project_api_sessions__session_id__projects__project_id__export_get: {
         parameters: {
             query?: {
@@ -5318,6 +7488,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JournalStyleOut"][];
+                };
+            };
+        };
+    };
+    get_suggested_section_plan_api_journal_styles__style_key__suggested_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                style_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

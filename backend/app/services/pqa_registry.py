@@ -55,6 +55,18 @@ class ServiceRegistry:
         self.store = store or SqliteChunkStore()
         self._services: dict[str, PaperQA2Service] = {}
         self._meta_lock = asyncio.Lock()
+        # Последний отчёт о цитировании (CitationReport.to_dict()) —
+        # для эндпоинта GET /api/citation-report.
+        self._last_citation_report: dict[str, Any] | None = None
+
+    # ------------------------------------------------------------- цитирование
+    def set_citation_report(self, report: dict[str, Any]) -> None:
+        """Сохранить последний CitationReport (из stats ответа чата)."""
+        self._last_citation_report = report
+
+    def get_citation_report(self) -> dict[str, Any] | None:
+        """Вернуть последний CitationReport или None, если ещё не было ответов."""
+        return self._last_citation_report
 
     def get(self, collection: str = GLOBAL_COLLECTION) -> PaperQA2Service:
         # Ленивый импорт разрывает цикл paperqa_service <-> pqa_registry.
@@ -74,10 +86,20 @@ class ServiceRegistry:
     def session_service(self, session_id: str) -> PaperQA2Service:
         return self.get(session_collection(session_id))
 
-    async def restore_all(self) -> dict[str, int]:
-        result: dict[str, int] = {}
+    def drop(self, collection: str) -> None:
+        """Забыть сервис коллекции (освободить память).
+
+        Нужен при удалении сессии: её `Docs` держит чанки в памяти, а
+        `persist_global()` при остановке приложения записал бы их обратно в
+        хранилище — вместе с только что удалёнными.
+        """
+        self._services.pop(normalize_collection(collection), None)
+
+    async def restore_all(self) -> dict[str, dict[str, int]]:
+        result: dict[str, dict[str, int]] = {}
         for key, service in list(self._services.items()):
-            result[key] = await service.restore_state()
+            restored, stale = await service.restore_state()
+            result[key] = {"restored": restored, "stale": stale}
         return result
 
     async def persist_global(self) -> int:

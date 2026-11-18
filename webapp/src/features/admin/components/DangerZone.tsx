@@ -3,7 +3,7 @@
  * Кнопка disabled до ввода точной фразы подтверждения.
  */
 
-import { useState } from 'react'
+import { cloneElement, useState } from 'react'
 import { Modal, TextInput, Button, Group, Alert, Stack } from '@mantine/core'
 
 export interface DangerZoneProps {
@@ -11,8 +11,9 @@ export interface DangerZoneProps {
   label?: string
   /** Текст, который нужно ввести для подтверждения */
   confirmText: string
-  /** Callback при подтверждении */
-  onConfirm: () => void
+  /** Callback при подтверждении. Промис, который отклоняется при ошибке,
+   *  оставляет окно открытым. */
+  onConfirm: () => void | Promise<void>
   /** Кастомный рендер триггера (если нужна не кнопка) */
   children?: React.ReactNode
   /** Цвет кнопки подтверждения */
@@ -21,6 +22,8 @@ export interface DangerZoneProps {
   warning?: string
   /** Блокирует триггер и открытие модалки (например, нельзя удалить себя) */
   disabled?: boolean
+  /** Ошибка действия: показывается в окне, и окно не закрывается. */
+  error?: React.ReactNode
 }
 
 export function DangerZone({
@@ -31,6 +34,7 @@ export function DangerZone({
   confirmColor = 'red',
   warning,
   disabled = false,
+  error,
 }: DangerZoneProps) {
   const [opened, setOpened] = useState(false)
   const [input, setInput] = useState('')
@@ -43,13 +47,31 @@ export function DangerZone({
     setOpened(true)
   }
 
-  const handleConfirm = () => {
-    onConfirm()
+  const handleConfirm = async () => {
+    try {
+      await onConfirm()
+    } catch {
+      // Действие не удалось: окно оставляем открытым, ошибку показывает
+      // вызывающий (свойство error).
+      return
+    }
     setOpened(false)
     setInput('')
   }
 
-  const trigger = children || (
+  // Триггер: либо своя кнопка, либо переданный элемент. В своём элементе
+  // onClick обязателен — иначе модалка не откроется (кнопка «Удалить» в
+  // таблице копий и «Сбросить…» на странице обслуживания).
+  const child = children as React.ReactElement<{
+    onClick?: () => void
+    disabled?: boolean
+  }> | null
+  const trigger = child ? (
+    cloneElement(child, {
+      onClick: handleOpen,
+      disabled: disabled || child.props?.disabled,
+    })
+  ) : (
     <Button
       variant="subtle"
       color={confirmColor}
@@ -69,6 +91,11 @@ export function DangerZone({
             Введите <b>{confirmText}</b> для подтверждения.
           </Alert>
           {warning && <Alert color="yellow">{warning}</Alert>}
+          {error && (
+            <Alert color="red" role="alert">
+              {error}
+            </Alert>
+          )}
           <TextInput
             label={`Введите "${confirmText}"`}
             value={input}

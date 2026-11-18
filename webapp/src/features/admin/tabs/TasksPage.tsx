@@ -12,14 +12,99 @@ import {
   Select,
   Button,
   Alert,
+  Paper,
+  Progress,
 } from '@mantine/core'
+import { useNavigate } from 'react-router-dom'
 
 import { useTasksPage } from './hooks/useTasksPage'
 import { SimpleTable } from '../components'
 import { shortWhen } from '../../../lib/format'
+import type { Task } from '../../../api/types'
 
 function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
+}
+
+/** Документы в результате задачи: у загрузок и индексаций это `result.added`. */
+function taskDocuments(task: Task): { id: string; title: string }[] {
+  const result = task.result
+  if (!result || typeof result !== 'object') return []
+  const added = (result as { added?: unknown }).added
+  if (!Array.isArray(added)) return []
+  return added.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const doc = item as { id?: unknown; title?: unknown }
+    return [{ id: String(doc.id ?? ''), title: String(doc.title ?? doc.id ?? '') }]
+  })
+}
+
+/**
+ * Панель незавершённых задач: прогресс, текущий этап и ошибка.
+ *
+ * В таблице задач прогресса нет — там одна строка на задачу, а админ
+ * смотрит, что задача делается и чем кончилась.
+ */
+function TaskProgressPanel({ task }: { task: Task }) {
+  const progress = task.progress ?? 0
+  return (
+    <Paper withBorder p="xs">
+      <Group justify="space-between" gap="xs" wrap="nowrap">
+        <Text size="sm" fw={500}>{task.title}</Text>
+        <Text size="sm" c="dimmed">{`${progress}%`}</Text>
+      </Group>
+      {task.step && (
+        <Text size="xs" c="dimmed">{task.step}</Text>
+      )}
+      <Progress value={progress} size="sm" mt={4} />
+      {task.error && (
+        <Alert color="red" role="alert" mt="xs">
+          {task.error}
+        </Alert>
+      )}
+    </Paper>
+  )
+}
+
+/** Ссылки «куда смотреть результат»: сессия, проекты и документы задачи. */
+function TaskLinks({ task }: { task: Task }) {
+  const navigate = useNavigate()
+  const documents = taskDocuments(task)
+  if (!task.session_id && documents.length === 0) return null
+  return (
+    <Group gap="xs" wrap="nowrap">
+      {task.session_id && (
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          onClick={() => navigate(`/s/${task.session_id}`)}
+          aria-label={`Открыть сессию задачи ${task.title}`}
+        >
+          Открыть сессию
+        </Button>
+      )}
+      {task.project_id && task.session_id && (
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          onClick={() => navigate(`/s/${task.session_id}/projects`)}
+          aria-label={`Открыть проекты задачи ${task.title}`}
+        >
+          Открыть проекты
+        </Button>
+      )}
+      {documents.length > 0 && task.session_id && (
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          onClick={() => navigate(`/s/${task.session_id}/documents`)}
+          aria-label={`Документы задачи ${task.title}`}
+        >
+          {`Документы (${documents.length})`}
+        </Button>
+      )}
+    </Group>
+  )
 }
 
 export default function TasksPage() {
@@ -48,6 +133,15 @@ export default function TasksPage() {
   } = useTasksPage()
 
   // Все хуки и useMemo должны быть до любых early return
+  // Незавершённые задачи: показываем прогресс и ошибку отдельной панелью.
+  // Панель уважает фильтры — иначе отфильтрованная задача осталась бы на экране.
+  const liveTasks = React.useMemo(
+    () => (data as Task[]).filter(
+      (task) => task.status === 'queued' || task.status === 'running' || task.status === 'error',
+    ),
+    [data],
+  )
+
   const columns = React.useMemo(() => [
     { id: 'id', accessorKey: 'id', header: 'ID' },
     {
@@ -79,7 +173,7 @@ export default function TasksPage() {
     {
       id: 'actions',
       header: 'Действия',
-      cell: (row: { id: string; status: string }) => {
+      cell: (row: { id: string; status: string; title: string; session_id?: string | null; project_id?: string | null; result?: unknown }) => {
         const active = row.status === 'queued' || row.status === 'running'
         return (
           <Group gap="xs" wrap="nowrap">
@@ -93,6 +187,7 @@ export default function TasksPage() {
             >
               Отменить
             </Button>
+            <TaskLinks task={row as Task} />
           </Group>
         )
       },
@@ -177,6 +272,15 @@ export default function TasksPage() {
         <Text c="dimmed" role="status">Задач нет.</Text>
       )}
 
+      {/* Панель незавершённых задач: прогресс и ошибка — их в таблице нет. */}
+      {liveTasks.length > 0 && (
+        <Stack gap="xs">
+          {liveTasks.map((task) => (
+            <TaskProgressPanel key={task.id} task={task} />
+          ))}
+        </Stack>
+      )}
+
       {data.length > 0 && (
         <SimpleTable
           columns={columns as never}
@@ -187,7 +291,6 @@ export default function TasksPage() {
           onSortingChange={setSorting}
           filters={filters}
           onFiltersChange={setFilters}
-          rowActions={() => null}
           isLoading={isLoading}
           emptyMessage="Задач нет."
         />

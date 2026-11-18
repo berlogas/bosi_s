@@ -309,6 +309,49 @@
 
 Метрики производительности системы.
 
+## Эндпоинты PaperQA2
+
+### `POST /api/pqa/reindex`
+
+Полная переиндексация коллекции PaperQA2. Перечитывает документы из хранилища, пересчитывает эмбеддинги (если `drop_embeddings=true`) и сохраняет результат обратно. Требует прав администратора.
+
+**Request:**
+```json
+{
+  "drop_embeddings": true
+}
+```
+
+**Response:**
+```json
+{
+  "documents": 4,
+  "chunks": 4,
+  "seconds": 16.2,
+  "collection": "global",
+  "meta": {"source": "api", ...}
+}
+```
+
+### `GET /api/pqa/citation-report`
+
+Отчёт о цитировании последнего ответа чата. Возвращает `CitationReport` из последнего ответа `/api/chat/query`: какие маркеры починили, какие удалили, предупреждения о сломанных ссылках. Требует прав администратора.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "changed": false,
+  "repaired": [],
+  "dropped": [],
+  "reflowed": [],
+  "cited": [1, 2],
+  "dangling": [],
+  "uncited": false,
+  "warnings": []
+}
+```
+
 ## Авторизация
 
 Большинство эндпоинтов требуют авторизации через `POST /api/auth/login`. Неавторизованный доступ имеет ограниченный набор эндпоинтов:
@@ -316,6 +359,46 @@
 - `GET /api/openapi.json`
 
 Для авторизации передавайте JWT-токен в заголовке `Authorization: Bearer <token>` или используйте форму логина `POST /api/auth/login`.
+
+## Методы PaperQA2Service
+
+Публичный API `PaperQA2Service` (`app/services/paperqa_service.py`) — единственная точка доступа к PaperQA2. Один экземпляр `Docs` на коллекцию (`global` или `session:<uuid>`).
+
+### Добавление документов
+
+| Метод | Описание |
+|-------|----------|
+| `add_file(path, ...)` | Добавить один файл в коллекцию |
+| `add_files(paths, ...)` | Добавить несколько файлов |
+| `add_uploads(files, ...)` | Добавить загруженные через HTTP файлы |
+| `add_url(url, ...)` | Добавить документ по URL |
+
+### Управление документами
+
+| Метод | Описание |
+|-------|----------|
+| `delete_document(dockey\|path\|docname)` | Удалить документ из коллекции |
+| `clear_documents()` | Очистить всю коллекцию |
+| `list_documents()` | Документы в памяти |
+| `documents_on_disk()` | Реестр документов из БД |
+
+### Поиск и ответ
+
+| Метод | Описание |
+|-------|----------|
+| `get_evidence(query, k, ...)` | Найти контекст без генерации |
+| `search(query, limit)` | Поиск фрагментов без ответа |
+| `ask(query, ...)` | Базовый RAG-ответ |
+| `ask_with_evidence(query, k, ...)` | RAG-fusion без повторного поиска |
+| `agent_ask(query, ...)` | Ответ через PaperQA-агент |
+
+### Персистентность
+
+| Метод | Описание |
+|-------|----------|
+| `persist_state()` | Сохранить состояние Docs в хранилище |
+| `restore_state(force)` | Восстановить Docs из хранилища |
+| `rebuild_index(drop_embeddings)` | Полная переиндексация |
 
 ## Модели данных
 

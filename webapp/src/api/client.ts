@@ -12,6 +12,7 @@
 import { ApiError, explainError } from './errors'
 import type { components } from './schema'
 import { tokens } from './tokens'
+
 import type {
   AuditLogEntry,
   CancelTaskResponse,
@@ -33,7 +34,21 @@ import type {
   SessionResume,
   Task,
   TaskListResponse,
+  SectionPlan,
+  SectionVersion,
+  VersionTree,
+  SemanticDiff,
+  TerminologyGlossaryEntry,
+  CompiledManuscript,
+  TerminologyCheckResult,
+  StyleComplianceResult,
+  PreGenerationCheckResult,
+  SectionKind,
+  SectionPlanStatus,
+  BatchRegenerateResult,
 } from './types'
+
+
 
 type UserOut = components['schemas']['UserOut']
 type LoginResponse = components['schemas']['LoginResponse']
@@ -643,11 +658,16 @@ class ApiClient {
   addDocumentByPath(
     sessionId: string,
     path: string,
-    options: { category?: string; tags?: string[] } = {},
+    options: { category?: string; tags?: string[]; forceReindex?: boolean } = {},
   ): Promise<DocumentOut> {
     return this.request(`/api/sessions/${sessionId}/documents/path`, {
       method: 'POST',
-      json: { path, category: options.category, tags: options.tags ?? [] },
+      json: {
+        path,
+        category: options.category,
+        tags: options.tags ?? [],
+        force_reindex: options.forceReindex ?? false,
+      },
       // индексация файла — минуты (upload в api.py тоже щадящий таймаут)
       timeoutMs: 600_000,
     })
@@ -676,6 +696,39 @@ class ApiClient {
     })
   }
 
+  /**
+   * Фоновая загрузка файлов: отвечает сразу `task_id`, индексация идёт в фоне.
+   *
+   * Индексация PDF на CPU занимает минуты: синхронный запрос держал бы
+   * интерфейс на спиннере без возможности отмены. Прогресс и отмена — через
+   * `/api/tasks/{id}`.
+   */
+  uploadDocumentsAsync(
+    sessionId: string,
+    files: File[],
+    options: {
+      category?: string
+      tags?: string
+      /** % отправленных байтов (0–100); включает XHR-транспорт. */
+      onProgress?: (percent: number) => void
+      /** Заменить прежние версии документов с теми же именами. */
+      replace?: boolean
+    } = {},
+  ): Promise<{ task_id: string; total: number }> {
+    const form = new FormData()
+    for (const file of files) form.append('files', file, file.name)
+    form.append('category', options.category ?? 'temp_literature')
+    form.append('tags', options.tags ?? '')
+    form.append('replace', options.replace ? 'true' : 'false')
+    return this.request(`/api/sessions/${sessionId}/documents/upload-async`, {
+      method: 'POST',
+      form,
+      // Ответ приходит сразу: файлы сохранены, индексация пошла в фоне.
+      timeoutMs: 120_000,
+      onProgress: options.onProgress,
+    })
+  }
+
   deleteDocument(sessionId: string, documentId: string): Promise<void> {
     return this.request(`/api/sessions/${sessionId}/documents/${documentId}`, {
       method: 'DELETE',
@@ -692,25 +745,48 @@ class ApiClient {
     return this.request('/api/journal-styles')
   }
 
+  /** Получить предложенный план разделов для стиля журнала */
+  getSuggestedSectionPlan(styleKey: string): Promise<SectionPlan[]> {
+    return this.request(`/api/journal-styles/${encodeURIComponent(styleKey)}/suggested-plan`)
+  }
+
   createProject(
     sessionId: string,
     title: string,
     targetJournal?: string,
+    language?: string,
   ): Promise<ProjectOut> {
     return this.request(`/api/sessions/${sessionId}/projects`, {
       method: 'POST',
-      json: { title, target_journal: targetJournal || null },
+      json: { title, target_journal: targetJournal || null, language: language || 'ru' },
     })
   }
 
   patchProject(
     sessionId: string,
     projectId: string,
-    fields: { status?: string; title?: string; target_journal?: string },
+    fields: {
+      status?: string
+      title?: string
+      target_journal?: string
+      language?: string
+      order?: number
+    },
   ): Promise<ProjectOut> {
     return this.request(`/api/sessions/${sessionId}/projects/${projectId}`, {
       method: 'PATCH',
       json: fields,
+    })
+  }
+
+  setProjectStyleGuide(
+    sessionId: string,
+    projectId: string,
+    documentId: string | null,
+  ): Promise<{ project_id: string; style_guide_document_id: string | null }> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/style-guide`, {
+      method: 'POST',
+      json: { document_id: documentId },
     })
   }
 
@@ -722,19 +798,6 @@ class ApiClient {
 
   sections(sessionId: string, projectId: string): Promise<ProjectSection[]> {
     return this.request(`/api/sessions/${sessionId}/projects/${projectId}/sections`)
-  }
-
-  /** Ручная правка раздела (content_md / notes / word_target). */
-  saveSection(
-    sessionId: string,
-    projectId: string,
-    name: string,
-    fields: { content_md?: string; notes?: string },
-  ): Promise<ProjectSection> {
-    return this.request(
-      `/api/sessions/${sessionId}/projects/${projectId}/sections/${encodeURIComponent(name)}`,
-      { method: 'PUT', json: fields },
-    )
   }
 
   projectDocuments(
@@ -780,6 +843,27 @@ class ApiClient {
     })
   }
 
+  /** Перевести раздел статьи на целевой язык через LLM. */
+  translateSection(
+    sessionId: string,
+    projectId: string,
+    sectionName: string,
+    targetLanguage: string,
+    sourceLanguage?: string,
+  ): Promise<ProjectSection> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/sections/${encodeURIComponent(sectionName)}/translate`,
+      {
+        method: 'POST',
+        json: {
+          target_language: targetLanguage,
+          source_language: sourceLanguage,
+        },
+        timeoutMs: 300_000,
+      },
+    )
+  }
+
   /** Разбор черновика без LLM: быстрый, детерминированный. */
   draftAnalysis(sessionId: string, projectId: string): Promise<DraftAnalysis> {
     return this.request(
@@ -802,6 +886,233 @@ class ApiClient {
       `/api/sessions/${sessionId}/projects/${projectId}/export`,
       { fmt },
     )
+  }
+
+  // ------------------------------------------------------------ SectionPlan / SectionVersion (новая система)
+  /** Список планов разделов */
+  sectionPlans(sessionId: string, projectId: string): Promise<SectionPlan[]> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans`)
+  }
+
+  /** Создать план раздела */
+  createSectionPlan(
+    sessionId: string,
+    projectId: string,
+    payload: { name: string; kind?: SectionKind; order?: number; word_target?: number; notes?: string; language?: string; required?: boolean; depends_on?: string[] },
+  ): Promise<{ id: string; name: string }> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans`, {
+      method: 'POST',
+      json: payload,
+    })
+  }
+
+  /** Обновить план раздела */
+  updateSectionPlan(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+    payload: Partial<{ name: string; kind: SectionKind; order: number; word_target: number; notes: string; language: string; required: boolean; depends_on: string[]; status: SectionPlanStatus }>,
+  ): Promise<{ id: string; status: string }> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}`, {
+      method: 'PATCH',
+      json: payload,
+    })
+  }
+
+  /** Удалить план раздела */
+  deleteSectionPlan(sessionId: string, projectId: string, planId: string): Promise<void> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  /** Синхронизировать старый JSON в новые SectionPlan */
+  syncSectionPlans(sessionId: string, projectId: string): Promise<{ synced: number; plans: Array<{ id: string; name: string }> }> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/sync`, {
+      method: 'POST',
+    })
+  }
+
+  /** Генерация раздела v2 (через SectionAgent) */
+  generateSectionV2(
+    sessionId: string,
+    projectId: string,
+    payload: {
+      section: string
+      question: string
+      notes?: string
+      word_target?: number
+      use_cache?: boolean
+      kind?: string
+    },
+  ): Promise<SectionVersion> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/generate-v2`, {
+      method: 'POST',
+      json: payload,
+      timeoutMs: 600_000,
+    })
+  }
+
+  /** Перевести раздел v2 (новая система) */
+  translateSectionV2(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+    targetLanguage: string,
+    versionId?: string,
+  ): Promise<SectionVersion> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/translate`, {
+      method: 'POST',
+      json: { target_language: targetLanguage, version_id: versionId },
+      timeoutMs: 300_000,
+    })
+  }
+
+  /** История версий раздела (дерево) */
+  sectionHistory(sessionId: string, projectId: string, planId: string): Promise<VersionTree> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/history`)
+  }
+
+  /** Все версии разделов проекта — реальная история генераций. */
+  projectSectionVersions(
+    sessionId: string,
+    projectId: string,
+  ): Promise<SectionVersion[]> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-versions`)
+  }
+
+  /** Сохранить текст раздела, набранный в редакторе. */
+  saveSectionContent(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+    contentMd: string,
+  ): Promise<SectionVersion> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/content`,
+      { method: 'PUT', json: { content_md: contentMd } },
+    )
+  }
+
+  /** Семантический diff двух версий */
+  diffSectionVersions(
+    sessionId: string,
+    projectId: string,
+    fromVersion: string,
+    toVersion: string,
+  ): Promise<SemanticDiff> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-versions/diff`, {
+      query: { from_version: fromVersion, to_version: toVersion },
+    })
+  }
+
+  /** Откатить раздел к версии */
+  rollbackSection(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+    versionId: string,
+  ): Promise<SectionVersion> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/rollback`, {
+      method: 'POST',
+      json: { version_id: versionId },
+    })
+  }
+
+  /** Одобрить версию раздела */
+  approveSection(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+    versionId: string,
+  ): Promise<SectionVersion> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/approve`, {
+      method: 'POST',
+      json: { version_id: versionId },
+    })
+  }
+
+  /** Глоссарий терминов */
+  getGlossary(sessionId: string, projectId: string): Promise<TerminologyGlossaryEntry[]> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/glossary`)
+  }
+
+  /** Добавить термин в глоссарий */
+  addGlossaryEntry(
+    sessionId: string,
+    projectId: string,
+    payload: { term: string; translations?: Record<string, string>; definition?: string },
+  ): Promise<{ id: string; term: string }> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/glossary`, {
+      method: 'POST',
+      json: payload,
+    })
+  }
+
+  /** Удалить термин из глоссария */
+  deleteGlossaryEntry(sessionId: string, projectId: string, entryId: string): Promise<void> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/glossary/${entryId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  /** Пакетная перегенерация устаревших разделов */
+  batchRegenerateSections(
+    sessionId: string,
+    projectId: string,
+    force = false,
+  ): Promise<BatchRegenerateResult> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/batch-regenerate`, {
+      method: 'POST',
+      json: { force },
+      timeoutMs: 1_800_000, // 30 min
+    })
+  }
+
+  /** Сборка полного манускрипта */
+  compileManuscript(
+    sessionId: string,
+    projectId: string,
+    language?: string,
+    includeUnapproved = false,
+  ): Promise<CompiledManuscript> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/manuscript`, {
+      query: { language, include_unapproved: includeUnapproved },
+    })
+  }
+
+  /** Проверка согласованности терминологии */
+  checkTerminologyConsistency(sessionId: string, projectId: string): Promise<TerminologyCheckResult> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/terminology-check`)
+  }
+
+  /** Проверка соответствия стилю журнала */
+  checkStyleCompliance(
+    sessionId: string,
+    projectId: string,
+    sectionPlanId: string,
+    versionId?: string,
+  ): Promise<StyleComplianceResult> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/style-compliance`, {
+      method: 'POST',
+      json: { section_plan_id: sectionPlanId, version_id: versionId },
+      timeoutMs: 120_000,
+    })
+  }
+
+  /** Предварительная проверка перед генерацией */
+  preGenerationCheck(
+    sessionId: string,
+    projectId: string,
+    sectionName: string,
+    question: string,
+    requiredSources = 3,
+  ): Promise<PreGenerationCheckResult> {
+    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/pre-generation-check`, {
+      method: 'POST',
+      json: { section_name: sectionName, question, required_sources: requiredSources },
+      timeoutMs: 60_000,
+    })
   }
 
   // ------------------------------------------------------------ админка
@@ -876,7 +1187,9 @@ class ApiClient {
   globalDocuments(
     options: { q?: string | undefined; category?: string | undefined } = {},
   ): Promise<GlobalDocumentOut[]> {
-    const q = typeof options.q === 'string' ? options.q.trim() : undefined
+    // Пустой поиск не отправляем: без него первый запрос идёт без фильтра,
+    // а с ним — лишний параметр в URL.
+    const q = typeof options.q === 'string' ? options.q.trim() || undefined : undefined
     return this.request('/api/documents', {
       query: { q, category: options.category },
     })
@@ -890,10 +1203,10 @@ class ApiClient {
     return this.request('/api/documents/stats')
   }
 
-  adminAddPath(path: string): Promise<DocumentOut> {
+  adminAddPath(path: string, options: { forceReindex?: boolean } = {}): Promise<DocumentOut> {
     return this.request('/api/admin/documents/path', {
       method: 'POST',
-      json: { path },
+      json: { path, force_reindex: options.forceReindex ?? false },
       timeoutMs: 600_000,
     })
   }
@@ -901,27 +1214,23 @@ class ApiClient {
   adminUpload(files: File[], tags = '', options: {
     /** % отправленных байтов (0–100); включает XHR-транспорт. */
     onProgress?: (percent: number) => void
+    /**
+     * Заменить прежние версии документов с теми же именами.
+     *
+     * Дедуп PaperQA идёт по содержимому, поэтому обновлённый файл иначе
+     * лёг бы вторым документом, а старый остался бы в индексе.
+     */
+    replace?: boolean
   } = {}): Promise<DocumentBatchResult> {
     const form = new FormData()
     for (const file of files) form.append('files', file, file.name)
     form.append('tags', tags)
+    form.append('replace', options.replace ? 'true' : 'false')
     return this.request('/api/admin/documents/upload', {
       method: 'POST',
       form,
       timeoutMs: 600_000,
       onProgress: options.onProgress,
-    })
-  }
-
-  /** Прямая загрузка офисных файлов (.docx, .xlsx, .pptx, .pdf, .txt, .md) */
-  bulkUpload(files: File[], tags = ''): Promise<DocumentBatchResult> {
-    const form = new FormData()
-    for (const file of files) form.append('files', file, file.name)
-    form.append('tags', tags)
-    return this.request('/api/admin/documents/bulk-upload', {
-      method: 'POST',
-      form,
-      timeoutMs: 600_000,
     })
   }
 

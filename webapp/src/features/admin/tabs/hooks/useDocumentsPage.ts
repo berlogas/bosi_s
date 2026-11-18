@@ -51,44 +51,62 @@ export function useDocumentsPage() {
   // --- Синхронизация URL ---
   const setPagination = useCallback(
     (next: { pageIndex: number; pageSize: number; pageCount: number }) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', String(next.pageIndex + 1))
-      setParam(params, 'size', String(next.pageSize))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', String(next.pageIndex + 1))
+          setParam(params, 'size', String(next.pageSize))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setSorting = useCallback(
     (next: { id: string; desc: boolean }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'sort', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'sort', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setFilters = useCallback(
     (next: { id: string; value: unknown }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'filters', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'filters', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- Колонки таблицы ---
-  const columns = useMemo(() => [
-    { id: 'title', accessorKey: 'title', header: 'Название' },
-    { id: 'filename', accessorKey: 'filename', header: 'Файл' },
-    { id: 'category', accessorKey: 'category', header: 'Категория' },
-    { id: 'status', accessorKey: 'status', header: 'Статус' },
-    { id: 'size_bytes', accessorKey: 'size_bytes', header: 'Размер (КБ)' },
-    { id: 'chunk_count', accessorKey: 'chunk_count', header: 'Чанков' },
-    { id: 'tags', accessorKey: 'tags', header: 'Теги' },
-  ], [])
+  const columns = useMemo(
+    () => [
+      { id: 'title', accessorKey: 'title', header: 'Название' },
+      { id: 'filename', accessorKey: 'filename', header: 'Файл' },
+      { id: 'category', accessorKey: 'category', header: 'Категория' },
+      { id: 'status', accessorKey: 'status', header: 'Статус' },
+      { id: 'size_bytes', accessorKey: 'size_bytes', header: 'Размер (КБ)' },
+      { id: 'chunk_count', accessorKey: 'chunk_count', header: 'Чанков' },
+      { id: 'tags', accessorKey: 'tags', header: 'Теги' },
+    ],
+    [],
+  )
 
   // --- Данные ---
   const data = documentsQuery.data ?? []
@@ -102,23 +120,32 @@ export function useDocumentsPage() {
   // --- Мутации ---
   const handleAddPath = useCallback(
     (path: string) => {
-      addPath.mutate(path.trim())
+      addPath.mutate({ path: path.trim() })
     },
-    [addPath]
+    [addPath],
+  )
+
+  /** Переиндексировать один документ (после смены настроек индексации). */
+  const handleReindexDocument = useCallback(
+    (path: string) => {
+      addPath.mutate({ path, forceReindex: true })
+    },
+    [addPath],
   )
 
   const handleUpload = useCallback(
-    (files: File[], tags: string, onProgress?: (percent: number) => void) => {
-      upload.mutate({ files, tags, onProgress })
+    (files: File[], tags: string, onProgress?: (percent: number) => void,
+     replace = false) => {
+      upload.mutate({ files, tags, onProgress, replace })
     },
-    [upload]
+    [upload],
   )
 
   const handleDelete = useCallback(
     (documentId: string) => {
       remove.mutate(documentId as string)
     },
-    [remove]
+    [remove],
   )
 
   const handleReindex = useCallback(() => {
@@ -141,6 +168,7 @@ export function useDocumentsPage() {
     handleUpload,
     handleDelete,
     handleReindex,
+    handleReindexDocument,
     PAGE_SIZE_OPTIONS,
     addPath,
     upload,

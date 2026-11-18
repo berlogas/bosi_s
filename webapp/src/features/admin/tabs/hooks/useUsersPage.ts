@@ -48,41 +48,79 @@ export function useUsersPage() {
   // --- Синхронизация URL ---
   const setPagination = useCallback(
     (next: { pageIndex: number; pageSize: number; pageCount: number }) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', String(next.pageIndex + 1))
-      setParam(params, 'size', String(next.pageSize))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', String(next.pageIndex + 1))
+          setParam(params, 'size', String(next.pageSize))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setSorting = useCallback(
     (next: { id: string; desc: boolean }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'sort', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'sort', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setFilters = useCallback(
     (next: { id: string; value: unknown }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'filters', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'filters', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- Колонки таблицы ---
-  const columns = useMemo(() => [
-    { id: 'username', accessorKey: 'username', header: 'Логин', cell: (row: User) => row.username },
-    { id: 'full_name', accessorKey: 'full_name', header: 'ФИО', cell: (row: User) => row.full_name || '—' },
-    { id: 'role', accessorKey: 'role', header: 'Роль', cell: (row: User) => row.role },
-    { id: 'is_active', accessorKey: 'is_active', header: 'Активен', cell: (row: User) => row.is_active ? '✓' : '✗' },
-  ], [])
+  const columns = useMemo(
+    () => [
+      {
+        id: 'username',
+        accessorKey: 'username',
+        header: 'Логин',
+        cell: (row: User) => row.username,
+      },
+      {
+        id: 'full_name',
+        accessorKey: 'full_name',
+        header: 'ФИО',
+        cell: (row: User) => row.full_name || '—',
+      },
+      {
+        id: 'role',
+        accessorKey: 'role',
+        header: 'Роль',
+        cell: (row: User) => row.role,
+      },
+      {
+        id: 'is_active',
+        accessorKey: 'is_active',
+        header: 'Активен',
+        cell: (row: User) => (row.is_active ? '✓' : '✗'),
+      },
+    ],
+    [],
+  )
 
   // --- Данные с клиентской сортировкой ---
   const sortedData = useMemo(() => {
@@ -106,27 +144,41 @@ export function useUsersPage() {
   const pageCount = Math.max(1, Math.ceil(sortedData.length / pageSize))
 
   // --- Мутации ---
+  // mutateAsync: ошибка уходит в catch вызывающего — без неё она
+  // проглатывалась, и админ не видел, почему пользователь не создался.
   const handleCreate = useCallback(
-    (fields: { username: string; password: string; role: string; full_name?: string }) => {
-      createUser.mutate(fields)
-    },
-    [createUser]
+    (fields: {
+      username: string
+      password: string
+      role: string
+      full_name?: string
+    }) => createUser.mutateAsync(fields),
+    [createUser],
   )
 
   const handleUpdate = useCallback(
-    (userId: string, fields: { username?: string; full_name?: string; role?: string; password?: string; is_active?: boolean }) => {
+    (
+      userId: string,
+      fields: {
+        username?: string
+        full_name?: string
+        role?: string
+        password?: string
+        is_active?: boolean
+      },
+    ) => {
       updateUser.mutate({ userId, fields })
     },
-    [updateUser]
+    [updateUser],
   )
 
   const deleteMutation = useDeleteUser()
 
+  // Ошибку удаления (409 «нельзя удалить себя») должен увидеть админ:
+  // поэтому промис, а не fire-and-forget.
   const handleDelete = useCallback(
-    (userId: string) => {
-      deleteMutation.mutate(userId)
-    },
-    [deleteMutation]
+    (userId: string) => deleteMutation.mutateAsync(userId),
+    [deleteMutation],
   )
 
   return {
@@ -144,6 +196,7 @@ export function useUsersPage() {
     handleCreate,
     handleUpdate,
     handleDelete,
+    createUser,
     deleteMutation,
     PAGE_SIZE_OPTIONS,
     ROLES: ['researcher', 'admin'] as const,

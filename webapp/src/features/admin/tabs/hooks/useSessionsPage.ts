@@ -7,10 +7,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import {
-  useAdminUsers,
-  useSessionsTable,
-} from '../../queries'
+import { useAdminUsers, useSessionsTable } from '../../queries'
 import type { SessionOut } from '../../../../api/types'
 
 const PARAM_PREFIX = 'sessions_'
@@ -44,49 +41,69 @@ export function useSessionsPage() {
 
   // --- Фильтр по пользователю ---
   const [userId, setUserIdState] = useState<string>(
-    getParam(searchParams, 'user') ?? 'all'
+    getParam(searchParams, 'user') ?? 'all',
   )
 
   const setUserId = useCallback(
     (v: string) => {
       setUserIdState(v)
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'user', v)
-      setParam(params, 'page', '1')
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'user', v)
+          setParam(params, 'page', '1')
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- Синхронизация URL для таблицы ---
   const setPagination = useCallback(
     (next: { pageIndex: number; pageSize: number; pageCount: number }) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', String(next.pageIndex + 1))
-      setParam(params, 'size', String(next.pageSize))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', String(next.pageIndex + 1))
+          setParam(params, 'size', String(next.pageSize))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setSorting = useCallback(
     (next: { id: string; desc: boolean }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'sort', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'sort', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setFilters = useCallback(
     (next: { id: string; value: unknown }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'filters', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'filters', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- Имена пользователей ---
@@ -119,9 +136,8 @@ export function useSessionsPage() {
       .map(([uid, rows]) => ({
         userId: uid,
         label: names.get(uid) ?? uid.slice(0, 8),
-        rows: rows.sort(
-          (a, b) =>
-            (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? '')
+        rows: rows.sort((a, b) =>
+          (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? ''),
         ),
       }))
       .sort((a, b) => a.label.localeCompare(b.label))

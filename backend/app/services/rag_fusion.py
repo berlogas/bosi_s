@@ -334,11 +334,15 @@ def merge_and_rerank(
 
     kept: list[Candidate] = []
     seen: dict[tuple[str, str, str], int] = {}
+    filtered_by_relevance = 0
+    filtered_by_scope = 0
     for candidate in candidates:
         if min_relevance > 0 and candidate.raw_score / 10.0 < min_relevance:
+            filtered_by_relevance += 1
             continue
         if not is_allowed(candidate.meta.category, candidate.scope, mode=mode,
                           project_linked=candidate.meta.is_project_linked):
+            filtered_by_scope += 1
             continue
         score_candidate(candidate, mode=mode, query_tokens=query_tokens)
         key = _dedup_key(candidate)
@@ -350,6 +354,12 @@ def merge_and_rerank(
 
     kept.sort(key=_sort_key)
     top = _limit_per_document(kept, k, max_per_document)
+
+    log.info(
+        "fusion: фильтрация чанков: всего=%d, по релевантности=%d (порог %.2f), "
+        "по scope/категории=%d, осталось=%d, выбрано top-%d",
+        len(candidates), filtered_by_relevance, min_relevance,
+        filtered_by_scope, len(kept), len(top))
 
     _log_rerank(kept, top, k=k, query=query)
 

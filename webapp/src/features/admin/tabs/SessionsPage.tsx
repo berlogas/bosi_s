@@ -11,9 +11,12 @@ import {
   Group,
   Select,
   Alert,
+  Button,
+  Modal,
 } from '@mantine/core'
 
 import { useSessionsPage } from './hooks/useSessionsPage'
+import { useClearMessages } from '../../chat/queries'
 import { SimpleTable } from '../components'
 import { EmptyState } from '../../../components/EmptyState'
 import { shortWhen, fullWhen } from '../../../lib/format'
@@ -21,6 +24,65 @@ import { IconLayoutDashboard } from '@tabler/icons-react'
 
 function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
+}
+
+/**
+ * Очистка переписки из админки — как кнопка «Очистить чат» в самой сессии:
+ * два шага, документы и заметки сессии не трогаются.
+ */
+function ClearChatCell({ sessionId }: { sessionId: string }) {
+  const [ask, setAsk] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const clear = useClearMessages(sessionId)
+
+  return (
+    <>
+      <Button
+        size="compact-xs"
+        variant="subtle"
+        color="error"
+        onClick={() => setAsk(true)}
+      >
+        Очистить чат
+      </Button>
+      <Modal
+        opened={ask}
+        onClose={() => setAsk(false)}
+        title="Очистить переписку?"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            Удалить всю переписку этой сессии? Отменить будет нельзя.
+          </Text>
+          {error && (
+            <Alert color="error" role="alert">
+              {error}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setAsk(false)}>
+              Отмена
+            </Button>
+            <Button
+              color="error"
+              loading={clear.isPending}
+              onClick={() => {
+                setError(null)
+                clear.mutate(undefined, {
+                  onSuccess: () => setAsk(false),
+                  onError: (cause) =>
+                    setError(errorText(cause, 'Не удалось очистить переписку')),
+                })
+              }}
+            >
+              Да, очистить
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  )
 }
 
 export default function SessionsPage() {
@@ -82,6 +144,11 @@ export default function SessionsPage() {
         return v ? <span title={fullWhen(v)}>{shortWhen(v)}</span> : '—'
       },
     },
+    {
+      id: 'actions',
+      header: 'Действия',
+      cell: (row: { id: string }) => <ClearChatCell sessionId={row.id} />,
+    },
   ], [names])
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
@@ -127,7 +194,6 @@ export default function SessionsPage() {
           onSortingChange={setSorting}
           filters={filters}
           onFiltersChange={setFilters}
-          rowActions={() => null}
           isLoading={isLoading}
           emptyMessage="Сессий нет."
         />

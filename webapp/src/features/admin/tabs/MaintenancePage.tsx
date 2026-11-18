@@ -14,11 +14,13 @@ import {
   Alert,
   Paper,
   Checkbox,
+  Modal,
 } from '@mantine/core'
 
 import { useMaintenancePage, RESET_SCOPES } from './hooks/useMaintenancePage'
 import { SimpleTable } from '../components'
 import { DangerZone } from '../components'
+import { useAdminReindex } from '../queries'
 import { shortWhen, fullWhen } from '../../../lib/format'
 
 function errorText(cause: unknown, fallback: string): string {
@@ -26,6 +28,7 @@ function errorText(cause: unknown, fallback: string): string {
 }
 
 export default function MaintenancePage() {
+  const [askBackup, setAskBackup] = React.useState(false)
   const {
     backups,
     create,
@@ -36,12 +39,12 @@ export default function MaintenancePage() {
     setIncludeModels,
     current,
     expected,
-    canReset,
     handleCreateBackup,
     handleDeleteBackup,
     handleReset,
     handleScopeChange,
   } = useMaintenancePage()
+  const reindex = useAdminReindex()
 
   // Все useMemo до early return
   const backupColumns = React.useMemo(() => [
@@ -130,7 +133,7 @@ export default function MaintenancePage() {
 
       <Group>
         <Button
-          onClick={handleCreateBackup}
+          onClick={() => setAskBackup(true)}
           disabled={backups.isPending || planInfo?.db_exists === false}
         >
           Создать копию…
@@ -149,6 +152,37 @@ export default function MaintenancePage() {
           {errorText(create.error, 'Не удалось создать копию')}
         </Alert>
       )}
+
+      {/* Копия снимается на сервере и может идти минуты — подтверждаем,
+          что это действительно нужно. */}
+      <Modal
+        opened={askBackup}
+        onClose={() => setAskBackup(false)}
+        title="Создать резервную копию?"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            Копия снимается на сервере: база данных и файлы документов. На больших
+            данных это может занять минуты. Старые копии сверх лимита будут удалены.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setAskBackup(false)}>
+              Отмена
+            </Button>
+            <Button
+              color="red"
+              loading={create.isPending}
+              onClick={() => {
+                setAskBackup(false)
+                handleCreateBackup()
+              }}
+            >
+              Да, создать копию
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {items.length > 0 && (
         <SimpleTable
@@ -174,6 +208,37 @@ export default function MaintenancePage() {
         </Alert>
       )}
 
+      {/* ====== Переиндексация PaperQA2 ====== */}
+      <Title order={4}>Переиндексация базы знаний</Title>
+
+      <Alert color="info" title="Когда нужно">
+        Переиндексация повторно считает эмбеддинги всех документов. Требуется после
+        смены модели эмбеддингов (`EMBEDDING_MODEL`), размера чанка
+        (`CHUNK_CHARS`/`CHUNK_OVERLAP`) или если настройки PaperQA изменились.
+        Все старые чанки с предыдущим отпечатком настроек будут пересозданы.
+      </Alert>
+
+      <Group>
+        <Button
+          onClick={() => void reindex.mutate()}
+          disabled={reindex.isPending}
+          loading={reindex.isPending}
+        >
+          Переиндексировать всё
+        </Button>
+      </Group>
+
+      {reindex.isError && (
+        <Alert color="error" role="alert">
+          {errorText(reindex.error, 'Переиндексация не удалась')}
+        </Alert>
+      )}
+      {reindex.isSuccess && (
+        <Alert color="green" role="status">
+          Переиндексация завершена.
+        </Alert>
+      )}
+
       <Alert color="warning" title="Восстановление — только скриптом">
         Восстановление требует остановки платформы, поэтому из браузера его делать
         нельзя. После копии выполните в корне проекта:
@@ -185,7 +250,7 @@ export default function MaintenancePage() {
 
       <Alert color="warning" title="Сброс необратим">
         Удалённые сессии, документы и переписка восстановить нельзя — только из бэкапа (
-        <code>make backup</code>). Сначала посмотрите план.
+        <code>scripts/backup.sh</code> или кнопка «Создать копию» выше). Сначала посмотрите план.
       </Alert>
 
       <Select
@@ -268,7 +333,7 @@ export default function MaintenancePage() {
           onConfirm={() => handleReset(expected, includeModels)}
           warning="Сброс необратим. Восстановление возможно только из резервной копии."
         >
-          <Button color="error" disabled={!plan.data?.allowed || !canReset}>
+          <Button color="error" disabled={!plan.data?.allowed}>
             Сбросить…
           </Button>
         </DangerZone>

@@ -13,7 +13,6 @@
  */
 
 import {
-  Alert,
   Badge,
   Button,
   Group,
@@ -30,7 +29,7 @@ import { categoryLabel } from '../../lib/format'
 import { useAuth } from '../auth/authStore'
 import { useKnowledgeDocuments, useKnowledgeStats } from './queries'
 import { PageHeader } from '../../components/PageHeader'
-import { SkeletonList } from '../../components/SkeletonList'
+import { AsyncBoundary } from '../../components/AsyncBoundary'
 import { StatusBadge } from '../../components/StatusBadge'
 
 /** Категории глобальной базы: те же, что и в админском списке. */
@@ -72,16 +71,15 @@ export function KnowledgePage() {
 
   // useDebouncedValue: серверный запрос отправляется не при каждом вводе,
   // а через 300 мс после остановки — снижает число запросов к бэкенду.
-  const debouncedSearch = useDebouncedValue(search, 300)
+  const [debouncedSearch] = useDebouncedValue(search, 300)
 
   const documents = useKnowledgeDocuments(debouncedSearch, category || null)
   const stats = useKnowledgeStats()
 
   // Глобальная база знаний — только документы без привязки к сессии.
-  // Временные документы из сессий видны только внутри соответствующей сессии.
-  const visibleDocuments = (documents.data ?? []).filter(
-    (document) => !document.session_id,
-  )
+  // Эндпоинт отдаёт именно такие (session_id = NULL), поэтому фильтр
+  // по session_id здесь не нужен.
+  const visibleDocuments = documents.data ?? []
 
   return (
     <Stack gap="md">
@@ -128,15 +126,14 @@ export function KnowledgePage() {
         />
       </Group>
 
-      {documents.isPending && !documents.data ? (
-        <SkeletonList count={6} />
-      ) : documents.isError ? (
-        <Alert color="error" role="alert" title="Не удалось загрузить список">
-          {documents.error instanceof Error
-            ? documents.error.message
-            : 'Неизвестная ошибка запроса'}
-        </Alert>
-      ) : (
+      <AsyncBoundary
+        data={visibleDocuments}
+        isLoading={documents.isPending && !documents.data}
+        error={documents.isError ? documents.error : null}
+        onRetry={() => void documents.refetch()}
+        emptyTitle="База пока пуста."
+        emptyDescription="Наполняет её администратор."
+      >
         <Table.ScrollContainer minWidth={640} type="native">
           <Table highlightOnHover>
             <Table.Thead>
@@ -181,7 +178,7 @@ export function KnowledgePage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
-      )}
+      </AsyncBoundary>
     </Stack>
   )
 }

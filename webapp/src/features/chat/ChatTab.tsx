@@ -1,7 +1,7 @@
 /**
  * Чат сессии — Волна 3 (план UI_REDESIGN_PLAN.md).
  *
- * История пузырей → закреплённый композитор снизу (sticky bottom внутри
+ * История пузырей → закреплённый compositor снизу (sticky bottom внутри
  * scroll-контейнера) → undo-тост вместо модалки при удалении пары →
  * оценка времени из панели задачи → A11y (role="log", aria-live,
  * prefers-reduced-motion).
@@ -36,6 +36,7 @@ import {
   useClearMessages,
   useDeleteMessage,
   useMessages,
+  useSaveState,
   useTask,
 } from './queries'
 import { ChatBubble } from './ChatBubble'
@@ -46,7 +47,8 @@ const MODE_OPTIONS = [
   { value: 'project_focus', label: 'Фокус на проекте' },
   { value: 'session_only', label: 'Только сессия' },
   { value: 'global_only', label: 'Только глобальная база' },
-] as const satisfies { value: SearchMode; label: string }[]
+  { value: 'agent', label: 'Агент' },
+] as const satisfies { value: SearchMode | 'agent'; label: string }[]
 
 type FailedExchange = { q: string; kind: 'error' | 'cancelled'; text: string }
 type LastExchange = { q: string; answer: NonNullable<AnswerViewPropsAnswer> }
@@ -75,7 +77,7 @@ export function ChatTab({
   readOnly: boolean
 }) {
   const queryClient = useQueryClient()
-  // prefers-reduced-motion: не анимируем автоскролл, если пользователь так 요청
+  // prefers-reduce-motion: не анимируем автоскролл, если пользователь так запросил
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
 
   const restored = useMemo(() => loadChatTask(sessionId), [sessionId])
@@ -93,15 +95,24 @@ export function ChatTab({
   const [clearAsk, setClearAsk] = useState(false)
   const [clearError, setClearError] = useState<string | null>(null)
 
-  // Скролл-контейнер истории: отслеживаем, ушёл ли пользователь от низа,
-  // чтобы показать кнопку «К последнему» и счётчик непрочитанных.
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [scrolledFromBottom, setScrolledFromBottom] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
-
   // Якорь автоскролла: следуем за свежим ответом, пока он не приедет.
   const answerRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [follow, setFollow] = useState<number | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [scrolledFromBottom, setScrolledFromBottom] = useState(false)
+
+  // Сохранять выбранный режим в sessionStorage для восстановления после F5
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        `boasi.chat.mode.${sessionId}`,
+        mode,
+      )
+    } catch {
+      // sessionStorage недоступен — приватный режим или ошибка
+    }
+  }, [mode, sessionId])
 
   // Контекст отмены удаления пары (храним предыдущий кэш для undo-тоста).
   const undoRef = useRef<{ previous: unknown; messageId: string } | null>(null)
@@ -111,6 +122,8 @@ export function ChatTab({
   const messages = useMessages(sessionId, limit)
   const task = useTask(taskId)
   const clearMessages = useClearMessages(sessionId)
+  // «Точка возврата»: после удаления пары сохраняем снимок состояния.
+  const saveState = useSaveState(sessionId)
   const items = useMemo(() => messages.data?.messages ?? [], [messages.data])
   const total = messages.data?.total ?? 0
   const lastAssistantIndex = useMemo(() => {
@@ -187,7 +200,7 @@ export function ChatTab({
     requestAnimationFrame(() => {
       answerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
-  }, [streamingAnswer, reduceMotion])
+  }, [streamingAnswer, reduceMotion, streaming])
 
   // отслеживаем скролл: ушёл от низа → кнопка «вниз» + счётчик непрочитанных
   useEffect(() => {
@@ -276,7 +289,6 @@ export function ChatTab({
         chatKeys.messages(sessionId),
       )
       undoRef.current = { previous, messageId }
-
       queryClient.setQueryData(chatKeys.messages(sessionId), (old: unknown) => {
           if (!old || typeof old !== 'object' || old === null) return old
           const data = old as { messages: MessageOut[]; total: number }
@@ -300,8 +312,12 @@ export function ChatTab({
             messages: data.messages.filter((_unknown: unknown, i: number) => !toRemove.has(i)),
             total: Math.max(0, data.total - toRemove.size),
           }
-        },
-      )
+        })
+
+      /** Сохранить точку возврата (дебаунс 5 мин делает клиент). */
+      void saveState.mutate({ snapshot: { tab: 'chat' }, force: true })
+
+      // Контекст отката: без него onError не восстановит список сообщений.
       return { previous }
     },
     onError: (_err: unknown, _messageId: string, context: { previous?: unknown } | undefined) => {
@@ -357,7 +373,7 @@ export function ChatTab({
   // ---------------------------------------------------------------- рендер
   return (
     <Box style={{ height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {/* История — скроллится, имеет отступ снизу под фиксированный композитор */}
+      {/* История — скроллится, имеет отступ снизу под фиксированный composer */}
       <Box
         style={{ flex: 1, overflowY: 'auto', position: 'relative', minHeight: 0, paddingBottom: '140px' }}
         ref={scrollRef}
@@ -383,6 +399,13 @@ export function ChatTab({
           )}
 
           {historyError && <Alert color="error">{historyError}</Alert>}
+
+          {/* Ошибка отправки вопроса: раньше она молча терялась. */}
+          {sendError && (
+            <Alert color="error" role="alert">
+              {sendError}
+            </Alert>
+          )}
 
           {chatEmpty && (
             <Text size="sm" c="dimmed">
@@ -430,8 +453,12 @@ export function ChatTab({
                           deleteMessage.variables === message.id
                         }
                         onClick={() => {
-                          deleteMessage.mutate(message.id)
-                          setUnreadCount((n) => n + 1)
+                          if (taskId) handleCancelTask()
+                          clearChatTask()
+                          setTaskId(null)
+                          setPending(null)
+                          // Само удаление: сервер убирает вопрос вместе с ответом.
+                          deleteMessage.mutate(message.id as string)
                         }}
                       >
                         🗑
@@ -463,9 +490,43 @@ export function ChatTab({
                 </ChatBubble>
               )
             })}
+          </div>
 
-            {/* Вопрос, ушедший в фоновую задачу */}
-            {pending && !asked(items, pending) && (
+          {/* Вопрос, ушедший в фоновую задачу */}
+          {pending && !asked(items, pending) && (
+            <ChatBubble
+              role="user"
+              action={
+                !readOnly && (
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="error"
+                    aria-label="Отменить вопрос и убрать его из переписки"
+                    onClick={() => {
+                      if (taskId) handleCancelTask()
+                      clearChatTask()
+                      setTaskId(null)
+                      setPending(null)
+                    }}
+                  >
+                    🗑
+                  </Button>
+                )
+              }
+            >
+              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                {pending}
+              </Text>
+            </ChatBubble>
+          )}
+          {pending && !asked(items, pending) && (
+            <ChatBubble role="assistant">
+              <Text size="sm" c="dimmed">Вопрос обрабатывается…</Text>
+            </ChatBubble>
+          )}
+          {failed && !asked(items, failed.q) && (
+            <>
               <ChatBubble
                 role="user"
                 action={
@@ -474,13 +535,8 @@ export function ChatTab({
                       size="compact-xs"
                       variant="subtle"
                       color="error"
-                      aria-label="Отменить вопрос и убрать его из переписки"
-                      onClick={() => {
-                        if (taskId) handleCancelTask()
-                        clearChatTask()
-                        setTaskId(null)
-                        setPending(null)
-                      }}
+                      aria-label="Убрать вопрос и ошибку из переписки"
+                      onClick={() => setFailed(null)}
                     >
                       🗑
                     </Button>
@@ -488,100 +544,79 @@ export function ChatTab({
                 }
               >
                 <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                  {pending}
+                  {failed.q}
                 </Text>
               </ChatBubble>
-            )}
-            {pending && !asked(items, pending) && (
               <ChatBubble role="assistant">
-                <Text size="sm" c="dimmed">Вопрос обрабатывается…</Text>
+                {failed.kind === 'cancelled' ? (
+                  <Text size="sm" c="dimmed">{failed.text}</Text>
+                ) : (
+                  <Alert color="error" role="alert">
+                    Не получилось ответить: {failed.text}
+                  </Alert>
+                )}
               </ChatBubble>
-            )}
-
-            {/* Вопрос, на который задача упала или была отменена */}
-            {failed && !asked(items, failed.q) && (
-              <>
-                <ChatBubble
-                  role="user"
-                  action={
-                    !readOnly && (
-                      <Button
-                        size="compact-xs"
-                        variant="subtle"
-                        color="error"
-                        aria-label="Убрать вопрос и ошибку из переписки"
-                        onClick={() => setFailed(null)}
-                      >
-                        🗑
-                      </Button>
-                    )
-                  }
-                >
-                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                    {failed.q}
-                  </Text>
-                </ChatBubble>
-                <ChatBubble role="assistant">
-                  {failed.kind === 'cancelled' ? (
-                    <Text size="sm" c="dimmed">{failed.text}</Text>
-                  ) : (
-                    <Alert color="error" role="alert">
-                      Не получилось ответить: {failed.text}
-                    </Alert>
-                  )}
-                </ChatBubble>
-              </>
-            )}
-
-            {/* Стриминговый ответ по токенам */}
-            {streaming && streamingAnswer && !asked(items, streamingAnswer) && (
-              <ChatBubble role="assistant" ref={answerRef}>
-                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                  {streamingAnswer}
-                </Text>
-              </ChatBubble>
-            )}
-
-            {/* Синхронный/кэшированный ответ, которого ещё нет в истории */}
-            {last && !asked(items, last.q) && (
-              <>
-                <ChatBubble
-                  role="user"
-                  action={
-                    !readOnly && (
-                      <Button
-                        size="compact-xs"
-                        variant="subtle"
-                        color="error"
-                        aria-label="Убрать вопрос и ответ из переписки"
-                        onClick={() => setLast(null)}
-                      >
-                        🗑
-                      </Button>
-                    )
-                  }
-                >
-                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                    {last.q}
-                  </Text>
-                </ChatBubble>
-                <ChatBubble role="assistant" ref={answerRef}>
-                  <AnswerView answer={last.answer} />
-                </ChatBubble>
-              </>
-            )}
-          </div>
-
-          {sendError && (
-            <Alert color="error" role="alert">{sendError}</Alert>
+            </>
           )}
+
+          {/* Вопрос, на который задача упала или была отменена */}
+
+          {/* Кнопка «К последнему» — fixed над composer (учитываем высоту ~120px) */}
+          {scrolledFromBottom && (
+            <Box
+              style={{
+                position: 'fixed',
+                bottom: '150px',
+                right: 20,
+                zIndex: 101,
+              }}
+            >
+              <Button
+                size="xs"
+                variant="default"
+                onClick={scrollToBottom}
+                aria-label="К последнему сообщению"
+              >
+                К последнему
+              </Button>
+            </Box>
+          )}
+
+          {/* Очистка переписки — в два шага, модалка остаётся только для этого (план Волны 3, п. 7) */}
+          <Modal
+            opened={clearAsk}
+            onClose={() => setClearAsk(false)}
+            title="Очистить переписку?"
+            centered
+          >
+            <Stack>
+              <Text size="sm">
+                Удалить всю переписку этой сессии? Отменить будет нельзя.
+              </Text>
+              {clearError && (
+                <Alert color="error" role="alert">{clearError}</Alert>
+              )}
+              <Group justify="flex-end">
+                <Button variant="default" onClick={() => setClearAsk(false)}>
+                  Отмена
+                </Button>
+                <Button
+                  color="error"
+                  loading={clearMessages.isPending}
+                  onClick={handleClearConfirm}
+                >
+                  Да, очистить
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
         </Stack>
       </Box>
 
       {/* Композитор — fixed к viewport, всегда внизу.
           left: 260px (navbar) + 16px (AppShell padding) = 276px.
           На мобильном (< 640px) navbar схлопывается в drawer —
-          композитор на весь экран (left: 0), но на узких экранах
+          composer на весь экран (left: 0), но на узких экранах
           это не заметно, так как сайдбар скрыт. */}
       <Box
         style={{
@@ -605,7 +640,7 @@ export function ChatTab({
             <Group align="flex-end" wrap="nowrap" gap="xs" px="md" py="xs">
               <Textarea
                 label="Ваш вопрос"
-                placeholder="Спросите что-нибудь…"
+                placeholder="Спростите что-нибудь…"
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 onKeyDown={handleKeyDown}
@@ -634,7 +669,7 @@ export function ChatTab({
         </form>
       </Box>
 
-      {/* Кнопка «К последнему» — fixed над композитором (учитываем высоту ~120px) */}
+      {/* Кнопка «К последнему» — fixed над composer (учитываем высоту ~120px) */}
       {scrolledFromBottom && (
         <Box
           style={{
@@ -654,35 +689,6 @@ export function ChatTab({
           </Button>
         </Box>
       )}
-
-      {/* Очистка переписки — в два шага, модалка остаётся только для этого (план Волны 3, п. 7) */}
-      <Modal
-        opened={clearAsk}
-        onClose={() => setClearAsk(false)}
-        title="Очистить переписку?"
-        centered
-      >
-        <Stack>
-          <Text size="sm">
-            Удалить всю переписку этой сессии? Отменить будет нельзя.
-          </Text>
-          {clearError && (
-            <Alert color="error" role="alert">{clearError}</Alert>
-          )}
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setClearAsk(false)}>
-              Отмена
-            </Button>
-            <Button
-              color="error"
-              loading={clearMessages.isPending}
-              onClick={handleClearConfirm}
-            >
-              Да, очистить
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </Box>
   )
 }

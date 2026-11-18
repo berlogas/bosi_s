@@ -14,18 +14,28 @@ interface NavSectionProps {
   user: User | null
 }
 
-function NavItem({ item, currentPath, level = 0 }: { item: MenuItem; currentPath: string; level?: number }) {
+interface NavItemProps {
+  item: MenuItem
+  currentPath: string
+  level?: number
+  user: User | null
+}
+
+function NavItem({ item, currentPath, level = 0, user }: NavItemProps) {
+  // Хуки вызываем до любых условий: иначе React «сломает» порядок хуков
+  // при переключении между пунктами с детьми и без.
+  const [open, setOpen] = useState(true)
+
   const to = item.to
   const active = isItemActive(currentPath, to)
   // disabled: enabled === false ИЛИ функция вернула false
-  const disabled = item.enabled === false || (typeof item.enabled === 'function' && !item.enabled(null as any))
+  const disabled = item.enabled === false || (typeof item.enabled === 'function' && !item.enabled(user))
   const hasChildren = item.children && item.children.length > 0
 
   // Отступ для вложенных пунктов
   const indentStyle = level > 0 ? { paddingLeft: `${level * 16 + 8}px` } : {}
 
   if (hasChildren) {
-    const [open, setOpen] = useState(true)
     const sectionActive = isSectionActive(currentPath, item.children!)
 
     return (
@@ -57,7 +67,7 @@ function NavItem({ item, currentPath, level = 0 }: { item: MenuItem; currentPath
         {open && (
           <Stack gap={1} style={{ marginTop: 'var(--mantine-spacing-xs)' }}>
             {item.children!.map((child) => (
-              <NavItem key={child.to} item={child} currentPath={currentPath} level={level + 1} />
+              <NavItem key={child.to} item={child} currentPath={currentPath} level={level + 1} user={user} />
             ))}
           </Stack>
         )}
@@ -92,6 +102,8 @@ function NavItem({ item, currentPath, level = 0 }: { item: MenuItem; currentPath
 export function NavSection({ section, user }: NavSectionProps) {
   const location = useLocation()
   const currentPath = location.pathname
+  // Хук до раннего возврата: порядок хуков должен быть стабилен.
+  const [open, setOpen] = useState(section.defaultOpen ?? true)
 
   // Фильтруем пункты: скрываем только по roles (авторизация), НЕ по enabled
   // enabled=false → рендерим как disabled (серый, некликабельный)
@@ -101,8 +113,6 @@ export function NavSection({ section, user }: NavSectionProps) {
   })
 
   if (visibleItems.length === 0) return null
-
-  const [open, setOpen] = useState(section.defaultOpen ?? true)
 
   return (
     <>
@@ -141,7 +151,7 @@ export function NavSection({ section, user }: NavSectionProps) {
       {open && (
         <Stack gap={2}>
           {visibleItems.map((item) => (
-            <NavItem key={item.to || item.label} item={item} currentPath={currentPath} />
+            <NavItem key={item.to || item.label} item={item} currentPath={currentPath} user={user} />
           ))}
         </Stack>
       )}

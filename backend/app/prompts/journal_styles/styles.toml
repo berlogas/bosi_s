@@ -1,0 +1,111 @@
+# Конфигурация стилей журналов
+# Этот файл можно редактировать для добавления новых стилей без правки кода
+
+[[styles]]
+key = "multidisciplinary_breakthrough"
+title = "Мультидисциплинарный прорыв"
+summary = "Стиль для высокоимпактных мультидисциплинарных работ (Nature, Science, PNAS)"
+description = """
+ROLE: Вы пишете высокоимпактную мультидисциплинарную статью для ведущего журнала (Nature/Science/PNAS). Ваша аудитория — эксперты из разных дисциплин, которым нужно понять значимость вашей работы без глубокой специализации. Подходит для прорывных исследований на стыке нескольких дисциплин. Требует чёткого формулирования широкой значимости результатов, доступного изложения для читателей из смежных областей и строгого обоснования новизны.
+Тон: авторитарный, но доступный.
+Читатель: эксперты смежных дисциплин."""
+journals = ["Nature", "Science", "PNAS", "Nature Communications", "Science Advances"]
+default_template = "multidisciplinary_standard.md"
+
+[[styles.templates]]
+file = "multidisciplinary_standard.md"
+label = "Стандартная статья"
+sections = ["abstract", "introduction", "results", "discussion", "methods", "references"]
+
+[[styles.templates]]
+file = "multidisciplinary_letter.md"
+label = "Краткое сообщение (Letter)"
+sections = ["abstract", "introduction", "results", "discussion", "methods", "references"]
+
+
+[[styles]]
+key = "engineering_cs"
+title = "Инженерия и Computer Science"
+summary = "Стиль для инженерных и CS-статей (IEEE, ACM, Nature Machine Intelligence)"
+description = """
+ROLE: Вы — старший исследователь, пишущий строгую инженерную/CS-статью. Акцент на воспроизводимости, технических деталях, сравнении с базовыми линиями (baselines) и вычислительной сложности. Требует детального описания алгоритмов, архитектур и экспериментальной установки.
+Тон: точный, воспроизводимый, технически строгий.
+Читатель: инженеры, CS-исследователи."""
+journals = ["IEEE Transactions", "ACM Transactions", "Nature Machine Intelligence", "Machine Learning", "JMLR", "NeurIPS", "ICML", "ICLR"]
+default_template = "engineering_standard.md"
+
+[[styles.templates]]
+file = "engineering_standard.md"
+label = "Полная статья"
+sections = ["abstract", "introduction", "related_work", "methodology", "experiments", "results", "discussion", "conclusion", "references"]
+
+[[styles.templates]]
+file = "engineering_conference.md"
+label = "Конференц-статья"
+sections = ["abstract", "introduction", "methodology", "experiments", "conclusion", "references"]
+
+
+[[styles]]
+key = "review_articles"
+title = "Обзорные статьи"
+summary = "Стиль для систематических обзоров, мета-анализов и обзорных статей"
+description = """
+ROLE: Вы пишете авторитетный обзорный обзор. Структура фокусируется на методологии поиска литературы, классификации подходов, критическом анализе существующих работ и выявлении пробелов в знаниях. Требует PRISMA-диаграмму для системных обзоров.
+Тон: критичный, структурированный, всесторонний.
+Читатель: исследователи, ищущие обзор состояния вопроса."""
+journals = ["Nature Reviews", "Annual Reviews", "Chemical Reviews", "Physics Reports", "ACM Computing Surveys", "IEEE Reviews"]
+default_template = "review_systematic.md"
+
+[[styles.templates]]
+file = "review_systematic.md"
+label = "Систематический обзор"
+sections = ["abstract", "introduction", "methods", "results", "discussion", "conclusion", "references"]
+
+[[styles.templates]]
+file = "review_narrative.md"
+label = "Нарративный обзор"
+sections = ["abstract", "introduction", "background", "thematic_sections", "discussion", "future_directions", "references"]
+
+
+[[styles]]
+key = "sound_science"
+title = "Здоровая наука"
+summary = "Стиль для биомедицинских, клинических и здравоохранительных исследований"
+description = """
+ROLE: Вы пишете клиническое исследование для ведущего медицинского журнала. Строгое следование CONSORT/STROBE/PRISMA руководствам. Обязательное описание этических одобрений, статистической мощности, случайности и слепоты. Акцент на клинической значимости, а не только статистической.
+Тон: точный, доказательный, клинически значимый, этически обоснованный.
+Читатель: клиницисты, исследователи, политики здравоохранения."""
+journals = ["The Lancet", "NEJM", "JAMA", "BMJ", "Nature Medicine", "JAMA Network Open", "PLOS Medicine", "PLOS ONE"]
+default_template = "clinical_standard.md"
+
+[[styles.templates]]
+file = "clinical_standard.md"
+label = "Клиническое исследование"
+sections = ["abstract", "introduction", "methods", "results", "discussion", "conclusion", "references"]
+
+[[styles.templates]]
+file = "clinical_trial.md"
+label = "Результаты клинического испытания"
+sections = ["abstract", "introduction", "trial_design", "participants", "interventions", "outcomes", "statistical_analysis", "results", "discussion", "conclusion", "references"]
+
+
+[[styles]]
+key = "specialized_top"
+title = "Специализированный топ"
+summary = "Стиль для высокоспециализированных топовых журналов узких профилей"
+description = """
+ROLE: Вы пишете для высокоспециализированного топового журнала узкого профиля. Для высокоспециализированных журналов (Physical Review Letters, Nature Physics, Nature Chemistry, Cell Reports и др.). Требует максимальной точности терминологии, детального описания экспериментальных методик и строгого физико-математического обоснования.
+Тон: строгий, точный, технически глубокий.
+Читатель: узкие специалисты в данной области."""
+journals = ["Physical Review Letters", "Nature Physics", "Nature Chemistry", "Nature Materials", "Cell Reports", "Angewandte Chemie", "JACS"]
+default_template = "specialized_standard.md"
+
+[[styles.templates]]
+file = "specialized_standard.md"
+label = "Стандартная статья"
+sections = ["abstract", "introduction", "theory", "methods", "results", "discussion", "conclusion", "references"]
+
+[[styles.templates]]
+file = "specialized_letter.md"
+label = "Краткое сообщение"
+sections = ["abstract", "introduction", "methods", "results", "conclusion", "references"]

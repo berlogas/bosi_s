@@ -133,7 +133,14 @@ function useInvalidateGlobalDocs() {
 export function useAdminAddPath() {
   const invalidate = useInvalidateGlobalDocs()
   return useMutation({
-    mutationFn: (path: string) => client.adminAddPath(path),
+    mutationFn: ({
+      path,
+      forceReindex = false,
+    }: {
+      path: string
+      /** Переиндексировать, даже если документ уже в индексе. */
+      forceReindex?: boolean
+    }) => client.adminAddPath(path, { forceReindex }),
     onSuccess: invalidate,
   })
 }
@@ -146,22 +153,15 @@ export function useAdminUpload() {
       files,
       tags,
       onProgress,
+      replace = false,
     }: {
       files: File[]
       tags: string
       /** % отправленных байтов — для прогресс-бара (XHR onprogress). */
       onProgress?: (percent: number) => void
-    }) => client.adminUpload(files, tags, { onProgress }),
-    onSuccess: invalidate,
-  })
-}
-
-/** Прямая загрузка офисных файлов (.docx, .xlsx, .pptx, .pdf, .txt, .md) */
-export function useBulkUpload() {
-  const invalidate = useInvalidateGlobalDocs()
-  return useMutation({
-    mutationFn: ({ files, tags }: { files: File[]; tags: string }) =>
-      client.bulkUpload(files, tags),
+      /** Заменить прежние версии документов с теми же именами. */
+      replace?: boolean
+    }) => client.adminUpload(files, tags, { onProgress, replace }),
     onSuccess: invalidate,
   })
 }

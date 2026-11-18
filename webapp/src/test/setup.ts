@@ -1,4 +1,11 @@
 import '@testing-library/jest-dom/vitest'
+import { configure } from '@testing-library/dom'
+
+// Вкладки сессии грузятся лениво (React.lazy + Vite code splitting). В тестовом
+// окружении первый импорт графа модулей занимает дольше секунды — дефолтный
+// таймаут RTL (1 с) успевал сработать раньше, чем чанк приезжал, и findBy*
+// падал на пустом экране. Здесь ждём щедрее.
+configure({ asyncUtilTimeout: 15000 })
 
 // jsdom не реализует matchMedia — Mantine-компоненты зовут его при рендере.
 // Десктопное приложение: всегда возвращаем matches=true для десктопных брейкпоинтов
@@ -72,14 +79,7 @@ if (!window.requestAnimationFrame) {
     setTimeout(cb, 0) as unknown as number;
 }
 
-// react-router-dom useSearchParams не работает в jsdom — мокаем пустыми параметрами.
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>()
-  return {
-    ...actual,
-    useSearchParams: () => [
-      new URLSearchParams(),
-      () => {},
-    ],
-  }
-})
+// react-router-dom useSearchParams в jsdom работает, но параметры фильтра
+// живут в URL: если мокать его пустыми, поиск и фильтры не доходят до сервера
+// (тесты «поиск уходит на сервер» и «категория применяется сразу» падали).
+// Поэтому мок убран — страницы фильтров используют настоящий useSearchParams.

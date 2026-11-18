@@ -37,22 +37,39 @@ class PaperQA2Persistence:
                  self.service.collection, saved, len(self.service.docs.texts))
         return saved
 
-    async def restore_state(self, force: bool = False) -> int:
+    async def restore_state(self, force: bool = False) -> tuple[int, int]:
         """Восстановить `Docs` из хранилища (чистый `Docs` + `aadd_texts`).
 
         `force=False` — если коллекция уже загружена в память, ничего не делаем
         (иначе вызов из API перетёр бы живое состояние).
+
+        Возвращает ``(restored, stale)``: сколько документов восстановлено и
+        сколько пропущено из-за несовпадения отпечатка настроек
+        (``chunk_fingerprint``). Старые чанки требуют переиндексации.
         """
         stored = await self.service.store.load(self.service.collection)
         if not stored:
-            return 0
+            return 0, 0
         if self.service.docs.docs and not force:
-            return 0
+            return 0, 0
+        current_fingerprint = self.service.fingerprint
         self.service.docs = Docs()
         restored = 0
+        stale = 0
         async with self.service.lock:
             for item in stored:
                 if item.doc is None or not item.texts:
+                    continue
+                # Чанки были проиндексированы при других настройках —
+                # эмбеддинги и семантика могут быть неактуальны. Пропускаем,
+                # чтобы пользователь запустил переиндексацию явно.
+                if item.settings_md5 is not None and item.settings_md5 != current_fingerprint:
+                    stale += 1
+                    log.warning(
+                        "restore_state: %s пропущен — настройки изменились "
+                        "(stored=%s current=%s)",
+                        item.docname, item.settings_md5, current_fingerprint,
+                    )
                     continue
                 try:
                     ok = await self.service.docs.aadd_texts(
@@ -62,17 +79,21 @@ class PaperQA2Persistence:
                     log.error("restore_state: %s пропущен: %s", item.docname, exc)
                     continue
                 restored += bool(ok)
-        log.info("restore_state: коллекция=%s восстановлено=%d чанков=%d",
-                 self.service.collection, restored, len(self.service.docs.texts))
-        return restored
+        log.info("restore_state: коллекция=%s восстановлено=%d чанков=%d устарело=%d",
+                 self.service.collection, restored, len(self.service.docs.texts), stale)
+        return restored, stale
 
     async def rebuild_index(self, drop_embeddings: bool = True) -> dict[str, Any]:
         """Полная переиндексация: перечитать документы с нуля.
 
         Чанки достаются из хранилища (там лежит исходный текст), эмбеддинги
         пересчитываются, если `drop_embeddings=True`.
+
+        Загружаются ВСЕ чанки, включая с устаревшей версией схемы — иначе
+        rebuild_index не сможет обновить чанки после смены схемы.
         """
-        stored = await self.service.store.load(self.service.collection)
+        stored = await self.service.store.load(self.service.collection,
+                                                include_stale=True)
         if not stored:
             return {"documents": 0, "chunks": 0}
 

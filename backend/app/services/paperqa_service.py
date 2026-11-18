@@ -22,31 +22,31 @@
   не передан ``citation`` — поэтому сервис всегда передаёт citation сам.
 """
 
-from __future__ import annotations
-
+import contextlib
 import logging
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
 import anyio
 from aviary.core import Message
 from paperqa import Context, Docs, PQASession
+from paperqa.agents import AnswerResponse, agent_query
 from paperqa.settings import Settings
 
 from app.config import Settings as AppSettings
 from app.config import get_settings
-from app.core.errors import DocumentProcessingError, UpstreamError
+from app.core.errors import DocumentProcessingError
 from app.core.locks import locks
 from app.services.chunk_store import ChunkStore, SqliteChunkStore
 from app.services.pqa_persistence import PaperQA2Persistence
 from app.services.pqa_profile import (
     build_pqa_settings,
+    chunk_fingerprint,
     get_embedding_model,
-    settings_fingerprint,
 )
 from app.services.pqa_readers import install_utf8_parser
 from app.services.pqa_registry import GLOBAL_COLLECTION, collection_kind, normalize_collection
@@ -67,11 +67,6 @@ log = logging.getLogger(__name__)
 install_utf8_parser()
 
 
-def _has_content(path: Path) -> bool:
-    """Есть ли в скачанном файле хоть какие-то данные (блокирующий вызов -> в thread)."""
-    return path.exists() and path.stat().st_size > 0
-
-
 class PaperQA2Service:
     """Обёртка над `Docs` с персистентностью, блокировками и типизированным API."""
 
@@ -90,7 +85,7 @@ class PaperQA2Service:
         self.kind = collection_kind(self.collection)
         self.store: ChunkStore = chunk_store or SqliteChunkStore()
         self.pqa_settings = pqa_settings or build_pqa_settings(self.app)
-        self.fingerprint = settings_fingerprint(self.pqa_settings)
+        self.fingerprint = chunk_fingerprint(self.pqa_settings)
         self.docs = docs if docs is not None else Docs()
         # подмена LLM для тестов/оффлайн-режима (None -> реальная модель из конфига)
         self._llm_model = llm_model
@@ -170,6 +165,7 @@ class PaperQA2Service:
         project_id: str | None = None,
         session_id: str | None = None,
         citation: str | None = None,
+        force_reindex: bool = False,
     ) -> DocumentBatchResult:
         """Добавить файлы с диска (проверка существования и расширения)."""
         result = DocumentBatchResult()
@@ -179,6 +175,7 @@ class PaperQA2Service:
                 ref = await self.add_file(
                     path, category=category, project_id=project_id,
                     session_id=session_id, citation=citation,
+                    force_reindex=force_reindex,
                 )
             except Exception as exc:
                 log.warning("add_files: %s не проиндексирован: %s", path.name, exc)
@@ -201,11 +198,20 @@ class PaperQA2Service:
         session_id: str | None = None,
         citation: str | None = None,
         title: str | None = None,
+        force_reindex: bool = False,
+        filename: str | None = None,
     ) -> DocumentRef | None:
         """Добавить один файл.
 
         Возвращает `DocumentRef`, либо `None` — документ с таким dockey уже есть
         (дедуп по содержимому, поведение `Docs.aadd`).
+
+        Если `force_reindex=True`, документ будет удалён и проиндексирован
+        заново независимо от того, изменился ли контент.
+
+        `filename` — имя файла как его знает пользователь: для загрузок путь
+        указывает на временный файл с техническим префиксом, а в реестр
+        должно попасть исходное имя.
         """
         file_path = Path(path)
         if not await anyio.to_thread.run_sync(file_path.exists):
@@ -217,10 +223,28 @@ class PaperQA2Service:
         file_citation = citation or self.make_citation(file_path, title)
         docname = self.unique_docname(file_path.stem[:80] or "document")
 
+        # Вычисляем dockey заранее, чтобы при повторной загрузке того же файла
+        # с другим содержимым удалить старую версию перед переиндексацией
+        # (реализует 1.3.2: переиндексация при изменении контента).
+        dockey = self._dockey_for_path(file_path)
+
         async with self.lock:
-            before = set(self.docs.docs)
+            existing = self.docs.docs.get(dockey)
+            if existing is not None:
+                if not force_reindex:
+                    # Документ с таким dockey уже есть — дедуп по содержимому,
+                    # возвращаем None без переиндексации.
+                    log.info("add_file: %s уже в коллекции (dockey=%s)",
+                             file_path.name, dockey[:12])
+                    return None
+                # force_reindex=True — удаляем старую версию перед переиндексацией
+                self.docs.delete(dockey=dockey)
+                await self.store.delete(self.collection, dockey)
+                log.info("add_file: %s переиндексирован по force_reindex",
+                         file_path.name)
+
             t0 = time.perf_counter()
-            returned = await self.docs.aadd(
+            await self.docs.aadd(
                 str(file_path),
                 citation=file_citation,
                 docname=docname,
@@ -229,13 +253,6 @@ class PaperQA2Service:
                 **self._embedding_kwargs(),
             )
             elapsed = time.perf_counter() - t0
-            new_keys = set(self.docs.docs) - before
-            if not new_keys:
-                # aadd вернул None -> документ с таким dockey уже в коллекции
-                log.info("add_file: %s уже в коллекции (dockey-дедуп, returned=%r)",
-                         file_path.name, returned)
-                return None
-            dockey = str(next(iter(new_keys)))
             doc = self._doc_of(dockey)
             texts = self._texts_of(dockey)
             await self.store.save(self.collection, doc, texts, self.fingerprint)
@@ -246,6 +263,7 @@ class PaperQA2Service:
             dockey=dockey,
             docname=doc.docname,
             path=str(file_path),
+            filename=filename or file_path.name,
             title=title or file_path.stem,
             citation=doc.citation,
             status=DocStatus.READY,
@@ -264,96 +282,107 @@ class PaperQA2Service:
         category: str | None = None,
         project_id: str | None = None,
         session_id: str | None = None,
+        force_reindex: bool = False,
     ) -> DocumentBatchResult:
         """Добавить загруженные файлы (`UploadFile` или file-like).
 
         `Docs.aadd_file()` на Windows падает с PermissionError, поэтому запись
         во временный файл делаем сами (спайк 02, примечание к API).
         """
-        result = DocumentBatchResult()
+        staged, failed = await self.stage_uploads(files, session_id)
+        result = await self.index_staged(
+            staged, category=category, project_id=project_id,
+            session_id=session_id, force_reindex=force_reindex,
+        )
+        result.failed = failed + result.failed
+        return result
+
+    async def stage_uploads(
+        self,
+        files: Iterable[Any],
+        session_id: str | None = None,
+    ) -> tuple[list[tuple[Path, str]], list[tuple[str, str]]]:
+        """Сохранить загруженные файлы на диск, не индексируя их.
+
+        Отделено от индексации намеренно: объект загрузки FastAPI закрывается
+        вместе с запросом, а фоновая задача живёт дольше. Поэтому файлы должны
+        оказаться на диске до старта задачи.
+
+        Возвращает `(сохранённые, ошибки)`: `(путь, имя)` и `(имя, причина)`.
+        """
         upload_dir = self.storage_dir(session_id, "uploads")
+        staged: list[tuple[Path, str]] = []
+        failed: list[tuple[str, str]] = []
 
         for uploaded in files:
             name = getattr(uploaded, "filename", None) or getattr(uploaded, "name", "upload")
             name = os.path.basename(str(name))
             target = upload_dir / f"{uuid.uuid4().hex[:8]}_{name}"
             try:
-                data = await self._read_upload(uploaded)
                 limit = self.app.upload_max_mb * 1024 * 1024
+                # Размер проверяем до чтения в память: файл в 2 ГБ не должен
+                # целиком попадать в RAM до отказа (D8).
+                size = getattr(uploaded, "size", None)
+                if size is not None and size > limit:
+                    raise DocumentProcessingError(
+                        f"Файл больше {self.app.upload_max_mb} МБ: {name}")
+                data = await self._read_upload(uploaded)
                 if len(data) > limit:
                     raise DocumentProcessingError(
                         f"Файл больше {self.app.upload_max_mb} МБ: {name}")
                 await anyio.to_thread.run_sync(target.write_bytes, data)
-                ref = await self.add_file(
-                    target, category=category, project_id=project_id,
-                    session_id=session_id, title=Path(name).stem,
-                )
             except Exception as exc:
-                log.warning("add_uploads: %s не загружен: %s", name, exc)
-                result.failed.append((name, f"{type(exc).__name__}: {exc}"))
+                log.warning("stage_uploads: %s не сохранён: %s", name, exc)
+                failed.append((name, f"{type(exc).__name__}: {exc}"))
+                with contextlib.suppress(OSError):
+                    target.unlink(missing_ok=True)
                 continue
-            if ref is None:
-                result.duplicates.append(DocumentRef(
-                    dockey=self._dockey_for_path(target), docname=Path(name).stem,
-                    path=str(target), status=DocStatus.READY))
-            else:
-                result.added.append(ref)
-        return result
+            staged.append((target, name))
+        return staged, failed
 
-    async def add_url(
+    async def index_staged(
         self,
-        url: str,
+        staged: Sequence[tuple[Path, str]],
         category: str | None = None,
         project_id: str | None = None,
         session_id: str | None = None,
-    ) -> DocumentRef:
-        """Добавить документ по URL.
+        force_reindex: bool = False,
+        on_progress: Callable[[int, int, str], None] | None = None,
+    ) -> DocumentBatchResult:
+        """Проиндексировать уже сохранённые файлы.
 
-        В оффлайн-контуре внешние источники недоступны, поэтому файл качаем сами
-        (`aadd_url` полагается на сеть и не проходит проверку размера/типа).
+        `on_progress(номер, всего, имя)` зовётся после каждого файла — по нему
+        фоновая задача показывает этап «файл 2/7: paper.pdf».
         """
-        import httpx
+        result = DocumentBatchResult()
+        total = len(staged)
 
-        if not url.lower().startswith(("http://", "https://")):
-            raise DocumentProcessingError(f"Некорректный URL: {url}")
-
-        tmp_dir = self.storage_dir(session_id, "urls")
-        target = tmp_dir / f"{uuid.uuid4().hex[:8]}{self._extension_from_url(url)}"
-        try:
-            async with (
-                httpx.AsyncClient(follow_redirects=True, timeout=60) as client,
-                client.stream("GET", url) as response,
-            ):
-                if response.status_code >= 400:
-                    raise UpstreamError(
-                        f"Источник вернул HTTP {response.status_code}: {url}")
-                limit = self.app.upload_max_mb * 1024 * 1024
-                size = 0
-                with target.open("wb") as handle:
-                    async for part in response.aiter_bytes():
-                        size += len(part)
-                        if size > limit:
-                            raise DocumentProcessingError(
-                                f"Файл больше {self.app.upload_max_mb} МБ")
-                        await anyio.to_thread.run_sync(handle.write, part)
-        except httpx.HTTPError as exc:
-            await anyio.to_thread.run_sync(lambda: target.unlink(missing_ok=True))
-            raise UpstreamError(
-                f"Не удалось скачать {url}: {exc}. "
-                "В оффлайн-режиме доступны только локальные файлы."
-            ) from exc
-
-        if not await anyio.to_thread.run_sync(_has_content, target):
-            await anyio.to_thread.run_sync(lambda: target.unlink(missing_ok=True))
-            raise DocumentProcessingError(f"Пустой ответ по URL: {url}")
-
-        ref = await self.add_file(target, category=category, project_id=project_id,
-                                  session_id=session_id,
-                                  citation=f"{url} (загружено по URL)")
-        if ref is None:
-            raise ConflictDocument(url)
-        ref.url = url
-        return ref
+        for index, (target, name) in enumerate(staged, start=1):
+            try:
+                ref = await self.add_file(
+                    target, category=category, project_id=project_id,
+                    session_id=session_id, title=Path(name).stem,
+                    force_reindex=force_reindex, filename=name,
+                )
+            except Exception as exc:
+                log.warning("index_staged: %s не проиндексирован: %s", name, exc)
+                result.failed.append((name, f"{type(exc).__name__}: {exc}"))
+                # Временный файл не проиндексировали — убираем с диска (D6).
+                await anyio.to_thread.run_sync(
+                    lambda t=target: t.unlink(missing_ok=True))
+                continue
+            if ref is None:
+                # Дубликат содержимого: временный файл больше не нужен (D6).
+                await anyio.to_thread.run_sync(
+                    lambda t=target: t.unlink(missing_ok=True))
+                result.duplicates.append(DocumentRef(
+                    dockey=self._dockey_for_path(target), docname=Path(name).stem,
+                    path=str(target), filename=name, status=DocStatus.READY))
+            else:
+                result.added.append(ref)
+            if on_progress is not None:
+                on_progress(index, total, name)
+        return result
 
     # ------------------------------------------------------------- удаление/список
     async def delete_document(
@@ -497,12 +526,53 @@ class PaperQA2Service:
         """Схема RAG-fusion: сначала контекст, затем ответ по нему (без повторного поиска)."""
         _chunks, _session = await self.get_evidence(query, k=k)
         return await self.ask(_session, mode=mode, max_sources=max_sources, evidence=_chunks)
+
+    async def agent_ask(
+        self,
+        query: str,
+        mode: str | None = "agent",
+        max_sources: int | None = None,
+        settings: Settings | None = None,
+    ) -> AnswerResult:
+        """Ответить на вопрос через PaperQA-агент (по умолчанию офлайн «fake»-агент).
+
+        Agent сам выбирает инструменты: поиск документов, сбор доказательств,
+        генерацию ответа. В офлайн-режиме (agent_type=\"fake\") вызовы LLM
+        детерминистичны — без внешних зависимостей, подходит для тестов.
+        """
+        pqa_settings = settings or self._settings_with_sources(max_sources)
+        t0 = time.perf_counter()
+        async with self.read_lock:
+            response: AnswerResponse = await agent_query(
+                query,
+                settings=pqa_settings,
+                docs=self.docs,
+                agent_type=self.app.agent_type,
+            )
+            session = response.session
+        elapsed = time.perf_counter() - t0
+
+        return AnswerResult(
+            question=session.question or str(query),
+            answer=session.answer,
+            formatted_answer=session.formatted_answer or session.answer,
+            citations=self._citations(session),
+            context=[self._context_dict(c) for c in session.contexts],
+            evidence=self._to_chunks(session.contexts),
+            has_successful_answer=bool(session.has_successful_answer),
+            cost=session.cost,
+            token_counts=dict(session.token_counts or {}),
+            mode=mode,
+            seconds=round(elapsed),
+            agent_status=response.status.value if response.status else None,
+        )
+    # -------------------------------------------------------------- персистентность
     # -------------------------------------------------------------- персистентность
     async def persist_state(self) -> int:
         """Сохранить текущее состояние `Docs` в хранилище."""
         return await PaperQA2Persistence(self).persist_state()
 
-    async def restore_state(self, force: bool = False) -> int:
+    async def restore_state(self, force: bool = False) -> tuple[int, int]:
         """Восстановить `Docs` из хранилища (см. :class:`PaperQA2Persistence`)."""
         return await PaperQA2Persistence(self).restore_state(force=force)
 
@@ -535,11 +605,6 @@ class PaperQA2Service:
         if suffix not in {e.lower() for e in self.app.allowed_extensions}:
             raise DocumentProcessingError(
                 f"Неподдерживаемый тип файла: {suffix or '(без расширения)'}")
-
-    def _extension_from_url(self, url: str) -> str:
-        name = url.split("?")[0].split("#")[0]
-        suffix = Path(name).suffix
-        return suffix if suffix else ".pdf"
 
     def _dockey_for_path(self, path: Path) -> str:
         from paperqa.docs import md5sum
@@ -653,6 +718,32 @@ class PaperQA2Service:
         result = await llm.call_single(messages=[Message(content=prompt)], name=name)
         return (getattr(result, "text", "") or "").strip()
 
+    async def complete_with_cost(
+        self, prompt: str, *, name: str = "completion"
+    ) -> tuple[str, dict[str, Any]]:
+        """Вызов LLM с возвратом стоимости и токенов.
+
+        Возвращает (text, cost_info) где cost_info содержит:
+        - cost_usd: float
+        - prompt_tokens: int
+        - completion_tokens: int
+        - cache_read_tokens: int
+        - cache_creation_tokens: int
+        - model: str
+        """
+        llm = self._llm_model if self._llm_model is not None else self.pqa_settings.get_llm()
+        result = await llm.call_single(messages=[Message(content=prompt)], name=name)
+        text = (getattr(result, "text", "") or "").strip()
+        cost_info = {
+            "cost_usd": getattr(result, "cost", 0.0) or 0.0,
+            "prompt_tokens": getattr(result, "prompt_count", 0) or 0,
+            "completion_tokens": getattr(result, "completion_count", 0) or 0,
+            "cache_read_tokens": getattr(result, "cache_read_tokens", 0) or 0,
+            "cache_creation_tokens": getattr(result, "cache_creation_tokens", 0) or 0,
+            "model": getattr(result, "model", "") or "",
+        }
+        return text, cost_info
+
     async def stream_complete(
         self,
         prompt: str,
@@ -751,10 +842,39 @@ class PaperQA2Service:
             data = await data
         return bytes(data)
 
+    # ------------------------------------------------------------------ перевод
+    async def translate_text(
+        self,
+        text: str,
+        target_language: str,
+        source_language: str | None = None,
+    ) -> str:
+        """Перевести текст через LLM с сохранением научной терминологии.
 
-class ConflictDocument(Exception):
-    """URL уже присутствует в коллекции (тот же dockey)."""
+        Использует ту же модель LLM, что и для генерации ответов. Сохраняет
+        названия географических объектов, приборов, методов и аббревиатуры,
+        структуру markdown, формулы и цитаты [n].
+        """
+        source = source_language or self.app.answer_language or "ru"
 
-    def __init__(self, url: str) -> None:
-        super().__init__(f"Документ по URL {url} уже загружен")
-        self.url = url
+        prompt = (
+            "Переведите следующий текст с "
+            f"{source} на {target_language}.\n\n"
+            "Правила перевода научной статьи:\n"
+            "1. Сохраняйте все названия географических объектов, приборов, "
+            "методов и аббревиатуры без перевода (например: «Баренцево море», "
+            "«CTD-зонд», «хлорофилл-а», «GF/F»).\n"
+            "2. Сохраняйте все формулы, уравнения и математические "
+            "обозначения без изменений.\n"
+            "3. Сохраняйте структуру markdown: заголовки, списки, таблицы, "
+            "цитаты [n], ссылки на источники.\n"
+            "4. Переводите только естественно-языковый текст, не изменяя "
+            "смысл.\n"
+            "5. Сохраняйте стиль научной статьи — формальный, объективный, "
+            "без эмоциональных окрасок.\n\n"
+            f"Текст для перевода:\n{text}\n\n"
+            "Перевод:"
+        )
+
+        result = await self.complete(prompt, name="translate_section")
+        return result.strip()

@@ -47,10 +47,10 @@ class StoredDocument:
     citation: str | None
     chunk_count: int
     settings_md5: str | None
+    schema_version: int = SCHEMA_VERSION
     updated_at: Any = None
     doc: Doc | None = None
     texts: list[Text] | None = None
-
 
 class ChunkStore(Protocol):
     """Контракт хранилища чанков."""
@@ -62,9 +62,13 @@ class ChunkStore(Protocol):
 
     async def clear(self, collection: str) -> int: ...
 
-    async def load(self, collection: str) -> list[StoredDocument]: ...
+    async def load(self, collection: str,
+                   include_stale: bool = False) -> list[StoredDocument]: ...
 
-    async def list_documents(self, collection: str) -> list[StoredDocument]: ...
+    async def list_documents(self, collection: str,
+                             with_payload: bool = False,
+                             include_stale: bool = False) \
+        -> list[StoredDocument]: ...
 
     async def count_chunks(self, collection: str) -> int: ...
 
@@ -141,10 +145,14 @@ class SqliteChunkStore:
 
         return await anyio.to_thread.run_sync(_clear)
 
-    async def load(self, collection: str) -> list[StoredDocument]:
-        return await self.list_documents(collection, with_payload=True)
+    async def load(self, collection: str,
+                   include_stale: bool = False) -> list[StoredDocument]:
+        return await self.list_documents(collection, with_payload=True,
+                                         include_stale=include_stale)
 
-    async def list_documents(self, collection: str, with_payload: bool = False) \
+    async def list_documents(self, collection: str,
+                             with_payload: bool = False,
+                             include_stale: bool = False) \
         -> list[StoredDocument]:
         def _read() -> list[StoredDocument]:
             with self._session() as db:
@@ -156,7 +164,7 @@ class SqliteChunkStore:
                 result = []
                 stale_count = 0
                 for row in rows:
-                    if row.schema_version != SCHEMA_VERSION:
+                    if row.schema_version != SCHEMA_VERSION and not include_stale:
                         stale_count += 1
                         continue
                     doc = Doc.model_validate(_loads(row.doc_blob)) if with_payload else None
@@ -169,7 +177,7 @@ class SqliteChunkStore:
                         chunk_count=row.chunk_count, settings_md5=row.settings_md5,
                         updated_at=row.updated_at, doc=doc, texts=texts,
                     ))
-                if stale_count:
+                if stale_count and not include_stale:
                     import logging
                     logging.getLogger("boasi.services.chunk_store").warning(
                         "load: %d записей с устаревшей версией схемы (stale=%d, current=%d)",
@@ -200,7 +208,8 @@ class MemoryChunkStore:
                    settings_md5: str | None = None) -> None:
         self._data.setdefault(collection, {})[str(doc.dockey)] = StoredDocument(
             dockey=str(doc.dockey), docname=doc.docname, citation=doc.citation,
-            chunk_count=len(texts), settings_md5=settings_md5, updated_at=utcnow(),
+            chunk_count=len(texts), settings_md5=settings_md5,
+            schema_version=SCHEMA_VERSION, updated_at=utcnow(),
             doc=doc.model_copy(deep=True),
             texts=[t.model_copy(deep=True) for t in texts],
         )
@@ -212,11 +221,26 @@ class MemoryChunkStore:
         items = self._data.pop(collection, {})
         return len(items)
 
-    async def load(self, collection: str) -> list[StoredDocument]:
-        return list(self._data.get(collection, {}).values())
+    async def load(self, collection: str,
+                   include_stale: bool = False) -> list[StoredDocument]:
+        result = []
+        stale = 0
+        for item in self._data.get(collection, {}).values():
+            if item.schema_version != SCHEMA_VERSION and not include_stale:
+                stale += 1
+                continue
+            result.append(item)
+        if stale:
+            import logging
+            logging.getLogger("boasi.services.chunk_store").warning(
+                "load: %d записей с устаревшей схемой (stale=%d, current=%d)",
+                stale, 0, SCHEMA_VERSION)
+        return result
 
-    async def list_documents(self, collection: str) -> list[StoredDocument]:
-        return list(self._data.get(collection, {}).values())
+    async def list_documents(self, collection: str,
+                             with_payload: bool = False,
+                             include_stale: bool = False) -> list[StoredDocument]:
+        return await self.load(collection, include_stale=include_stale)
 
     async def count_chunks(self, collection: str) -> int:
         return sum(d.chunk_count for d in self._data.get(collection, {}).values())

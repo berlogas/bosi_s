@@ -170,6 +170,18 @@ class RagFusionService:
         on_stage: Any = None,
     ) -> FusionResult:
         """Полный цикл: слияние коллекций -> rerank -> генерация."""
+        # Режим агента: итеративный поиск через PaperQA agent_query
+        if mode == SearchMode.agent:
+            service = self.registry.session_service(session_id) if session_id \
+                else self.registry.global_service()
+            result = await service.agent_ask(query, max_sources=max_sources)
+            return FusionResult(
+                answer=result,
+                sources=[],
+                references=result.citations,
+                mode=mode, question=query, from_cache=False,
+                stats={"candidates": 0, "selected": 0, "agent": True},
+            )
         catalog, stamp = self.load_catalog(db, session_id, self._config_stamp)
         return await self._generator.answer(
             db,

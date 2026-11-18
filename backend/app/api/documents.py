@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.api.serializers import _enum_value, document_from_ref, document_from_row
 from app.core.errors import NotFoundError
-from app.core.safety import validate_global_import
+from app.core.safety import global_import_roots, is_within, validate_global_import
 from app.core.security import get_current_user, require_admin
 from app.db.models import (
     Document,
@@ -37,6 +37,7 @@ from app.schemas.api import (
     FileFailureOut,
     GlobalDocumentOut,
 )
+from app.services.document_replace import drop_replaced_documents
 from app.services.paperqa_service import PaperQA2Service
 from app.services.pqa_registry import get_registry
 from app.services.types import DocStatus
@@ -65,14 +66,20 @@ def _service() -> PaperQA2Service:
     return get_registry().global_service()
 
 
-def _register(db: Session, user: User, ref: Any, tags: list[str],
+def _register(db: Session, user_id: str, ref: Any, tags: list[str],
               source: str) -> Document:
+    """Зеркалим `DocumentRef` в таблицу `documents`.
+
+    Принимает id пользователя, а не ORM-объект: вызывается и из фоновой
+    задачи, где сессия запроса уже закрыта.
+    """
     return docs_repo.upsert_document(
         db,
         dockey=ref.dockey,
         docname=ref.docname or "",
         title=ref.title or ref.docname,
-        filename=os.path.basename(ref.path) if ref.path else (ref.docname or ""),
+        filename=ref.filename or (os.path.basename(ref.path) if ref.path
+                                   else (ref.docname or "")),
         path=ref.path,
         url=ref.url,
         size_bytes=ref.size_bytes or 0,
@@ -83,8 +90,8 @@ def _register(db: Session, user: User, ref: Any, tags: list[str],
         category=GLOBAL_CATEGORY,
         visibility=DocumentVisibility.global_,
         session_id=None,
-        owner_user_id=user.id,
-        added_by=user.id,
+        owner_user_id=user_id,
+        added_by=user_id,
         tags=tags,
         source=source,
         status=DocumentStatus.ready if ref.status is DocStatus.READY else DocumentStatus.error,
@@ -171,12 +178,26 @@ def global_stats(db: Session = Depends(get_db)) -> dict[str, Any]:
 # --------------------------------------------------------------------------- запись
 @router.post("/upload", response_model=DocumentBatchResultOut)
 async def upload(files: list[UploadFile] = File(...), tags: str = Form(""),
+                 force_reindex: bool = Form(False),
+                 replace: bool = Form(False),
                  request: Request = None,
                  admin: User = Depends(require_admin),
                  db: Session = Depends(get_db)) -> DocumentBatchResultOut:
+    """Загрузка файлов в глобальную базу.
+
+    `replace` — заменить прежние версии документов с теми же именами: без
+    этого изменённый файл лёг бы вторым документом, а старая версия осталась
+    бы в индексе (дедуп PaperQA идёт по содержимому, а не по имени).
+    """
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-    result = await _service().add_uploads(files)
-    stored = [document_from_row(_register(db, admin, ref, tag_list, "upload"))
+    service = _service()
+    staged, stage_failed = await service.stage_uploads(files)
+    if replace:
+        await drop_replaced_documents(
+            db, service, session_id=None, names=[name for _, name in staged])
+    result = await service.index_staged(staged, force_reindex=force_reindex)
+    result.failed = stage_failed + result.failed
+    stored = [document_from_row(_register(db, admin.id, ref, tag_list, "upload"))
               for ref in result.added]
     audit(db, action="admin.documents.upload", actor=admin, target_type="collection",
           target_id="global", **(_meta(request) if request else {}),
@@ -215,7 +236,7 @@ async def bulk_add(payload: dict[str, Any], request: Request,
 
     tag_list = [str(t).strip() for t in (payload.get("tags") or []) if str(t).strip()]
     result = await _service().add_files([str(p) for p in paths])
-    stored = [document_from_row(_register(db, admin, ref, tag_list, "bulk"))
+    stored = [document_from_row(_register(db, admin.id, ref, tag_list, "bulk"))
               for ref in result.added]
     audit(db, action="admin.documents.bulk", actor=admin, target_type="collection",
           target_id="global", **_meta(request),
@@ -244,7 +265,7 @@ async def bulk_upload(
     """
     tag_list = [str(t).strip() for t in (tags or "").split(",") if str(t).strip()]
     result = await _service().add_uploads(files)
-    stored = [document_from_row(_register(db, admin, ref, tag_list, "bulk"))
+    stored = [document_from_row(_register(db, admin.id, ref, tag_list, "bulk"))
               for ref in result.added]
     audit(db, action="admin.documents.bulk_upload", actor=admin,
           target_type="collection", target_id="global",
@@ -276,15 +297,26 @@ async def bulk_async(payload: dict[str, Any], request: Request,
     if len(paths) > 200:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "За один раз не больше 200 файлов")
+    # Пути проверяются так же, как в `bulk_add`: без этого админ мог бы
+    # проиндексировать любой файл на диске, минуя `ALLOW_EXTERNAL_IMPORT_PATHS`.
+    allowed = [str(p) for p in await anyio.to_thread.run_sync(lambda plist: [
+        str(validate_global_import(str(item), must_exist=False))
+        for item in plist], paths)]
     present = await anyio.to_thread.run_sync(
-        lambda: [str(p) for p in paths if Path(str(p)).is_file()])
+        lambda: [str(p) for p in allowed if Path(str(p)).is_file()])
     existing = present
     if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ни один файл не найден")
 
     tag_list = [str(t).strip() for t in (payload.get("tags") or []) if str(t).strip()]
 
+    # В замыкание попадают только простые значения: сессия запроса к моменту
+    # старта задачи закрыта, а ORM-объект админа от неё отвязан.
+    actor_id = admin.id
+
     async def body(task: Task) -> dict[str, Any]:
+        from app.db.session import session_scope
+
         service = _service()
         added: list[dict[str, Any]] = []
         failed: list[dict[str, str]] = []
@@ -299,9 +331,12 @@ async def bulk_async(payload: dict[str, Any], request: Request,
                 continue
             if ref is None:
                 continue
-            row = _register(db, admin, ref, tag_list, "bulk")
-            added.append({"id": row.id, "docname": row.docname,
-                          "chunks": row.chunks_count})
+            # Реестр — в своей сессии: сессия запроса уже закрыта, а общая
+            # сессия из двух потоков небезопасна (SQLAlchemy не потокобезопасен).
+            with session_scope() as task_db:
+                row = _register(task_db, actor_id, ref, tag_list, "bulk")
+                added.append({"id": row.id, "docname": row.docname,
+                              "chunks": row.chunks_count})
         return {"added": added, "failed": failed, "total": len(existing)}
 
     task = tasks.submit(body, kind="indexing",
@@ -321,11 +356,13 @@ async def add_path(payload: dict[str, Any], request: Request,
     if not raw_path:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Не указан путь")
     path = await anyio.to_thread.run_sync(validate_global_import, raw_path)
-    ref = await _service().add_file(path)
+    force_reindex = bool(payload.get("force_reindex"))
+    ref = await _service().add_file(path, force_reindex=force_reindex)
     if ref is None:
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Документ уже в базе (дедуп по содержимому)")
-    document = _register(db, admin, ref, [], "path")
+                            "Документ уже в базе (дедуп по содержимому). "
+                            "Для переиндексации укажите force_reindex.")
+    document = _register(db, admin.id, ref, [], "path")
     audit(db, action="admin.documents.add", actor=admin, target_type="document",
           target_id=document.id, **_meta(request), filename=document.filename)
     return document_from_row(document)
@@ -354,6 +391,11 @@ async def delete_document(document_id: str, request: Request,
     if document.dockey:
         await _service().delete_document(dockey=document.dockey)
     docs_repo.delete_document_row(db, document_id)
+    # Файл глобальной базы убираем с диска, если документ удаляли (D12).
+    if document.path:
+        target = Path(document.path)
+        if is_within(target, global_import_roots()):
+            await anyio.to_thread.run_sync(lambda: target.unlink(missing_ok=True))
     audit(db, action="admin.documents.delete", actor=admin, target_type="document",
           target_id=document_id, **_meta(request), filename=document.filename)
 
@@ -361,10 +403,15 @@ async def delete_document(document_id: str, request: Request,
 @router.delete("", response_model=DocumentBatchResultOut)
 async def clear_all(request: Request, admin: User = Depends(require_admin),
                     db: Session = Depends(get_db)) -> DocumentBatchResultOut:
-    """Полная очистка глобальной базы (индекс + реестр)."""
+    """Полная очистка глобальной базы (индекс + реестр + файлы)."""
     removed = 0
     for document in docs_repo.list_documents(db, session_id=None):
         docs_repo.delete_document_row(db, document.id)
+        # При очистке базы файлы больше не нужны (D12).
+        if document.path:
+            target = Path(document.path)
+            if is_within(target, global_import_roots()):
+                await anyio.to_thread.run_sync(lambda: target.unlink(missing_ok=True))
         removed += 1
     await _service().clear_documents()
     audit(db, action="admin.documents.clear", actor=admin, target_type="collection",

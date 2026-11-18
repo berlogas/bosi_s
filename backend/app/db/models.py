@@ -30,6 +30,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import DateTime as _DateTime
 
+from app.core.paths import from_stored_path, to_stored_path
+
 
 class UTCDateTime(TypeDecorator):
     """Время в UTC.
@@ -53,6 +55,37 @@ class UTCDateTime(TypeDecorator):
         if value is None:
             return None
         return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+class DataPath(TypeDecorator):
+    """Путь к файлу: в БД относительно DATA_DIR, наружу — абсолютный.
+
+    Каталог данных один и тот же, а путь к нему в разных средах разный
+    (хосте `N:\\...\\data`, в контейнере `/data`). Абсолютный путь в БД
+    привязывал бы запись к одной машине: документ, загруженный на хосте,
+    не находился бы в контейнере.
+
+    Поэтому в БД лежит путь относительно DATA_DIR (`documents/uploads/a.md`),
+    а наружу отдаётся абсолютный — собранный из текущего DATA_DIR.
+
+    Путь за пределами DATA_DIR (внешний импорт, папка-приёмник inbox)
+    хранится как есть: он не переносим и переносить его нельзя.
+
+    Подробности — в `app/core/paths.py`.
+    """
+
+    impl = String(1024)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):  # noqa: ANN001, ANN201
+        if value is None:
+            return None
+        return to_stored_path(value)
+
+    def process_result_value(self, value, dialect):  # noqa: ANN001, ANN201
+        if value is None:
+            return None
+        return from_stored_path(value)
 
 
 def utcnow() -> datetime:
@@ -85,6 +118,7 @@ class DocumentCategory(str, enum.Enum):
     temp_literature = "temp_literature"
     notes = "notes"
     supplementary = "supplementary"
+    style_guide = "style_guide"  # документ «Правила оформления» журнала (только для стиля, не для текста)
     global_knowledge = "global_knowledge"  # документ глобальной базы знаний
 
 
@@ -111,6 +145,7 @@ class ProjectDocRole(str, enum.Enum):
     reference = "reference"
     data = "data"
     draft = "draft"
+    style_guide = "style_guide"  # документ «Правила оформления журнала»
 
 
 class RelationType(str, enum.Enum):
@@ -125,6 +160,45 @@ class SearchMode(str, enum.Enum):
     project_focus = "project_focus"
     session_only = "session_only"
     global_only = "global_only"
+    agent = "agent"
+
+
+class SectionKind(str, enum.Enum):
+    """Тип раздела — определяет стратегию генерации и промпт."""
+
+    standard = "standard"              # обычный раздел (Introduction, Methods, ...)
+    literature_review = "literature_review"  # обзор литературы
+    data = "data"                      # описание собственных данных
+    discussion = "discussion"          # обсуждение
+    custom = "custom"                  # пользовательский раздел
+
+
+class SectionStatus(str, enum.Enum):
+    """Статус раздела в плане проекта."""
+
+    pending = "pending"           # ожидает генерации
+    in_progress = "in_progress"   # генерируется / редактируется
+    review = "review"             # на ревью у автора
+    approved = "approved"         # одобрен, можно переводить
+
+
+class VersionStatus(str, enum.Enum):
+    """Статус версии раздела."""
+
+    draft = "draft"               # черновик (только что сгенерирован)
+    review = "review"             # на ревью
+    approved = "approved"         # одобрен автором
+    superseded = "superseded"     # заменён новой версией
+    archived = "archived"         # архивная версия (для истории)
+
+
+class TranslationStatus(str, enum.Enum):
+    """Статус перевода раздела."""
+
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    failed = "failed"
 
 
 # --------------------------------------------------------------------------- users
@@ -227,7 +301,7 @@ class Document(Base):
 
     title: Mapped[str] = mapped_column(String(512))
     filename: Mapped[str] = mapped_column(String(512))
-    path: Mapped[str] = mapped_column(String(1024))
+    path: Mapped[str] = mapped_column(DataPath)
     url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     mime: Mapped[str | None] = mapped_column(String(128), nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
@@ -237,6 +311,7 @@ class Document(Base):
     docname: Mapped[str | None] = mapped_column(String(255), index=True)
     citation: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    doc_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunks_count: Mapped[int] = mapped_column(Integer, default=0)
     indexed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
@@ -271,10 +346,22 @@ class Project(Base):
                                              index=True)
     title: Mapped[str] = mapped_column(String(512))
     target_journal: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Язык генерации разделов статьи (ru | en и т.д.). Выбирается при создании
+    # проекта и используется в промптах при генерации.
+    language: Mapped[str] = mapped_column(String(10), default="ru", nullable=False)
+    # Документ-правила оформления журнала (требования к оформлению статьи). При
+    # генерации разделов его содержимое добавляется в промпт как
+    # дополнительные указания автору.
+    style_guide_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True,
+        index=True)
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus, native_enum=False), default=ProjectStatus.planning
     )
     sections: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Порядок проектов в списке: пользователь перетаскивает их мышью.
+    # Меньше — выше. По умолчанию 0, чтобы старые проекты не «уехали».
+    order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
                                                 onupdate=utcnow)
@@ -283,6 +370,13 @@ class Project(Base):
     versions: Mapped[list[ProjectVersion]] = relationship(
         back_populates="project", cascade="all, delete-orphan",
         order_by="ProjectVersion.created_at")
+    section_plans: Mapped[list[SectionPlan]] = relationship(
+        back_populates="project", cascade="all, delete-orphan",
+        order_by="SectionPlan.order")
+    language_policy: Mapped[ProjectLanguagePolicy | None] = relationship(
+        back_populates="project", cascade="all, delete-orphan", uselist=False)
+    glossary: Mapped[list[TerminologyGlossary]] = relationship(
+        back_populates="project", cascade="all, delete-orphan")
 
 
 class GenerationKind(str, enum.Enum):
@@ -328,6 +422,156 @@ class ProjectVersion(Base):
 
     __table_args__ = (
         Index("ix_project_versions_project_created", "project_id", "created_at"),
+    )
+
+
+# --------------------------------------------------------------------------- section planning & versioning
+class SectionPlan(Base):
+    """План раздела статьи — замена JSON в Project.sections.
+
+    Каждый раздел становится отдельной строкой с полным набором метаданных:
+    зависимости, языковая политика, лимиты слов, статус.
+    """
+
+    __tablename__ = "section_plans"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[SectionKind] = mapped_column(
+        Enum(SectionKind, native_enum=False), default=SectionKind.standard)
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    required: Mapped[bool] = mapped_column(Boolean, default=True)
+    word_target: Mapped[int] = mapped_column(Integer, default=500)
+    word_min: Mapped[int] = mapped_column(Integer, default=300)
+    word_max: Mapped[int] = mapped_column(Integer, default=2000)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    language: Mapped[str] = mapped_column(String(10), default="ru")
+    depends_on: Mapped[list[str]] = mapped_column(JSON, default=list)  # IDs других SectionPlan
+    status: Mapped[SectionStatus] = mapped_column(
+        Enum(SectionStatus, native_enum=False), default=SectionStatus.pending)
+    current_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                onupdate=utcnow)
+
+    project: Mapped[Project] = relationship(back_populates="section_plans")
+    versions: Mapped[list[SectionVersion]] = relationship(
+        back_populates="section_plan", cascade="all, delete-orphan",
+        order_by="SectionVersion.created_at")
+
+    __table_args__ = (
+        Index("ix_section_plans_project_order", "project_id", "order"),
+        UniqueConstraint("project_id", "name", name="uq_section_plan_project_name"),
+    )
+
+
+class SectionVersion(Base):
+    """Версия раздела — расширяет ProjectVersion языковой поддержкой,
+    деревом версий (parent_version_id) и отчётом качества.
+
+    PaperQA2 не имеет версионирования разделов, поэтому мы делаем свою
+    таблицу с полной трассировкой: кто, когда, с какими параметрами,
+    качество, откуда переведено.
+    """
+
+    __tablename__ = "section_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    section_plan_id: Mapped[str] = mapped_column(
+        ForeignKey("section_plans.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("research_sessions.id", ondelete="CASCADE"), nullable=True, index=True)
+    # Контент
+    content_md: Mapped[str] = mapped_column(Text, default="")
+    language: Mapped[str] = mapped_column(String(10), default="ru")
+    source_language: Mapped[str | None] = mapped_column(String(10), nullable=True)  # если переведено
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Цитирование
+    citation_map: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Генерация
+    generation_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # полный снапшот параметров
+    seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Стоимость
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    token_counts: Mapped[dict[str, int]] = mapped_column(JSON, default=dict)
+    # Качество
+    quality_report: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[VersionStatus] = mapped_column(
+        Enum(VersionStatus, native_enum=False), default=VersionStatus.draft)
+    # Дерево версий
+    parent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Мета
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                  onupdate=utcnow)
+
+    section_plan: Mapped[SectionPlan] = relationship(back_populates="versions")
+    project: Mapped[Project] = relationship()
+    session: Mapped[ResearchSession | None] = relationship()
+    creator: Mapped[User | None] = relationship()
+
+    __table_args__ = (
+        Index("ix_section_versions_plan_created", "section_plan_id", "created_at"),
+        Index("ix_section_versions_parent", "parent_version_id"),
+    )
+
+
+class ProjectLanguagePolicy(Base):
+    """Языковая политика проекта: основной язык, допустимые языки,
+    настройки авто-перевода, глоссарий, пороги качества генерации."""
+
+    __tablename__ = "project_language_policies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), unique=True, index=True)
+    primary_language: Mapped[str] = mapped_column(String(10), default="ru")
+    allowed_languages: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["ru", "en"])
+    translate_on_approve: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_translate_target: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Пороги качества генерации (0.0-1.0)
+    quality_grounding_threshold: Mapped[float] = mapped_column(Float, default=0.7)
+    quality_completeness_threshold: Mapped[float] = mapped_column(Float, default=0.7)
+    quality_citations_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Максимум итераций агента
+    max_generation_iterations: Mapped[int] = mapped_column(Integer, default=3)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                onupdate=utcnow)
+
+    project: Mapped[Project] = relationship(back_populates="language_policy")
+
+
+class TerminologyGlossary(Base):
+    """Проектный глоссарий терминов для согласованного перевода.
+
+    term — канонический термин (обычно на английском или в исходном языке)
+    translations — словарь {lang: translated_term}
+    definition — необязательное определение для контекста
+    """
+
+    __tablename__ = "terminology_glossary"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    term: Mapped[str] = mapped_column(String(255))
+    translations: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    definition: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
+                                                onupdate=utcnow)
+
+    project: Mapped[Project] = relationship(back_populates="glossary")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "term", name="uq_glossary_project_term"),
     )
 
 
@@ -406,7 +650,7 @@ class AuditLog(Base):
     actor_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     action: Mapped[str] = mapped_column(String(64), index=True)
     target_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -523,7 +767,7 @@ class InboxFile(Base):
         ForeignKey("inbox_runs.id", ondelete="CASCADE"), index=True,
     )
     rel_path: Mapped[str] = mapped_column(String(1024))
-    abs_path: Mapped[str] = mapped_column(String(1024))
+    abs_path: Mapped[str] = mapped_column(DataPath)
     sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -541,7 +785,7 @@ class InboxFile(Base):
     document_id: Mapped[str | None] = mapped_column(
         ForeignKey("documents.id", ondelete="SET NULL"), nullable=True,
     )
-    final_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    final_path: Mapped[str | None] = mapped_column(DataPath, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow,
                                                   onupdate=utcnow)

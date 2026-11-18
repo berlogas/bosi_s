@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     allowed_extensions: list[str] = Field(
         default_factory=lambda: [
             ".pdf", ".txt", ".md", ".html", ".htm", ".docx", ".xlsx", ".pptx",
-            ".csv", ".tsv", ".json", ".yaml", ".yml", ".py",
+            ".csv", ".tsv", ".json", ".yaml", ".yml", ".py", ".ts",
         ]
     )
 
@@ -115,6 +115,8 @@ class Settings(BaseSettings):
     # Короткий ответ без «научно-статьной» простыни: простыня = больше
     # выдуманных фактов (см. grounding.py) и дольше генерация на CPU.
     answer_length: str = "no more than 120 words"
+    # Язык ответа (для промптов и правил языка). По умолчанию «ru».
+    answer_language: str = "ru"
     # Сырой текст вместо LLM-сводок в контексте: честнее, но огромный
     # prefill (SPICE_REPORT: ответ 817 с) — включается только явно.
     evidence_skip_summary: bool = False
@@ -122,9 +124,8 @@ class Settings(BaseSettings):
     chunk_chars: int = 4000
     chunk_overlap: int = 200
     offline_mode: bool = True  # не ходим в Crossref / Semantic Scholar
+    agent_type: str = "fake"  # «fake» — детерминистичный офлайн-агент без вызовов LLM
     multimodal: bool = False
-    # Язык ответов: ru (по умолчанию) | en. Реализуется через prompts.system.
-    answer_language: str = "ru"
     # Русскоязычные промпты; если пусто — берётся дефолт paperqa + правило языка
     prompts_system: str | None = None
     # Шаблон qa-промпта; если пусто — дефолт paperqa с GROUNDING RULES
@@ -137,7 +138,7 @@ class Settings(BaseSettings):
     max_sessions_per_user: int = 10
     max_documents_per_session: int = 50
     max_session_storage_mb: int = 500
-    max_projects_per_session: int = 5
+    max_projects_per_session: int = 100
     max_quick_history: int = 200
 
     # ---------- журнал аудита ----------

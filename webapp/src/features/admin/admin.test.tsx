@@ -4,7 +4,7 @@
  * индексация/переиндексация), задачи, таблицы сессий и аудита.
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -237,7 +237,7 @@ describe('админка', () => {
       await screen.findByText('Раздел доступен только администратору.'),
     ).toBeInTheDocument()
     // вкладки даже не монтируются
-    expect(screen.queryByRole('tab', { name: 'Пользователи' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Пользователи' })).toBeNull()
   })
 
   it('вкладка берётся из адреса: /admin/audit открывается после F5', async () => {
@@ -246,9 +246,9 @@ describe('админка', () => {
 
     renderApp('/admin/audit')
 
-    expect(await screen.findByRole('tab', { name: 'Аудит' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    expect(await screen.findByRole('link', { name: 'Аудит' })).toHaveAttribute(
+      'aria-current',
+      'page',
     )
     expect(
       await screen.findByRole('combobox', { name: 'Фильтр: период журнала' }),
@@ -261,9 +261,9 @@ describe('админка', () => {
 
     renderApp('/admin/base')
 
-    expect(await screen.findByRole('tab', { name: 'Глобальная база' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    expect(await screen.findByRole('link', { name: 'Глобальная база' })).toHaveAttribute(
+      'aria-current',
+      'page',
     )
     expect(await screen.findByLabelText('Путь к файлу')).toBeVisible()
   })
@@ -274,9 +274,9 @@ describe('админка', () => {
 
     renderApp('/admin/nope')
 
-    expect(await screen.findByRole('tab', { name: 'Пользователи' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    expect(await screen.findByRole('link', { name: 'Пользователи' })).toHaveAttribute(
+      'aria-current',
+      'page',
     )
   })
 
@@ -286,7 +286,7 @@ describe('админка', () => {
 
     renderApp()
 
-    expect(await screen.findByRole('tab', { name: 'Пользователи' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Пользователи' })).toBeInTheDocument()
     expect(await screen.findByLabelText('Логин: ivanov')).toBeInTheDocument()
     expect(screen.getByLabelText('ФИО: ivanov')).toHaveValue('Иванов И.И.')
     // в поле видно русскую подпись, а уходит в API техническое 'admin'
@@ -463,7 +463,9 @@ describe('админка', () => {
     await screen.findByLabelText('Логин: ivanov')
 
     await userEvent.click(screen.getByRole('button', { name: 'Создать пользователя' }))
-    await userEvent.type(screen.getByLabelText('Логин'), 'x')
+    // Логин короче 2 символов не проходит проверку на клиенте — берём
+    // корректный, чтобы дойти до ответа сервера.
+    await userEvent.type(screen.getByLabelText('Логин'), 'xx')
     await userEvent.type(screen.getByLabelText(/^Пароль/), '12345678')
     await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
 
@@ -576,6 +578,110 @@ describe('админка', () => {
     expect(await screen.findByText('Нельзя удалить самого себя')).toBeInTheDocument()
   })
 
+  it('глобальная база: итог загрузки показывает дубликаты и ошибки по файлам', async () => {
+    mockApi(
+      adminRoutes({
+        'POST /api/admin/documents/upload': {
+          added: [ADMIN_DOC],
+          duplicates: [],
+          failed: [{ name: 'broken.pdf', error: 'Не удалось прочитать PDF' }],
+          total: 2,
+        },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp('/admin/documents')
+
+    const fileInput = await screen.findByTestId('admin-doc-file-input')
+    fileInput.removeAttribute('hidden')
+    await userEvent.upload(fileInput, new File(['x'], 'a.pdf', { type: 'application/pdf' }))
+    fileInput.setAttribute('hidden', '')
+
+    await screen.findByText('Выбрано файлов: 1')
+    await userEvent.click(screen.getByRole('button', { name: 'Загрузить файлы' }))
+
+    expect(await screen.findByText('Итог загрузки')).toBeInTheDocument()
+    expect(await screen.findByText(/Добавлено: 1/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/broken.pdf: Не удалось прочитать PDF/),
+    ).toBeInTheDocument()
+  })
+
+  it('глобальная база: файл с тем же именем спрашивает замену прежней версии', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        'GET /api/admin/documents': [{ ...ADMIN_DOC, filename: 'otchet.md' }],
+        'POST /api/admin/documents/upload': {
+          added: [ADMIN_DOC],
+          duplicates: [],
+          failed: [],
+          total: 1,
+        },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp('/admin/documents')
+
+    const fileInput = await screen.findByTestId('admin-doc-file-input')
+    fileInput.removeAttribute('hidden')
+    await userEvent.upload(
+      fileInput,
+      new File(['x'], 'otchet.md', { type: 'text/markdown' }),
+    )
+    fileInput.setAttribute('hidden', '')
+
+    await screen.findByText('Выбрано файлов: 1')
+    await userEvent.click(screen.getByRole('button', { name: 'Загрузить файлы' }))
+
+    // Спрашиваем подтверждение — молча перезаписывать нельзя.
+    expect(await screen.findByText('Заменить прежние версии?')).toBeInTheDocument()
+    expect(
+      calls.some((c) => c.url.includes('/documents/upload') && c.init.method === 'POST'),
+    ).toBe(false)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Заменить и загрузить' }))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) => c.url.includes('/documents/upload') && c.init.method === 'POST',
+      )
+      expect(call).toBeDefined()
+      // Флаг замены уходит в multipart отдельным полем.
+      const body = call?.init.body as FormData
+      expect(body.get('replace')).toBe('true')
+    })
+  })
+
+  it('глобальная база: переиндексация документа уходит с force_reindex', async () => {
+    const { calls } = mockApi(
+      adminRoutes({
+        'GET /api/admin/documents': [
+          { ...ADMIN_DOC, filename: 'otchet.md', path: '/data/documents/otchet.md' },
+        ],
+        'POST /api/admin/documents/path': { ...ADMIN_DOC, id: 'g-1' },
+      }),
+    )
+    loginAs(TEST_ADMIN)
+
+    renderApp('/admin/documents')
+
+    await screen.findByText('Глобальный документ')
+    await userEvent.click(screen.getByRole('button', { name: 'Переиндексировать' }))
+
+    await waitFor(() => {
+      const call = calls.find(
+        (c) => c.url.includes('/documents/path') && c.init.method === 'POST',
+      )
+      expect(call).toBeDefined()
+      expect(JSON.parse(String(call?.init.body))).toEqual({
+        path: '/data/documents/otchet.md',
+        force_reindex: true,
+      })
+    })
+  })
+
   it.skip('глобальная база: после загрузки файлов поле очищается (jsdom: userEvent.upload на скрытом input не работает)', async () => {
     mockApi(
       adminRoutes({
@@ -584,8 +690,7 @@ describe('админка', () => {
     )
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     // Находим скрытый input для загрузки файлов по testid
     const fileInput = await screen.findByTestId('admin-doc-file-input')
@@ -622,8 +727,7 @@ describe('админка', () => {
     )
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     const button = await screen.findByRole('button', {
       name: 'Запустить массовое добавление',
@@ -649,8 +753,7 @@ describe('админка', () => {
     )
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     const button = await screen.findByRole('button', {
       name: 'Запустить массовое добавление',
@@ -662,11 +765,11 @@ describe('админка', () => {
     mockApi(adminRoutes())
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     expect(await screen.findByText('годовой отчёт.pdf')).toBeInTheDocument()
-    expect(screen.getByText('принят')).toBeInTheDocument()
+    // файл попал в библиотеку — так и называется его статус
+    expect(screen.getByText('в библиотеке')).toBeInTheDocument()
     expect(screen.getByText('отклонён')).toBeInTheDocument()
     // Время прогона — в локальной зоне, а не в UTC: 10:00 UTC = 13:00 MSK.
     const startedAt = screen.getByText('09.10.2026, 13:00')
@@ -681,8 +784,7 @@ describe('админка', () => {
     mockApi(adminRoutes())
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     expect(
       screen.queryByLabelText('Пути через запятую или по одному в строке'),
@@ -697,8 +799,7 @@ describe('админка', () => {
     )
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     const reindex = await screen.findByRole('button', {
       name: 'Переиндексировать всё',
@@ -722,9 +823,7 @@ describe('админка', () => {
     )
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await screen.findByRole('tab', { name: 'Глобальная база' })
-    await userEvent.click(screen.getByRole('tab', { name: 'Глобальная база' }))
+    renderApp('/admin/documents')
 
     // документы глобальной базы уже видны
     expect(await screen.findByText(/Глобальный документ/)).toBeInTheDocument()
@@ -763,10 +862,10 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
-    expect(await screen.findByText(/30%/)).toBeInTheDocument()
+    // Прогресс показан в панели незавершённых задач (в таблице его нет).
+    expect((await screen.findAllByText(/30%/)).length).toBeGreaterThan(0)
     expect(screen.getByText('Не удалось проиндексировать')).toBeInTheDocument()
   })
 
@@ -785,8 +884,7 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
     expect(await screen.findByText(/Показано 3 из 3/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('combobox', { name: /Фильтр: статус/ }))
@@ -815,8 +913,7 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
     const userFilter = await screen.findByRole('combobox', {
       name: /Фильтр: пользователь/,
@@ -839,13 +936,14 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
-    expect(await screen.findByText('Автор: ivanov')).toBeInTheDocument()
+    // Автор показан в колонке «Автор» — именем, а не идентификатором.
+    expect(await screen.findByRole('columnheader', { name: 'Автор' })).toBeInTheDocument()
+    expect((await screen.findAllByText('ivanov')).length).toBeGreaterThan(0)
   })
 
-  it('вкладка Задачи: очистка завершённых с подтверждением', async () => {
+  it('вкладка Задачи: очистка завершённых', async () => {
     const { calls } = mockApi(
       adminRoutes({
         'GET /api/tasks': {
@@ -860,18 +958,14 @@ describe('админка', () => {
     )
     loginAs(TEST_ADMIN)
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
     await userEvent.click(
       await screen.findByRole('button', {
         name: 'Очистить завершённые',
       }),
     )
-    // без подтверждения запрос не уходит
-    expect(calls.some((c) => c.url.endsWith('/api/tasks/clear'))).toBe(false)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Очистить' }))
+    // Завершённые задачи убираются сразу, отдельного подтверждения нет.
     await waitFor(() =>
       expect(
         calls.some(
@@ -901,8 +995,7 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
     expect(
       await screen.findByRole('button', {
@@ -920,13 +1013,12 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
     mockApi(adminRoutes())
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Задачи' }))
+    renderApp('/admin/tasks')
 
     expect(await screen.findByText('Задач нет.')).toBeInTheDocument()
   })
 
-  it('вкладка Сессии: сессии сгруппированы по пользователям', async () => {
+  it('вкладка Сессии: фильтр по пользователю оставляет только его сессии', async () => {
     loginAs(TEST_ADMIN)
     mockApi(
       adminRoutes({
@@ -955,40 +1047,31 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Сессии' }))
+    renderApp('/admin/sessions')
 
-    // группы по логинам из списка пользователей (u-1=ivanov, u-2=petrov)
-    // (логины есть и в соседних вкладках/сайдбаре — ищем именно группы).
-    // Роль region есть и у Accordion.Item, и у его панели, поэтому берём
-    // группу от заголовка аккордеона, а не поиском по роли.
-    const control = await screen.findByRole('button', { name: /ivanov/ })
-    const group = control.closest('[role="region"]') as HTMLElement
-    expect(group).toHaveAttribute('aria-label', 'ivanov')
-    expect(screen.getAllByText('petrov').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('1 сессия').length).toBeGreaterThan(0)
-
-    // первая группа раскрыта по умолчанию: таблица видна сразу
-    expect(await screen.findByRole('table')).toBeInTheDocument()
-    // закрываем и раскрываем обратно — таблица восстанавливается
-    await userEvent.click(control)
-    expect(screen.queryByRole('table')).toBeNull()
-    await userEvent.click(control)
-    await screen.findByRole('table')
-    const table2 = await screen.findByRole('table')
-    const header = within(table2)
+    // Таблица сессий: пользователя выбирают фильтром, группировки больше нет.
+    const table = await screen.findByRole('table')
+    const header = within(table)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
-    expect(header).toEqual([
-      'id',
-      'название',
-      'статус',
-      'действие',
-      'чат',
-      'активность',
-    ])
-    expect(within(table2).getByText('abcdefgh')).toBeInTheDocument()
-    expect(within(table2).getByText('07.10.2026, 15:34')).toBeInTheDocument()
+    expect(header.slice(0, 4)).toEqual(['ID', 'Название', 'Статус', 'Пользователь'])
+    // колонка активности отсортирована по умолчанию — с маркером сортировки
+    expect(header[4]).toMatch(/^Активность/)
+    expect(header[5]).toBe('Действия')
+    expect(within(table).getByText('Баренцево')).toBeInTheDocument()
+    expect(within(table).getByText('Статья про моржей')).toBeInTheDocument()
+    // логины из списка пользователей (u-1=ivanov, u-2=petrov)
+    expect(within(table).getByText('ivanov')).toBeInTheDocument()
+    expect(within(table).getByText('petrov')).toBeInTheDocument()
+    expect(within(table).getByText('07.10.2026, 15:34')).toBeInTheDocument()
+
+    // фильтр по пользователю оставляет только его сессии
+    const filter = await screen.findByRole('combobox', { name: /Фильтр: пользователь сессии/ })
+    await userEvent.click(filter)
+    await userEvent.click(selectOption(filter, 'petrov'))
+
+    await waitFor(() => expect(screen.queryByText('Баренцево')).toBeNull())
+    expect(screen.getByText('Статья про моржей')).toBeInTheDocument()
   })
 
   it('вкладка Сессии: «Очистить чат» чистит переписку сессии в два шага', async () => {
@@ -1011,8 +1094,7 @@ describe('админка', () => {
       }),
     )
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Сессии' }))
+    renderApp('/admin/sessions')
 
     // шаг 1: кнопка в строке сессии, шаг 2 — подтверждение, как в чате сессии
     await userEvent.click(await screen.findByRole('button', { name: 'Очистить чат' }))
@@ -1037,8 +1119,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
     const { calls } = mockApi(adminRoutes())
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Аудит' }))
+    renderApp('/admin/audit')
 
     // сводка: видно, что ретрация работает и сколько всего записей
     expect(await screen.findByText(/всего записей: 1234/)).toBeInTheDocument()
@@ -1067,8 +1148,7 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
     mockApi(adminRoutes())
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Аудит' }))
+    renderApp('/admin/audit')
 
     const link = await screen.findByRole('link', {
       name: 'Выгрузить журнал в CSV',
@@ -1093,20 +1173,25 @@ describe('админка', () => {
     loginAs(TEST_ADMIN)
     mockApi(adminRoutes())
 
-    renderApp()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Аудит' }))
+    renderApp('/admin/audit')
 
     const table = await screen.findByRole('table')
-    let cells = within(table).getAllByRole('row')
+    const cells = within(table).getAllByRole('row')
     // по умолчанию сначала новые
     expect(cells[1]).toHaveTextContent('session.create')
     expect(cells[2]).toHaveTextContent('admin.user.create')
     expect(within(table).getByText('✓')).toBeInTheDocument()
     expect(within(table).getByText('✗')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /Время:/ }))
-    cells = within(table).getAllByRole('row')
-    expect(cells[1]).toHaveTextContent('admin.user.create')
-    expect(screen.getByRole('button', { name: /сначала старые/ })).toBeInTheDocument()
+    // сортировка по времени — теперь заголовком колонки, а не отдельной кнопкой
+    fireEvent.click(screen.getByRole('columnheader', { name: /Время/ }))
+    // перерисовка после смены сортировки асинхронная
+    await waitFor(
+      () => {
+        const sorted = within(screen.getByRole('table')).getAllByRole('row')
+        expect(sorted[1]).toHaveTextContent('admin.user.create')
+      },
+      { timeout: 5000 },
+    )
   })
 })

@@ -7,6 +7,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
+import { notifications } from '@mantine/notifications'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders } from '../../app/AppProviders'
@@ -103,9 +104,6 @@ function mockDocsApi(routes: Record<string, unknown> = {}) {
 beforeEach(() => {
   sessionStorage.clear()
   loginAs()
-  // Очищаем все порталы Mantine от предыдущих тестов (уведомления, модалки и т.д.)
-  document.querySelectorAll('[data-mantine-shared-portal-node]').forEach((el) => el.remove())
-  document.querySelectorAll('.mantine-Notifications-root').forEach((el) => el.remove())
   // Сбрасываем location, чтобы useSearchParams начинал с чистого состояния
   window.history.replaceState(null, '', '/s/s-1/documents')
 })
@@ -113,9 +111,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   resetAuth()
-  // Очищаем порталы уведомлений после каждого теста
-  document.querySelectorAll('[data-mantine-shared-portal-node]').forEach((el) => el.remove())
-  document.querySelectorAll('.mantine-Notifications-root').forEach((el) => el.remove())
+  // Уведомления живут в портале и переживают размонтирование: их текст
+  // мешал бы findByText. Чистим штатным способом — портал при этом остаётся
+  // на месте: удалять его из DOM нельзя, React на него ссылается.
+  notifications.clean()
 })
 
 describe('вкладка Документы', () => {
@@ -162,9 +161,10 @@ describe('вкладка Документы', () => {
       const call = calls.find((c) => c.url.includes('/documents/path'))
       expect(call).toBeDefined()
       const body = JSON.parse(String(call?.init.body))
-      expect(body).toEqual({
+      expect(body).toMatchObject({
         path: '/data/file.pdf',
         tags: ['a', 'b'],
+        force_reindex: false,
       })
       expect(body.category).toBeUndefined()
     })
@@ -198,6 +198,141 @@ describe('вкладка Документы', () => {
 
     // Проверяем, что кнопка загрузки появляется только при наличии файлов
     expect(screen.queryByRole('button', { name: 'Загрузить файлы' })).not.toBeInTheDocument()
+  })
+
+  it('загрузка идёт в фон: сервер отдаёт task_id, прогресс виден в панели задач', async () => {
+    const { calls } = mockDocsApi({
+      'POST /api/sessions/s-1/documents/upload-async': { task_id: 't-1', total: 1 },
+      'GET /api/tasks': {
+        tasks: [
+          {
+            id: 't-1',
+            kind: 'indexing',
+            title: 'Индексация 1 файлов',
+            status: 'running',
+            progress: 40,
+            step: 'файл 1/1: report.md',
+            error: null,
+            cancel_requested: false,
+            user_id: 'u-1',
+            session_id: 's-1',
+            project_id: null,
+            created_at: '2026-10-01T00:00:00+00:00',
+            started_at: '2026-10-01T00:00:00+00:00',
+            finished_at: null,
+            seconds: 3,
+            stage_seconds: 2,
+            result: null,
+          },
+        ],
+        active: 1,
+      },
+    })
+
+    renderApp()
+    await screen.findByText('Временная литература (1)')
+
+    const input = screen.getByTestId('doc-file-input')
+    await userEvent.upload(input, new File(['# Отчёт\n\nХлорофилл 1.85.\n'], 'report.md', {
+      type: 'text/markdown',
+    }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Загрузить файлы' }))
+
+    // Фоновая загрузка: ответ — task_id, а не список документов.
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.includes('/documents/upload-async'))
+      expect(call).toBeDefined()
+      expect(call?.init.method).toBe('POST')
+    })
+    expect(
+      calls.some((c) => c.url.includes('/documents/upload') && !c.url.includes('upload-async')),
+    ).toBe(false)
+
+    // Панель задачи с прогрессом индексации: у живой задачи видно этап.
+    expect(await screen.findByText(/файл 1\/1: report.md/)).toBeInTheDocument()
+    expect(
+      await screen.findByLabelText(/Индексация 1 файлов: 40%/),
+    ).toBeInTheDocument()
+  })
+
+  it('файл с тем же именем спрашивает замену прежней версии', async () => {
+    const { calls } = mockDocsApi({
+      'GET /api/sessions/s-1/documents': [{ ...DOC, filename: 'otchet.md' }],
+      'POST /api/sessions/s-1/documents/upload-async': { task_id: 't-3', total: 1 },
+    })
+
+    renderApp()
+    await screen.findByText('Временная литература (1)')
+
+    const input = screen.getByTestId('doc-file-input')
+    await userEvent.upload(
+      input,
+      new File(['# Отчёт\n\nХлорофилл 1.85.\n'], 'otchet.md', {
+        type: 'text/markdown',
+      }),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Загрузить файлы' }))
+
+    // Спрашиваем подтверждение — молча перезаписывать нельзя.
+    expect(await screen.findByText('Заменить прежние версии?')).toBeInTheDocument()
+    expect(
+      calls.some((c) => c.url.includes('/documents/upload-async')),
+    ).toBe(false)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Заменить и загрузить' }))
+
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.includes('/documents/upload-async'))
+      expect(call).toBeDefined()
+      const body = call?.init.body as FormData
+      expect(body.get('replace')).toBe('true')
+    })
+  })
+
+  it('после индексации показывается итог: сколько добавили и что не разобрали', async () => {
+    mockDocsApi({
+      'POST /api/sessions/s-1/documents/upload-async': { task_id: 't-2', total: 2 },
+      'GET /api/tasks': {
+        tasks: [
+          {
+            id: 't-2',
+            kind: 'indexing',
+            title: 'Индексация 2 файлов',
+            status: 'done',
+            progress: 100,
+            step: 'готово',
+            error: null,
+            cancel_requested: false,
+            user_id: 'u-1',
+            session_id: 's-1',
+            project_id: null,
+            created_at: '2026-10-01T00:00:00+00:00',
+            started_at: '2026-10-01T00:00:00+00:00',
+            finished_at: '2026-10-01T00:00:05+00:00',
+            seconds: 5,
+            stage_seconds: 1,
+            result: {
+              added: [{ id: 'd-9', docname: 'report', chunks: 3 }],
+              duplicates: ['notes.md'],
+              failed: [{ name: 'broken.pdf', error: 'Не удалось прочитать PDF' }],
+              total: 3,
+            },
+          },
+        ],
+        active: 0,
+      },
+    })
+
+    renderApp()
+    await screen.findByText('Временная литература (1)')
+
+    expect(await screen.findByText('Итог индексации')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Проиндексировано: 1.*дубликатов: 1.*с ошибкой: 1/),
+    ).toBeInTheDocument()
+    expect(await screen.findByText(/broken.pdf: Не удалось прочитать PDF/)).toBeInTheDocument()
   })
 
   it('удаление документа — оптимистично с undo-тостом, затем DELETE', async () => {
@@ -287,7 +422,9 @@ describe('вкладка Документы', () => {
     renderApp()
 
     await screen.findByText(/Отчёт 2025/)
-    expect(screen.getByLabelText('Путь к файлу на диске')).toBeDisabled()
+    // Страница грузится в два запроса (сессия → документы), поэтому поля
+    // формы ищем с ожиданием, а не сразу.
+    expect(await screen.findByLabelText('Путь к файлу на диске')).toBeDisabled()
     expect(screen.getByLabelText('Категория', { selector: 'input' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Добавить' })).toBeDisabled()
     // кнопки удаления на месте, но заблокированы

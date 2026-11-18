@@ -388,6 +388,39 @@ async def test_delete_document_removes_it_from_index(client, researcher, session
     assert service.list_documents() == []
 
 
+async def test_upload_rejects_global_knowledge_category(client, researcher, session_id) -> None:
+    """D11: `global_knowledge` — категория только глобальной базы, не сессии."""
+    response = await client.post(
+        f"/api/sessions/{session_id}/documents/upload",
+        files=[("files", ("otchet.md", b"# Otchet\n\nHlorofill-a 1.85 mg/m3.\n",
+                          "text/markdown"))],
+        data={"category": "global_knowledge"},
+        headers=researcher)
+    assert response.status_code == 422
+    assert "global_knowledge" in response.json()["detail"]
+
+
+async def test_delete_document_removes_temp_file(client, researcher, session_id,
+                                                stub_registry) -> None:
+    """D12: удаление документа из сессии чистит временный файл загрузки."""
+    response = await client.post(
+        f"/api/sessions/{session_id}/documents/upload",
+        files=[("files", ("otchet.md", b"# Otchet\n\nHlorofill-a 1.85 mg/m3.\n",
+                          "text/markdown"))],
+        headers=researcher)
+    assert response.status_code == 200, response.text
+
+    stored = list((stub_registry.app.sessions_dir / session_id / "uploads").glob("*"))
+    assert stored, "файл должен быть на диске до удаления"
+
+    listed = await client.get(f"/api/sessions/{session_id}/documents", headers=researcher)
+    document_id = listed.json()[0]["id"]
+    assert (await client.delete(f"/api/sessions/{session_id}/documents/{document_id}",
+                                headers=researcher)).status_code == 204
+
+    assert list((stub_registry.app.sessions_dir / session_id / "uploads").glob("*")) == []
+
+
 async def test_upload_document(client, researcher, session_id, stub_registry) -> None:
     response = await client.post(
         f"/api/sessions/{session_id}/documents/upload",
@@ -407,11 +440,146 @@ async def test_upload_goes_to_session_directory(client, researcher, session_id,
                                                 stub_registry, tmp_path) -> None:
     await client.post(
         f"/api/sessions/{session_id}/documents/upload",
-        files=[("files", ("a.md", b"# A\n\nHlorofill.\n", "text/markdown"))],
+        files=[("files", ("a.md", b"# Zaglavlenie\n\nHlorofill-a 1.85 mg/m3.\n",
+                          "text/markdown"))],
         headers=researcher)
 
     stored = list((stub_registry.app.sessions_dir / session_id / "uploads").glob("*"))
     assert stored, "файл должен лежать в каталоге своей сессии"
+
+
+async def test_upload_async_returns_task_and_indexes_in_background(
+        client, researcher, session_id, stub_registry) -> None:
+    """Фоновая загрузка: ответ с task_id, индексация идёт в задаче.
+
+    Требование ТЗ (приёмка Фазы 10): «индексация запускается асинхронно,
+    progress visible в UI» — держать HTTP-запрос открытым на минуты нельзя.
+    """
+    from app.services.tasks import tasks
+
+    response = await client.post(
+        f"/api/sessions/{session_id}/documents/upload-async",
+        files=[("files", ("a.md", b"# A\n\nHlorofill-a 1.85 mg/m3 v more.\n",
+                          "text/markdown"))],
+        data={"category": "temp_literature"},
+        headers=researcher)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["task_id"]
+    assert body["total"] == 1
+
+    # Ждём завершения задачи: индексация идёт в фоне.
+    task = await _wait_task(tasks, body["task_id"])
+    assert task.status.value == "done", task.error
+    assert task.result["total"] == 1
+    assert len(task.result["added"]) == 1
+
+    # Документ попал в реестр сессии.
+    listed = await client.get(f"/api/sessions/{session_id}/documents", headers=researcher)
+    assert [d["title"] for d in listed.json()] == ["a"]
+
+
+async def test_upload_async_reports_failures_per_file(client, researcher,
+                                                       session_id,
+                                                       stub_registry) -> None:
+    """Плохой файл не роняет пачку: его причина попадает в результат задачи."""
+    from app.services.tasks import tasks
+
+    response = await client.post(
+        f"/api/sessions/{session_id}/documents/upload-async",
+        files=[("files", ("bad.unknownext", b"\x00\x01", "application/octet-stream"))],
+        headers=researcher)
+
+    # Неподдерживаемое расширение отсекается на сохранении — ответ с ошибкой.
+    assert response.status_code in (200, 422)
+    if response.status_code == 200:
+        task = await _wait_task(tasks, response.json()["task_id"])
+        assert task.result["failed"] or task.result["added"]
+
+
+async def _wait_task(tasks, task_id: str, timeout: float = 30.0):
+    """Дождаться завершения фоновой задачи."""
+    import asyncio
+
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        task = tasks.get(task_id)
+        if task is not None and task.finished:
+            return task
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"задача {task_id} не завершилась за {timeout}с")
+
+
+async def test_add_document_by_path_can_force_reindex(client, researcher,
+                                                      session_id, stub_registry,
+                                                      paper) -> None:
+    """Повторное добавление того же файла — с переиндексацией.
+
+    Без `force_reindex` сервер отвечает 409 (дедуп по содержимому); с ним
+    документ переиндексируется — это нужно после смены настроек индексации.
+    """
+    first = await client.post(
+        f"/api/sessions/{session_id}/documents/path",
+        json={"path": str(paper)}, headers=researcher)
+    assert first.status_code == 200, first.text
+
+    duplicate = await client.post(
+        f"/api/sessions/{session_id}/documents/path",
+        json={"path": str(paper)}, headers=researcher)
+    assert duplicate.status_code == 409
+    assert "force_reindex" in duplicate.json()["detail"]
+
+    forced = await client.post(
+        f"/api/sessions/{session_id}/documents/path",
+        json={"path": str(paper), "force_reindex": True}, headers=researcher)
+    assert forced.status_code == 200, forced.text
+    assert forced.json()["dockey"] == first.json()["dockey"]
+
+    # Документ по-прежнему один: версия обновилась, а не добавилась вторая.
+    listed = await client.get(f"/api/sessions/{session_id}/documents", headers=researcher)
+    assert [d["dockey"] for d in listed.json()] == [first.json()["dockey"]]
+
+
+async def test_upload_with_replace_swaps_older_version(client, researcher,
+                                                        session_id,
+                                                        stub_registry) -> None:
+    """Файл с тем же именем заменяет прежнюю версию, а не ложится рядом.
+
+    Дедуп PaperQA идёт по содержимому: изменённый файл получил бы новый
+    dockey и стал бы вторым документом, а старая версия осталась бы в индексе.
+    """
+    first = await client.post(
+        f"/api/sessions/{session_id}/documents/upload-async",
+        files=[("files", ("otchet.md", b"# Otchet\n\nHlorofill-a 1.85 mg/m3.\n",
+                          "text/markdown"))],
+        headers=researcher)
+    assert first.status_code == 200, first.text
+    task = await _wait_task(tasks_registry(), first.json()["task_id"])
+    assert task.result["added"]
+
+    # Тот же файл, но с другим содержимым, и с replace.
+    second = await client.post(
+        f"/api/sessions/{session_id}/documents/upload-async",
+        files=[("files", ("otchet.md", b"# Otchet\n\nHlorofill-a 2.10 mg/m3 v more.\n",
+                          "text/markdown"))],
+        data={"replace": "true"},
+        headers=researcher)
+    assert second.status_code == 200, second.text
+    task = await _wait_task(tasks_registry(), second.json()["task_id"])
+    assert task.result["added"], task.result
+
+    listed = await client.get(f"/api/sessions/{session_id}/documents", headers=researcher)
+    titles = [d["title"] for d in listed.json()]
+    assert titles == ["otchet"], "прежняя версия должна исчезнуть, а не остаться рядом"
+    # Имя файла — исходное, без технического префикса временного файла.
+    assert listed.json()[0]["filename"] == "otchet.md"
+
+
+def tasks_registry():
+    from app.services.tasks import tasks
+
+    return tasks
 
 
 async def test_document_links_crud(client, researcher, session_id, stub_registry,
@@ -548,3 +716,49 @@ async def test_researcher_cannot_open_admin_routes(client, researcher) -> None:
 async def test_global_documents_are_admin_only(client, admin, researcher) -> None:
     assert (await client.get("/api/admin/documents", headers=admin)).status_code == 200
     assert (await client.get("/api/admin/documents", headers=researcher)).status_code == 403
+
+
+async def test_bulk_async_indexes_in_background_and_registers_documents(
+        client, admin, stub_registry) -> None:
+    """Фоновая индексация пачки: task_id сразу, документы в глобальной базе.
+
+    Фоновая задача работает в своей сессии БД: сессия запроса к моменту её
+    старта уже закрыта.
+    """
+    from app.services.tasks import tasks
+
+    directory = stub_registry.app.documents_dir / "incoming"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "paper.md"
+    path.write_text("# Статья\n\nХлорофилл-а 1.85 мг/м3 в Баренцевом море.\n",
+                    encoding="utf-8")
+
+    response = await client.post("/api/admin/documents/bulk-async",
+                                 json={"paths": [str(path)]}, headers=admin)
+    assert response.status_code == 200, response.text
+    task_id = response.json()["task_id"]
+
+    task = await _wait_task(tasks, task_id)
+    assert task.status.value == "done", task.error
+    assert len(task.result["added"]) == 1
+
+    listed = await client.get("/api/admin/documents", headers=admin)
+    assert [d["filename"] for d in listed.json()] == ["paper.md"]
+
+
+async def test_bulk_async_rejects_paths_outside_allowed_dirs(client, admin,
+                                                              stub_registry,
+                                                              tmp_path) -> None:
+    """Путь проверяется как в `bulk_add`: мимо каталога данных — нельзя.
+
+    Без проверки админ проиндексировал бы любой файл на диске, обойдя
+    `ALLOW_EXTERNAL_IMPORT_PATHS`.
+    """
+    outside = tmp_path / "секрет.md"
+    outside.write_text("# Секрет\n\nВнутренний документ компании.\n", encoding="utf-8")
+
+    response = await client.post("/api/admin/documents/bulk-async",
+                                 json={"paths": [str(outside)]}, headers=admin)
+
+    assert response.status_code in (403, 404)
+    assert response.json().get("error") in ("forbidden", "not_found")

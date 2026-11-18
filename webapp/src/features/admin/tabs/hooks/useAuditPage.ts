@@ -7,10 +7,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import {
-  useAudit,
-  useAuditStats,
-} from '../../queries'
+import { useAudit, useAuditStats } from '../../queries'
 
 const PARAM_PREFIX = 'audit_'
 
@@ -30,34 +27,44 @@ export function useAuditPage() {
 
   // --- Фильтры по датам (DatePicker) ---
   const [dateFrom, setDateFrom] = useState<string | undefined>(
-    getParam(searchParams, 'from') || undefined
+    getParam(searchParams, 'from') || undefined,
   )
   const [dateTo, setDateTo] = useState<string | undefined>(
-    getParam(searchParams, 'to') || undefined
+    getParam(searchParams, 'to') || undefined,
   )
 
   const setDateFromValue = useCallback(
     (v: string | undefined) => {
       setDateFrom(v)
-      const params = new URLSearchParams(searchParams)
-      if (v) setParam(params, 'from', v)
-      else searchParams.delete(`${PARAM_PREFIX}from`)
-      setParam(params, 'page', '1')
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          if (v) setParam(params, 'from', v)
+          else searchParams.delete(`${PARAM_PREFIX}from`)
+          setParam(params, 'page', '1')
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [searchParams, setSearchParams],
   )
 
   const setDateToValue = useCallback(
     (v: string | undefined) => {
       setDateTo(v)
-      const params = new URLSearchParams(searchParams)
-      if (v) setParam(params, 'to', v)
-      else searchParams.delete(`${PARAM_PREFIX}to`)
-      setParam(params, 'page', '1')
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          if (v) setParam(params, 'to', v)
+          else searchParams.delete(`${PARAM_PREFIX}to`)
+          setParam(params, 'page', '1')
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [searchParams, setSearchParams],
   )
 
   // --- since для запроса (dateFrom имеет приоритет) ---
@@ -82,32 +89,47 @@ export function useAuditPage() {
 
   const setPagination = useCallback(
     (next: { pageIndex: number; pageSize: number; pageCount: number }) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', String(next.pageIndex + 1))
-      setParam(params, 'size', String(next.pageSize))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', String(next.pageIndex + 1))
+          setParam(params, 'size', String(next.pageSize))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setSorting = useCallback(
     (next: { id: string; desc: boolean }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'sort', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'sort', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   const setFilters = useCallback(
     (next: { id: string; value: unknown }[]) => {
-      const params = new URLSearchParams(searchParams)
-      setParam(params, 'page', '1')
-      setParam(params, 'filters', JSON.stringify(next))
-      setSearchParams(params, { replace: true })
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          setParam(params, 'page', '1')
+          setParam(params, 'filters', JSON.stringify(next))
+          return params
+        },
+        { replace: true },
+      )
     },
-    [searchParams, setSearchParams]
+    [setSearchParams],
   )
 
   // --- Данные ---
@@ -116,15 +138,13 @@ export function useAuditPage() {
     items.sort((a, b) =>
       sorting[0]?.desc
         ? (b.created_at ?? '').localeCompare(a.created_at ?? '')
-        : (a.created_at ?? '').localeCompare(b.created_at ?? '')
+        : (a.created_at ?? '').localeCompare(b.created_at ?? ''),
     )
     // Фильтрация по dateTo (до данной даты включительно)
     if (dateTo) {
       const to = new Date(dateTo)
       to.setHours(23, 59, 59, 999)
-      return items.filter(
-        (item) => new Date(item.created_at ?? '') <= to
-      )
+      return items.filter((item) => new Date(item.created_at ?? '') <= to)
     }
     return items
   }, [auditQuery.data, sorting, dateTo])

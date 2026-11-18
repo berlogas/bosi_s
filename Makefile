@@ -49,7 +49,7 @@ reindex: ## переиндексация глобальной базы
 	@echo "см. docs/OPERATIONS.md"
 
 reindex-all: ## переиндексация всех коллекций (global + сессии), нужно после смены EMBEDDING_MODEL
-	cd $(BACKEND) && ../$(PY) scripts_reindex.py
+	cd $(BACKEND) && ../$(PY) scripts/reindex.py
 
 profile: ## разложить время ответа по этапам: make profile Q="вопрос" SESSION_ID=...
 	cd $(BACKEND) && ../$(PY) scripts/profile_answer.py "$(Q)" --repeat $(or $(REPEAT),3) $(if $(SESSION_ID),--session-id $(SESSION_ID),)

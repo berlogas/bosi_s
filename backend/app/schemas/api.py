@@ -130,8 +130,12 @@ class SessionOut(ORMModel):
         """
         if isinstance(data, ResearchSession):
             owner = data.user
-            data.owner_username = owner.username
-            data.owner_full_name = owner.full_name
+            if owner is None:
+                data.owner_username = ""
+                data.owner_full_name = None
+            else:
+                data.owner_username = owner.username
+                data.owner_full_name = owner.full_name
         return data
 
 
@@ -363,13 +367,108 @@ class ProjectSectionUpdate(BaseModel):
     required: bool | None = None
 
 
+class SectionVersionOut(BaseModel):
+    """Версия раздела — полная сериализация для интерфейса.
+
+    `content_md` — сам текст раздела. Без него в ответе интерфейс не может
+    показать сохранённый текст после перезагрузки страницы: он знает только
+    метаданные версии.
+    """
+
+    id: str
+    section_plan_id: str
+    project_id: str
+    session_id: str | None = None
+    content_md: str = ""
+    language: str = "ru"
+    source_language: str | None = None
+    word_count: int = 0
+    citation_map: list[dict[str, Any]] = Field(default_factory=list)
+    generation_params: dict[str, Any] = Field(default_factory=dict)
+    seconds: float | None = None
+    cost_usd: float | None = None
+    token_counts: dict[str, Any] = Field(default_factory=dict)
+    quality_report: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    parent_version_id: str | None = None
+    created_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, version: Any) -> "SectionVersionOut":
+        """Собрать DTO из ORM-объекта SectionVersion."""
+        return cls(
+            id=version.id,
+            section_plan_id=version.section_plan_id,
+            project_id=version.project_id,
+            session_id=version.session_id,
+            content_md=version.content_md or "",
+            language=version.language,
+            source_language=version.source_language,
+            word_count=version.word_count or 0,
+            citation_map=list(version.citation_map or []),
+            generation_params=dict(version.generation_params or {}),
+            seconds=version.seconds,
+            cost_usd=version.cost_usd,
+            token_counts=dict(version.token_counts or {}),
+            quality_report=dict(version.quality_report or {}),
+            status=getattr(version.status, "value", str(version.status)),
+            parent_version_id=version.parent_version_id,
+            created_by=version.created_by,
+            created_at=version.created_at,
+            updated_at=version.updated_at,
+        )
+
+
+class SectionPlanOut(BaseModel):
+    """План раздела — вместе с текущей версией и её текстом."""
+
+    id: str
+    project_id: str
+    name: str
+    kind: str
+    order: int
+    required: bool = True
+    word_target: int = 500
+    word_min: int = 0
+    word_max: int = 0
+    notes: str = ""
+    language: str = "ru"
+    depends_on: list[str] = Field(default_factory=list)
+    status: str
+    current_version_id: str | None = None
+    current_version: SectionVersionOut | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class VersionNodeOut(BaseModel):
+    """Узел дерева версий: сама версия и её потомки."""
+
+    version: SectionVersionOut
+    children: list["VersionNodeOut"] = Field(default_factory=list)
+
+
+class VersionTreeOut(BaseModel):
+    """Дерево версий раздела + плоский список всех версий."""
+
+    section_plan_id: str
+    section_name: str
+    roots: list[VersionNodeOut] = Field(default_factory=list)
+    all_versions: list[SectionVersionOut] = Field(default_factory=list)
+
+
 class ProjectOut(ORMModel):
     id: str
     session_id: str
     title: str
     target_journal: str | None = None
+    style_guide_document_id: str | None = None
+    language: str = "ru"
     status: str
     sections: list[dict[str, Any]] = Field(default_factory=list)
+    order: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -401,6 +500,7 @@ class JournalStyleOut(BaseModel):
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=512)
     target_journal: str | None = Field(default=None, max_length=255)
+    language: str = Field(default="ru", max_length=10)
     status: str = "planning"
     sections: list[dict[str, Any]] | None = None
 
@@ -408,14 +508,26 @@ class ProjectCreate(BaseModel):
 class ProjectPatch(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=512)
     target_journal: str | None = Field(default=None, max_length=255)
+    language: str | None = Field(default=None, max_length=10)
+    style_guide_document_id: str | None = Field(default=None)
     status: str | None = None
     sections: list[dict[str, Any]] | None = None
+    order: int | None = Field(default=None, ge=0)
 
 
 class ProjectDocBind(BaseModel):
     document_id: str
     role: str = "reference"  # reference | data | draft
     note: str | None = Field(default=None, max_length=2000)
+
+
+class ProjectStyleGuideRequest(BaseModel):
+    """Привязать/отвязать документ «Правила оформления» журнала к проекту как стиль оформления."""
+
+    document_id: str | None = Field(
+        default=None,
+        description="ID документа «Правила оформления». None — отвязать текущий стиль.",
+    )
 
 
 class GenerateRequest(BaseModel):
@@ -427,6 +539,7 @@ class GenerateRequest(BaseModel):
     no_cache: bool = False
     template_md: str | None = Field(default=None, max_length=20000)
     data_document_ids: list[str] | None = None
+    language: str | None = Field(default=None, max_length=10)
 
 
 class GenerateResultOut(BaseModel):
@@ -610,6 +723,66 @@ class InboxStatusOut(BaseModel):
     busy: bool
 
 
+
+
 class InboxScanResultOut(BaseModel):
     run: InboxRunOut
     inbox_dir: str
+
+class ReindexRequest(BaseModel):
+    """Параметры переиндексации."""
+
+    drop_embeddings: bool = Field(default=True,
+                                  description="Пересчитать эмбеддинги заново")
+
+
+class ReindexResultOut(BaseModel):
+    """Результат переиндексации коллекции PaperQA2."""
+
+    documents: int
+    chunks: int
+    seconds: float
+    collection: str
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class CitationReportOut(BaseModel):
+    """Отчёт о цитировании последнего ответа чата (из CitationReport)."""
+
+    ok: bool = False
+    changed: bool = False
+    repaired: list[str] = Field(default_factory=list)
+    dropped: list[str] = Field(default_factory=list)
+    reflowed: list[str] = Field(default_factory=list)
+    cited: list[int] = Field(default_factory=list)
+    dangling: list[int] = Field(default_factory=list)
+    uncited: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+
+class TranslateSectionRequest(BaseModel):
+    """Параметры перевода раздела статьи на другой язык."""
+
+    target_language: str = Field(
+        ...,
+        min_length=2,
+        max_length=10,
+        description="Код целевого языка (например, 'en', 'ru', 'de', 'fr')",
+    )
+    source_language: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=10,
+        description="Код исходного языка. Если не задан — берется из ANSWER_LANGUAGE или 'ru'",
+    )
+
+
+class TranslateSectionResultOut(BaseModel):
+    """Результат перевода раздела."""
+
+    name: str
+    target_language: str
+    source_language: str | None
+    content_md: str
+    words: int
+    written: bool = True

@@ -34,6 +34,9 @@ class DocumentRef:
     dockey: str
     docname: str
     path: str | None = None
+    # Имя файла как его знает пользователь. Для загрузок `path` указывает на
+    # временный файл с техническим префиксом, а здесь — исходное имя.
+    filename: str | None = None
     url: str | None = None
     title: str | None = None
     citation: str | None = None
@@ -132,8 +135,9 @@ class AnswerResult:
     cost: float = 0.0
     token_counts: dict[str, Any] = field(default_factory=dict)
     mode: str | None = None
-    seconds: float = 0.0
+    agent_status: str | None = None  # статус агента PaperQA (success/fail/truncated/unsure)
     used_context: bool = False  # True, если ответ построен на готовом PQASession
+    seconds: float = 0.0
     # True, если ответ сгенерирован без опоры на базу (база пуста или
     # ничего не нашлось). Фронтенд по этому флагу объясняет пользователю,
     # почему ответ не со ссылками, вместо того чтобы молчать.
@@ -154,10 +158,9 @@ class AnswerResult:
             "has_successful_answer": self.has_successful_answer,
             "base_empty": self.base_empty,
             "cost": self.cost,
-            "token_counts": self.token_counts,
             "mode": self.mode,
+            "agent_status": self.agent_status,
             "seconds": round(self.seconds, 2),
-            "used_context": self.used_context,
         }
 
 

@@ -202,11 +202,13 @@ def journal_rules(style: str | None, task: str) -> str:
 
 def literature_review_prompt(topic: str, sources: Sequence[dict[str, Any]],
                              *, word_target: int = 1200,
-                             style: str | None = None) -> str:
+                             style: str | None = None,
+                             language: str = "ru") -> str:
     """Обзор литературы: сгруппируй источники, а не перечисли их по одному."""
+    lang = "русском" if language == "ru" else "английском"
     return (
-        "Напиши обзор литературы по теме:\n"
-        f"{topic}\n\n"
+        f"Напиши обзор литературы по теме:\n{topic}\n\n"
+        f"Пиши на языке: {lang}, научным стилем.\n"
         "ЖЁСТКИЕ ПРАВИЛА:\n"
         "1. Группируй источники по темам и подходам, а не перечисляй по одному.\n"
         "2. Каждое утверждение подкрепляй ссылкой [n] на источник из списка.\n"
@@ -223,12 +225,14 @@ def literature_review_prompt(topic: str, sources: Sequence[dict[str, Any]],
 def data_comparison_prompt(question: str, summaries: Sequence[DataSummary],
                            sources: Sequence[dict[str, Any]],
                            *, word_target: int = 800,
-                           style: str | None = None) -> str:
+                           style: str | None = None,
+                           language: str = "ru") -> str:
     """Сверка своих чисел с литературой: числа уже посчитаны, модель их трактует."""
+    lang = "русском" if language == "ru" else "английском"
     data_block = "\n\n".join(s.render() for s in summaries) or "Сводка данных недоступна."
     return (
-        "Сопоставь СВОИ ДАННЫЕ с литературой по вопросу:\n"
-        f"{question}\n\n"
+        f"Сопоставь СВОИ ДАННЫЕ с литературой по вопросу:\n{question}\n\n"
+        f"Пиши на языке: {lang}, научным стилем.\n"
         "ЖЁСТКИЕ ПРАВИЛА:\n"
         "1. Опирайся ровно на приведённые числа — не пересчитывай и не выдумывай.\n"
         "2. Каждое утверждение о литературе подкрепляй ссылкой [n].\n"
@@ -246,7 +250,8 @@ def data_comparison_prompt(question: str, summaries: Sequence[DataSummary],
 def discussion_prompt(topic: str, written: str, summaries: Sequence[DataSummary],
                       sources: Sequence[dict[str, Any]], *,
                       word_target: int = 900,
-                      style: str | None = None) -> str:
+                      style: str | None = None,
+                      language: str = "ru") -> str:
     """Обсуждение результатов: наши числа против литературы.
 
     В отличие от `data_comparison` обсуждение получает уже написанные
@@ -254,10 +259,11 @@ def discussion_prompt(topic: str, written: str, summaries: Sequence[DataSummary]
     вообще. Порядок разделов и сводка данных — то, что уже посчитано
     программно, пересчитывать нельзя.
     """
+    lang = "русском" if language == "ru" else "английском"
     data_block = "\n\n".join(s.render() for s in summaries)
     return (
-        "Напиши обсуждение результатов по теме:\n"
-        f"{topic}\n\n"
+        f"Напиши обсуждение результатов по теме:\n{topic}\n\n"
+        f"Пиши на языке: {lang}, научным стилем.\n"
         "ЖЁСТКИЕ ПРАВИЛА:\n"
         "1. Опирайся ровно на приведённые ниже числа и текст разделов: "
         "не пересчитывай и не выдумывай значений.\n"
@@ -300,11 +306,13 @@ def written_sections(sections: Sequence[dict[str, Any]], *,
 
 def gap_analysis_prompt(topic: str, coverage: str,
                         sources: Sequence[dict[str, Any]], *,
-                        style: str | None = None) -> str:
+                        style: str | None = None,
+                        language: str = "ru") -> str:
     """Поиск пробелов в литературе: что изучали, а что нет."""
+    lang = "русском" if language == "ru" else "английском"
     return (
-        "Определи пробелы в литературе по теме:\n"
-        f"{topic}\n\n"
+        f"Определи пробелы в литературе по теме:\n{topic}\n\n"
+        f"Пиши на языке: {lang}, научным стилем.\n"
         "ЖЁСТКИЕ ПРАВИЛА:\n"
         "1. Сравни список покрытых тем с тем, что обычно требуется в работе.\n"
         "2. Каждый вывод о недостающей работе опирай на источник [n] или "
@@ -331,10 +339,13 @@ def coverage_line(sources: Sequence[dict[str, Any]]) -> str:
 
 def report_prompt(template: str, sources: Sequence[dict[str, Any]],
                   *, question: str = "",
-                  style: str | None = None) -> str:
+                  style: str | None = None,
+                  language: str = "ru") -> str:
     """Отчёт по готовому шаблону: структуру задаёт шаблон, факты — источники."""
+    lang = "русском" if language == "ru" else "английском"
     return (
-        "Заполни отчёт по шаблону ниже, используя факты из источников.\n\n"
+        f"Заполни отчёт по шаблону ниже, используя факты из источников.\n\n"
+        f"Пиши на языке: {lang}, научным стилем.\n"
         "ЖЁСТКИЕ ПРАВИЛА:\n"
         "1. Сохрани заголовки и структуру шаблона.\n"
         "2. Каждое утверждение подкрепляй ссылкой [n].\n"

@@ -8,7 +8,7 @@
  * - Выход очищает auth и переходит на /login
  */
 import { Avatar, Box, Button, Menu } from '@mantine/core'
-import { IconLogout, IconUserCircle } from '@tabler/icons-react'
+import { IconLogout } from '@tabler/icons-react'
 import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../auth/authStore'

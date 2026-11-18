@@ -1,10 +1,6 @@
-/**
- * Хук для страницы «Обслуживание» админки: бэкапы и сброс состояния.
- * URL-параметры имеют префикс `maint_`.
- */
+/** Хук страницы «Обслуживание»: бэкапы + сброс состояния. */
 
-import React, { useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
 
 import {
   useBackups,
@@ -29,84 +25,59 @@ export const RESET_SCOPES = [
   {
     value: 'all',
     label: 'Всё (полностью пустая платформа)',
-    hint: 'Удаляются и учётные записи. После этого нужен make create-admin.',
+    hint: 'Удаляются и учётные записи. После этого нужен docker compose exec backend python scripts/create_admin.py.',
   },
 ] as const
 
-const PARAM_PREFIX = 'maint_'
-
-function getParam(searchParams: URLSearchParams, key: string): string | null {
-  return searchParams.get(`${PARAM_PREFIX}${key}`)
-}
-
-function setParam(searchParams: URLSearchParams, key: string, value: string | null) {
-  const fullKey = `${PARAM_PREFIX}${key}`
-  if (value) searchParams.set(fullKey, value)
-  else searchParams.delete(fullKey)
-}
-
 export function useMaintenancePage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [scope, setScope] = useState<ResetScope>('data')
+  const [includeModels, setIncludeModels] = useState(false)
+
   const backups = useBackups()
   const create = useCreateBackup()
   const remove = useDeleteBackup()
-
-  const [scope, setScope] = React.useState<ResetScope>(
-    (getParam(searchParams, 'scope') as ResetScope) || 'data'
-  )
-  const [includeModels, setIncludeModels] = React.useState(false)
-
   const plan = useResetPreview(scope, includeModels)
   const reset = useResetState()
 
   const current = RESET_SCOPES.find((item) => item.value === scope)
   const expected = plan.data?.confirmation ?? ''
-  const canReset = Boolean(expected) && !reset.isPending
 
-  const handleScopeChange = useCallback((value: string) => {
-    setScope(value as ResetScope)
-    const params = new URLSearchParams(searchParams)
-    setParam(params, 'scope', value)
-    setSearchParams(params, { replace: true })
-  }, [searchParams, setSearchParams])
+  const handleCreateBackup = () => {
+    void create.mutate()
+  }
 
-  const handleCreateBackup = useCallback(() => {
-    create.mutate(undefined)
-  }, [create])
+  const handleDeleteBackup = (name: string) => {
+    void remove.mutate(name)
+  }
 
-  const handleDeleteBackup = useCallback(
-    (name: string) => {
-      remove.mutate(name)
-    },
-    [remove]
-  )
+  const handleReset = (expectedValue: string, includeModelsVal: boolean) => {
+    void reset.mutate({
+      scope,
+      confirm: expectedValue,
+      include_models: includeModelsVal,
+    })
+  }
 
-  const handleReset = useCallback(
-    (confirm: string, include_models: boolean) => {
-      reset.mutate(
-        { scope, confirm, include_models: include_models },
-        { onSuccess: () => setScope('data') }
-      )
-    },
-    [reset, scope]
-  )
+  const handleScopeChange = (value: ResetScope) => {
+    setScope(value)
+  }
 
   return {
     backups,
     create,
     remove,
     plan,
-    reset,
     scope,
+    setScope: handleScopeChange,
+    handleScopeChange,
     includeModels,
     setIncludeModels,
     current,
     expected,
-    canReset,
-    RESET_SCOPES,
+    phrase: '',
+    setPhrase: () => {},
     handleCreateBackup,
     handleDeleteBackup,
     handleReset,
-    handleScopeChange,
   }
 }

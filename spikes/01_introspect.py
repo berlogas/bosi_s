@@ -33,7 +33,7 @@ for name in sorted(n for n in dir(Docs) if not n.startswith("_")):
 print()
 
 REQUIRED = ["aadd", "aadd_file", "aadd_url", "aadd_texts", "aquery", "aget_evidence", "delete", "clear_docs"]
-print("=== checklist из interface.md ===")
+print("=== checklist из docs/wip/interface.md ===")
 for name in REQUIRED:
     member = getattr(Docs, name, None)
     if member is None:

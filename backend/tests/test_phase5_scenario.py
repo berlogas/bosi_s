@@ -204,7 +204,8 @@ async def test_full_session_scenario(scenario, db_engine, tmp_path) -> None:
     restarted = new_service()
     assert restarted.list_documents() == []
 
-    assert await restarted.restore_state() == 3
+    restored, stale = await restarted.restore_state()
+    assert restored == 3
     assert len(restarted.list_documents()) == 3
 
     chunks_before, _ = await service.get_evidence("метод GF/F и хлорофилл-а")

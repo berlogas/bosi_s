@@ -82,7 +82,7 @@ except Exception as exc:
 PY
     then snapshot_ok=1; else die "не удалось снять снимок БД"; fi
   elif [ -n "$BACKEND_IMAGE" ]; then
-    if docker run --rm -i -v "$DATA_PATH:/data" "$BACKEND_IMAGE" \
+    if docker run --rm -i -v "$(host_path "$DATA_PATH"):/data" "$BACKEND_IMAGE" \
          python - /data/.backup-snapshot.sqlite3 <<'PY'
 import sqlite3, sys
 src, dst = "/data/boasi.sqlite3", sys.argv[1]
@@ -119,7 +119,7 @@ else
   if [ "$STACK_UP" = "1" ]; then
     MANIFEST_CMD=(docker exec boasi-backend python scripts/backup_manifest.py)
   elif [ -n "$BACKEND_IMAGE" ]; then
-    MANIFEST_CMD=(docker run --rm -v "$DATA_PATH:/data:ro" -e DATA_DIR=/data \
+    MANIFEST_CMD=(docker run --rm -v "$(host_path "$DATA_PATH"):/data:ro" -e DATA_DIR=/data \
       "$BACKEND_IMAGE" python scripts/backup_manifest.py)
   else
     MANIFEST_CMD=()
@@ -155,7 +155,7 @@ if [ "$MODE" = "local" ]; then
     cp "$TMP/boasi.sqlite3" "$STAGE/.backup-snapshot.sqlite3"
   fi
 else
-  docker run --rm -v "$DATA_PATH:/data:ro" "$ALPINE" sh -c \
+  docker run --rm -v "$(host_path "$DATA_PATH"):/data:ro" "$ALPINE" sh -c \
     "cd /data && tar -cf - \
        --exclude=./boasi.sqlite3 \
        --exclude=./boasi.sqlite3-wal \
@@ -163,7 +163,7 @@ else
        . " \
     | ( cd "$STAGE" && tar -xf - )
   if [ "$snapshot_ok" = "1" ]; then
-    docker run --rm -v "$DATA_PATH:/data:ro" -v "$(host_path "$TMP"):/tmp:ro" \
+    docker run --rm -v "$(host_path "$DATA_PATH"):/data:ro" -v "$(host_path "$TMP"):/tmp:ro" \
       "$ALPINE" sh -c "cp /data/.backup-snapshot.sqlite3 /tmp/boasi.sqlite3" \
       && cp "$TMP/boasi.sqlite3" "$STAGE/.backup-snapshot.sqlite3"
   fi

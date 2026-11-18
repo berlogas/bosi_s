@@ -32,6 +32,16 @@ def session_import_roots(session_id: str) -> list[Path]:
             settings.documents_dir]
 
 
+def session_root(session_id: str) -> Path:
+    """Каталог сессии: `data/sessions/<id>`.
+
+    Свои файлы сессии лежат здесь; всё, что вне каталога, — чужие (например,
+    файл общей библиотеки, добавленный в сессию по пути). Удалять при purge
+    можно только то, что внутри каталога (см. `services/session_cleanup.py`).
+    """
+    return get_settings().sessions_dir / session_id
+
+
 def global_import_roots() -> list[Path]:
     settings = get_settings()
     roots: list[Path] = [settings.documents_dir]
@@ -129,3 +139,8 @@ def ensure_within(path: Path, root: Path) -> Path:
     if resolved != root_resolved and root_resolved not in resolved.parents:
         raise ForbiddenError(f"Файл вне каталога {root_resolved}")
     return resolved
+
+
+def is_within(path: Path, roots: Sequence[Path]) -> bool:
+    """Проверить, что путь лежит внутри одного из корней (безопасная проверка перед удалением)."""
+    return _within(path, roots) is not None

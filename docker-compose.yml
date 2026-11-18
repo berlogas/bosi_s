@@ -17,13 +17,18 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: boasi-backend
     restart: unless-stopped
+    # Владелец каталого данных: файлы в data/ будут приналежаться владельцу каталога. На Linux файлы
+    # станут root:root, и хостовый пользователь снова сне удалить без sudo.
+    #
+    # Решение: пользователь UID/GID хоста через переменные переменные:
+    #   DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose up -d
+    user: "${DOCKER_UID:-0}:${DOCKER_GID:-0}"
     depends_on:
       ollama:
         condition: service_healthy
@@ -32,11 +37,11 @@ services:
       DATA_DIR: /data
       DATABASE_URL: sqlite:////data/boasi.sqlite3
       PQA_HOME: /data/pqa
-      # Бэкапы — в ОТДЕЛЬНЫЙ том. Кладя их внутрь /data, мы получили бы
+      # Бэкапы — в ОТДЕЛЬНЫЙ каталог. Кладя их внутрь /data, мы получили бы
       # бэкап внутри бэкапа: архив рос бы с каждой копией.
       BACKUP_DIR: /backups
       BACKUP_KEEP: "14"
-      # Папка-приёмник: файлы кладёте сюда на хосте, backend по кнопке
+      # Папка-приёмник: файлы кладёте сюда на хосте (./data/inbox), backend по кнопке
       # в админке индексирует их и переносит в /data/documents/library.
       INBOX_DIR: /data/inbox
       LIBRARY_DIR: /data/documents/library
@@ -45,11 +50,12 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - boasi_data:/data
-      - boasi_backups:/backups
-      # Приёмник файлов для массового добавления. Каталог inbox/ в корне
-      # репозитория создаётся один раз: mkdir -p inbox
-      - ./inbox:/data/inbox
+      # Каталог данных — bind-mount на ./data хоста: одна и та же БД и файлы
+      # видят и контейнеру, и локальному запуску backend (scripts/start.sh).
+      # Пути файлов в БД хранятся относительно от DATA_DIR, поэтому переезд
+      # между хостом и контейнером ничего не ломает.
+      - ./data:/data
+      - ./backups:/backups
     # Явный healthcheck (в Dockerfile тоже есть, но здесь видно и можно задать
     # запас: первый старт грузит модель эмбеддингов и восстанавливает индекс —
     # это минуты, а не секунды).
@@ -65,7 +71,6 @@ services:
         limits:
           cpus: "4.0"
           memory: 8G
-
   webapp:
     build:
       context: ./webapp
@@ -80,13 +85,6 @@ services:
       VITE_API_TARGET: http://backend:8000
     ports:
       - "127.0.0.1:5173:5173"
-
 volumes:
   ollama_models:
     name: boasi_ollama_models
-  boasi_data:
-    name: boasi_data
-  # Копии данных. Отдельный том: снимать их из /data нельзя, иначе архив
-  # будет содержать предыдущие архивы. Ротацию делает backend (BACKUP_KEEP).
-  boasi_backups:
-    name: boasi_backups

@@ -15,7 +15,6 @@ import asyncio
 import logging
 import time
 from datetime import timedelta
-from pathlib import Path
 from typing import Any
 
 import anyio
@@ -23,49 +22,21 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.core.locks import locks
 from app.db.models import RefreshToken, utcnow
 from app.db.repositories.sessions import purge_expired_archives
 from app.db.repositories.users import expire_due_sessions
 from app.db.repositories.users import prune_audit as prune_audit_repo
 from app.db.session import get_session_factory
-from app.services.pqa_registry import get_registry, session_collection
+from app.services.session_cleanup import (
+    purge_session_artifacts,
+    remove_files,  # noqa: F401 - ре-экспорт: прежнее место импорта, на него ссылаются тесты
+)
 
 log = logging.getLogger("boasi.workers.reaper")
 
 # Монотонное время последней ретрации аудита: живёт в памяти процесса,
 # чтобы не делать лишний запрос к БД каждые 5 минут.
 _last_audit_prune = 0.0
-
-
-def remove_files(paths: list[str]) -> int:
-    """Удалить файлы сессии; опустевшие каталоги поднимаем вверх по дереву."""
-    removed = 0
-    dirs: set[Path] = set()
-    for raw in paths:
-        path = Path(raw)
-        try:
-            if path.is_file():
-                path.unlink()
-                removed += 1
-                dirs.add(path.parent)
-        except OSError:
-            log.warning("reaper: не удалось удалить %s", path)
-    for directory in sorted(dirs, key=lambda p: len(p.parts), reverse=True):
-        current = directory
-        for _ in range(3):  # files -> <session_id> -> sessions
-            try:
-                next(current.iterdir())
-                break  # каталог не пуст — выше не идём
-            except StopIteration:
-                try:
-                    current.rmdir()
-                except OSError:
-                    break
-                current = current.parent
-            except OSError:
-                break
-    return removed
 
 
 async def purge_sessions(retention_days: int | None = None) -> dict[str, Any]:
@@ -77,17 +48,14 @@ async def purge_sessions(retention_days: int | None = None) -> dict[str, Any]:
     if not purged:
         return {"purged": 0, "files_removed": 0, "chunks_removed": 0}
 
-    removed_files = await anyio.to_thread.run_sync(
-        remove_files, [p for item in purged for p in item["paths"]])
-
+    # Файлы и чанки каждой сессии чистим по отдельности: у сессии свой
+    # каталог, и чужие файлы (общая библиотека) трогать нельзя.
+    removed_files = 0
     chunks_removed = 0
     for item in purged:
-        collection = session_collection(item["session_id"])
-        try:
-            chunks_removed += await get_registry().get(collection).store.clear(collection)
-        except Exception:
-            log.exception("reaper: не удалось очистить чанки %s", collection)
-        locks.reset_session_lock(item["session_id"])
+        cleaned = await purge_session_artifacts(item["session_id"], item["paths"])
+        removed_files += cleaned["files_removed"]
+        chunks_removed += cleaned["chunks_removed"]
 
     log.info("reaper: purged=%d файлов=%d чанков=%d",
              len(purged), removed_files, chunks_removed)

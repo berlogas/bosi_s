@@ -21,12 +21,19 @@ const PROJECT_STATUS_LABELS: Record<string, string> = {
   done: 'Готово (done)',
 }
 
+/** Доступные статусы проекта. */
+export const STATUSES = ['planning', 'drafting', 'reviewing', 'done'] as const
+
 /** Роль документа в проекте → подпись. */
 const DOC_ROLE_LABELS: Record<string, string> = {
   reference: 'Литература (reference)',
   data: 'Данные (data)',
   draft: 'Черновик (draft)',
+  style_guide: 'Правила оформления журнала (style_guide)',
 }
+
+/** Доступные роли документа в проекте. */
+export const DOC_ROLES = ['reference', 'data', 'draft', 'style_guide'] as const
 
 /** Значение статуса → подпись; неизвестное значение показываем как есть. */
 export function projectStatusLabel(status: string): string {

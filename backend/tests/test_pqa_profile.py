@@ -213,3 +213,92 @@ def test_min_relevance_score_drives_paperqa_cutoff() -> None:
 
     high = build_pqa_settings(_app(evidence_min_relevance_score=0.86))
     assert high.answer.evidence_relevance_score_cutoff == 9
+
+
+# ------------------------------------------------------------------ кэш эмбеддингов
+def test_embedding_model_cached_reuse(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Повторный вызов `_cached_embedding_model` с теми же аргументами
+    не перезагружает модель с диска (lru_cache срабатывает).
+
+    2.4.1 Тесты кэша эмбеддингов: `_cached_embedding_model` кэширует до 8
+    экземпляров; второй вызов с тем же именем модели и конфигом должен
+    вернуть тот же объект без повторного вызова `embedding_model_factory`.
+    """
+    from app.services import pqa_profile
+
+    calls = []
+    fake_model = object()
+
+    def _fake_factory(embedding: str, **kwargs) -> object:
+        calls.append((embedding, kwargs))
+        return fake_model
+
+    monkeypatch.setattr(
+        "lmi.embeddings.embedding_model_factory", _fake_factory)
+
+    # Очищаем kэш перед тестом, чтобы не зависеть от других тестов
+    pqa_profile._cached_embedding_model.cache_clear()
+
+    model1 = pqa_profile._cached_embedding_model("st-multi-qa-MiniLM-L6-cos-v1",
+                                                 "{}")
+    model2 = pqa_profile._cached_embedding_model("st-multi-qa-MiniLM-L6-cos-v1",
+                                                 "{}")
+
+    assert model1 is model2 is fake_model
+    assert len(calls) == 1, (
+        f"fabrik должен быть вызван 1 раз, а вызван {len(calls)}")
+
+    # Другая модель — другой кэш-слот, фабрика вызывается повторно
+    model3 = pqa_profile._cached_embedding_model("other-model", "{}")
+    assert model3 is fake_model  # та же заглушка
+    assert len(calls) == 2
+
+    pqa_profile._cached_embedding_model.cache_clear()
+
+
+# ------------------------------------------------------------------ метрика загрузки модели эмбеддингов
+def test_embedding_model_load_count_metric(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """2.4.2 Метрика загрузки модели эмбеддингов.
+
+    `embedding_model_load_count()` должна увеличиваться только при реальной
+    загрузке с диска (промахе kэша), а не при каждом вызове
+    `get_embedding_model` / `_cached_embedding_model`.
+    """
+    from app.services import pqa_profile
+
+    calls = []
+    fake_model = object()
+
+    def _fake_factory(embedding: str, **kwargs) -> object:
+        calls.append((embedding, kwargs))
+        return fake_model
+
+    monkeypatch.setattr(
+        "lmi.embeddings.embedding_model_factory", _fake_factory)
+
+    pqa_profile._cached_embedding_model.cache_clear()
+    # Сбрасываем счётчик метрики (глобальная переменная модуля)
+    pqa_profile._embedding_model_loads = 0
+
+    assert pqa_profile.embedding_model_load_count() == 0
+
+    # Первый вызов — промах кэша, модель загружается
+    m1 = pqa_profile._cached_embedding_model("model-a", "{}")
+    assert pqa_profile.embedding_model_load_count() == 1
+    assert len(calls) == 1
+
+    # Второй вызов с теми же аргументами — попадание в кэш, загрузки нет
+    m2 = pqa_profile._cached_embedding_model("model-a", "{}")
+    assert m1 is m2
+    assert pqa_profile.embedding_model_load_count() == 1
+    assert len(calls) == 1
+
+    # Другая модель — снова промах кэша
+    m3 = pqa_profile._cached_embedding_model("model-b", "{}")
+    assert pqa_profile.embedding_model_load_count() == 2
+    assert len(calls) == 2
+
+    pqa_profile._cached_embedding_model.cache_clear()
+    pqa_profile._embedding_model_loads = 0

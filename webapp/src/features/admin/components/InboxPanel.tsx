@@ -25,7 +25,7 @@ import {
   useInboxStatus,
 } from '../queries'
 import type { InboxRun } from '../../../api/client'
-import { shortWhen } from '../../../lib/format'
+import { fullWhen, shortWhen } from '../../../lib/format'
 
 function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
@@ -197,7 +197,7 @@ export function InboxPanel() {
       {runs.data?.map((run) => (
         <Paper key={run.id} withBorder p="sm">
           <Group justify="space-between" wrap="nowrap">
-            <Text size="sm" title={run.started_at}>
+            <Text size="sm" title={fullWhen(run.started_at)}>
               {shortWhen(run.started_at)}
             </Text>
             <Badge

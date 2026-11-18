@@ -11,7 +11,7 @@
 | `backend` | 127.0.0.1:8000 | FastAPI API, Swagger по `/api/docs` |
 | `webapp` | 127.0.0.1:5173 | React-интерфейс (Vite dev-сервер) |
 
-Данные хранятся в именованных томах Docker (`boasi_data`, `boasi_backups`, `boasi_ollama_models`), поэтому при пересоздании контейнеры не теряют базу, загруженные документы и модели Ollama.
+Каталог данных — общий каталог `data/` в корне репозитория: он смотрен в контейнере как bind-mount (`./data:/data`), поэтому БД и файлы общие для хоста и контейнера. Модели Ollama остаются в отдельном томе `boasi_ollama_models`.
 
 ---
 
@@ -163,11 +163,11 @@ scripts\start-docker.bat
 
 Все данные живут в томах Docker:
 
-- `boasi_data` — SQLite БД, загруженные документы, индекс эмбеддингов (`/data` внутри контейнера)
+- каталог `data/` — SQLite БД, загруженные документы, индекс эмбеддингов (`/data` внутри контейнера)
 - `boasi_backups` — архивы бэкапов (`/backups`)
 - `boasi_ollama_models` — модели Ollama (`/root/.ollama`)
 
-Скрипты бэкапа (`scripts/backup.sh`, `scripts/restore.sh`) работают с данными тома `boasi_data`. Их можно запускать из Git Bash или WSL.
+Скрипты бэкапа (`scripts/backup.sh`, `scripts/restore.sh`) работают с каталогом `data/`. Их можно запускать из Git Bash или WSL.
 
 ---
 
@@ -185,7 +185,7 @@ scripts\start-docker.bat
 
 ```cmd
 docker compose down -v
-docker volume rm boasi_ollama_models boasi_data boasi_backups
+docker volume rm boasi_ollama_models
 ```
 
 ⚠️ Это безвозвратно удаляет базу, документы, сессии и модели Ollama.

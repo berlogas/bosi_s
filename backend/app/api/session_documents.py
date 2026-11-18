@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -49,7 +50,6 @@ from app.db.models import (
     DocumentVisibility,
     ProjectDocRole,
     RelationType,
-    ResearchSession,
     User,
 )
 from app.db.repositories import documents as docs_repo
@@ -64,7 +64,9 @@ from app.schemas.api import (
     DocumentPatch,
     FileFailureOut,
 )
+from app.services.document_replace import drop_replaced_documents
 from app.services.pqa_registry import get_registry
+from app.services.session_cleanup import owned_paths, remove_files
 from app.services.types import DocStatus, DocumentRef
 
 log = logging.getLogger("boasi.api.session_documents")
@@ -82,17 +84,22 @@ def _service(session_id: str) -> Any:
     return get_registry().session_service(session_id)
 
 
-async def _register(db: Session, session: ResearchSession, user: User,
-                    ref: DocumentRef,
+def _register(db: Session, *, session_id: str, owner_user_id: str,
+                    added_by: str, ref: DocumentRef,
                     category: DocumentCategory, tags: list[str] | None,
                     source: str | None) -> Document:
-    """Зеркалим `DocumentRef` в таблицу `documents`."""
+    """Зеркалим `DocumentRef` в таблицу `documents`.
+
+    Принимает простые идентификаторы, а не ORM-объекты: вызывается и из
+    фоновой задачи, где сессия запроса уже закрыта.
+    """
     return docs_repo.upsert_document(
         db,
         dockey=ref.dockey,
         docname=ref.docname or "",
         title=ref.title or ref.docname,
-        filename=os.path.basename(ref.path) if ref.path else (ref.docname or ""),
+        filename=ref.filename or (os.path.basename(ref.path) if ref.path
+                                   else (ref.docname or "")),
         path=ref.path,
         url=ref.url,
         mime=None,
@@ -103,9 +110,9 @@ async def _register(db: Session, session: ResearchSession, user: User,
         content_hash=ref.content_hash,
         category=category,
         visibility=DocumentVisibility.session,
-        session_id=session.id,
-        owner_user_id=session.user_id,
-        added_by=user.id,
+        session_id=session_id,
+        owner_user_id=owner_user_id,
+        added_by=added_by,
         tags=tags,
         source=source,
         status=DocumentStatus.ready if ref.status is DocStatus.READY else DocumentStatus.error,
@@ -138,10 +145,18 @@ async def upload_documents(
     files: list[UploadFile] = File(...),
     category: DocumentCategory = Form(DocumentCategory.temp_literature),
     tags: str = Form(""),
+    replace: bool = Form(False),
     request: Request = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentBatchResultOut:
+    """Загрузка файлов в сессию.
+
+    `replace` — заменить прежние версии документов с теми же именами: без
+    этого изменённый файл лёг бы вторым документом, а старая версия осталась
+    бы в индексе (дедуп PaperQA идёт по содержимому, а не по имени).
+    """
+    _ensure_session_category(category)
     session = get_owned_session(db, session_id, user)
     ensure_writable(session)
 
@@ -152,13 +167,22 @@ async def upload_documents(
                                     incoming_bytes=total_bytes)
 
     # сервис читает UploadFile сам, поэтому передаём их как есть
-    result = await _service(session.id).add_uploads(
-        files, category=category.value, session_id=session.id)
+    service = _service(session.id)
+    staged, stage_failed = await service.stage_uploads(files, session.id)
+    if replace:
+        await drop_replaced_documents(
+            db, service, session_id=session.id,
+            names=[name for _, name in staged])
+    result = await service.index_staged(
+        staged, category=category.value, session_id=session.id)
+    result.failed = stage_failed + result.failed
 
     registered = 0
     stored: list[DocumentOut] = []
     for ref in result.added:
-        document = await _register(db, session, user, ref, category, tag_list, source="upload")
+        document = _register(db, session_id=session.id, owner_user_id=session.user_id,
+                           added_by=user.id, ref=ref, category=category,
+                           tags=tag_list, source="upload")
         stored.append(document_from_row(document))
         registered += 1
 
@@ -178,6 +202,108 @@ async def upload_documents(
     )
 
 
+@router.post("/{session_id}/documents/upload-async", response_model=dict)
+async def upload_documents_async(
+    session_id: str,
+    files: list[UploadFile] = File(...),
+    category: DocumentCategory = Form(DocumentCategory.temp_literature),
+    tags: str = Form(""),
+    replace: bool = Form(False),
+    request: Request = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Фоновая индексация загруженных файлов.
+
+    Индексация PDF на CPU занимает секунды-минуты: держать открытым
+    HTTP-запрос нельзя — интерфейс «висит спиннером» и не может отменить
+    операцию (ТЗ, приёмка Фазы 10: «индексация запускается асинхронно,
+    progress visible в UI»). Поэтому отвечаем сразу `task_id`, а прогресс и
+    отмена идут через `/api/tasks/{id}`.
+
+    Файлы сохраняются на диск прямо в запросе: объект загрузки FastAPI
+    закрывается вместе с ответом, а задача живёт дольше.
+    """
+    from app.db.session import session_scope
+    from app.services.tasks import Task, tasks
+
+    _ensure_session_category(category)
+    session = get_owned_session(db, session_id, user)
+    ensure_writable(session)
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    total_bytes = sum(getattr(f, "size", 0) or 0 for f in files)
+    docs_repo.check_document_limits(db, session.id,
+                                    incoming_count=len(files),
+                                    incoming_bytes=total_bytes)
+
+    service = _service(session.id)
+    staged, stage_failed = await service.stage_uploads(files, session.id)
+    if replace:
+        await drop_replaced_documents(
+            db, service, session_id=session.id,
+            names=[name for _, name in staged])
+    if not staged:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Ни один файл не удалось сохранить: "
+            + "; ".join(f"{name}: {error}" for name, error in stage_failed),
+        )
+
+    # В замыкание попадают только простые значения: сессия запроса к моменту
+    # старта задачи закрыта, а ORM-объекты от неё отвязаны.
+    target_session_id = session.id
+    owner_user_id = session.user_id
+    actor_id = user.id
+    category_value = category
+
+    async def body(task: Task) -> dict[str, Any]:
+        added: list[dict[str, Any]] = []
+        duplicates: list[str] = []
+        failed: list[dict[str, str]] = [
+            {"name": name, "error": error} for name, error in stage_failed]
+
+        total = len(staged)
+        for index, (path, name) in enumerate(staged, start=1):
+            tasks.report(task, int(100 * (index - 1) / max(1, total)),
+                          f"файл {index}/{total}: {name}")
+            try:
+                ref = await service.add_file(
+                    path, category=category_value.value, session_id=target_session_id,
+                    title=Path(name).stem, filename=name)
+            except Exception as exc:  # один плохой файл не роняет пачку
+                failed.append({"name": name, "error": f"{type(exc).__name__}: {exc}"})
+                continue
+            if ref is None:
+                duplicates.append(name)
+                continue
+            # Реестр — в своей сессии: сессия запроса уже закрыта.
+            with session_scope() as task_db:
+                document = _register(
+                    task_db, session_id=target_session_id, owner_user_id=owner_user_id,
+                    added_by=actor_id, ref=ref, category=category_value,
+                    tags=tag_list, source="upload")
+                added.append({"id": document.id, "docname": document.docname,
+                              "chunks": document.chunks_count})
+        tasks.report(task, 100, "готово")
+        return {"added": added, "duplicates": duplicates, "failed": failed,
+                "total": total}
+
+    task = tasks.submit(body, kind="indexing",
+                        title=f"Индексация {len(staged)} файлов",
+                        user_id=user.id, session_id=session.id)
+    touch_session(db, session, action_type="documents.upload",
+                  action_label=f"Индексация {len(staged)} файлов (в фоне)",
+                  snapshot={"tab": "documents"})
+    audit(db, action="session.documents.upload_async", actor=user,
+          target_type="session", target_id=session.id,
+          **(_meta(request) if request else {}),
+          files=len(files), staged=len(staged), task=task.id)
+    return {"task_id": task.id, "total": len(staged),
+            "failed": [{"name": name, "error": error}
+                       for name, error in stage_failed]}
+
+
 @router.post("/{session_id}/documents/path", response_model=DocumentOut)
 async def add_document_path(
     session_id: str,
@@ -185,7 +311,12 @@ async def add_document_path(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentOut:
-    """Добавление файла с диска: `{"path": ..., "category": ..., "tags": [...]}`."""
+    """Добавление файла с диска.
+
+    Тело: `{"path": ..., "category": ..., "tags": [...], "force_reindex": bool}`.
+    `force_reindex` — переиндексировать документ, даже если он уже в индексе
+    (нужно после смены настроек: чанки со старым отпечатком устарели).
+    """
     session = get_owned_session(db, session_id, user)
     ensure_writable(session)
 
@@ -198,16 +329,21 @@ async def add_document_path(
 
     category = _parse_category(payload.get("category"))
     tags = _parse_tags(payload.get("tags"))
+    force_reindex = bool(payload.get("force_reindex"))
 
     size = await anyio.to_thread.run_sync(lambda: path.stat().st_size)
     docs_repo.check_document_limits(db, session.id, incoming_count=1,
                                     incoming_bytes=size)
     ref = await _service(session.id).add_file(path, category=category.value,
-                                              session_id=session.id)
+                                              session_id=session.id,
+                                              force_reindex=force_reindex)
     if ref is None:
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Документ уже есть в индексе (дедуп по содержимому)")
-    document = await _register(db, session, user, ref, category, tags, source="path")
+                            "Документ уже есть в индексе (дедуп по содержимому). "
+                            "Для переиндексации укажите force_reindex.")
+    document = _register(db, session_id=session.id, owner_user_id=session.user_id,
+                       added_by=user.id, ref=ref, category=category,
+                       tags=tags, source="path")
     touch_session(db, session, action_type="documents.add",
                   action_label=f"Добавлен документ: {ref.title or ref.docname}",
                   snapshot={"tab": "documents"})
@@ -250,6 +386,8 @@ async def delete_document(session_id: str, document_id: str,
     if dockey:
         await _service(session.id).delete_document(dockey=dockey)
     docs_repo.delete_document_row(db, document_id)
+    # Файл документа убираем из диска — только если он внутри каталога сессии (D12).
+    remove_files(owned_paths(session.id, [document.path or ""]))
     touch_session(db, session, action_type="documents.delete",
                   action_label=f"Удалён документ: {document.title}",
                   snapshot={"tab": "documents"})
@@ -260,10 +398,10 @@ async def restore_index(session_id: str, user: User = Depends(get_current_user),
                         db: Session = Depends(get_db)) -> dict[str, int]:
     """Пересобрать `Docs` сессии из БД (после рестарта контейнера)."""
     session = get_owned_session(db, session_id, user)
-    restored = await _service(session.id).restore_state(force=True)
+    restored, stale = await _service(session.id).restore_state(force=True)
     touch_session(db, session, action_type="documents.restore",
                   action_label="Индекс восстановлен из БД")
-    return {"restored": restored}
+    return {"restored": restored, "stale": stale}
 
 
 # --------------------------------------------------------------------------- связи
@@ -313,21 +451,38 @@ def delete_link(session_id: str, link_id: str, user: User = Depends(get_current_
 
 
 # --------------------------------------------------------------------------- хелперы
-def _parse_category(value: Any, default: DocumentCategory = DocumentCategory.temp_literature
-                    ) -> DocumentCategory:
-    """Категория из запроса; пустое значение -> категория по умолчанию."""
-    if isinstance(value, DocumentCategory):
-        return value
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return default
-    try:
-        return DocumentCategory(str(value).strip())
-    except ValueError as exc:
+def _ensure_session_category(category: DocumentCategory) -> DocumentCategory:
+    """`global_knowledge` — категория только глобальной базы, не сессии (D11)."""
+    if category is DocumentCategory.global_knowledge:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Неизвестная категория: {value}. Допустимо: "
-            + ", ".join(c.value for c in DocumentCategory),
-        ) from exc
+            "Категория «global_knowledge» доступна только для глобальной базы знаний",
+        )
+    return category
+
+
+def _parse_category(value: Any, default: DocumentCategory = DocumentCategory.temp_literature
+                    ) -> DocumentCategory:
+    """Категория из запроса; пустое значение -> категория по умолчанию.
+
+    `global_knowledge` — категория только глобальной базы знаний: документ с
+    ней всегда сессионный (visibility=session), поэтому исследователь не должен
+    получать её при загрузке/обновлении документа своей сессии (D11).
+    """
+    if isinstance(value, DocumentCategory):
+        category = value
+    elif value is None or (isinstance(value, str) and not value.strip()):
+        return default
+    else:
+        try:
+            category = DocumentCategory(str(value).strip())
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Неизвестная категория: {value}. Допустимо: "
+                + ", ".join(c.value for c in DocumentCategory),
+            ) from exc
+    return _ensure_session_category(category)
 
 
 def _parse_tags(value: Any) -> list[str]:

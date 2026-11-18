@@ -59,10 +59,6 @@ describe('AnswerView a11y', () => {
             },
           ],
           references: ['(pqac-abc123)'],
-          citations: ['(pqac-abc123)'],
-          context: [],
-          evidence: [],
-          seconds: 5,
         }}
       />,
     )

@@ -1154,7 +1154,12 @@ describe('смена пользователя в одной вкладке', () 
     await userEvent.click(screen.getByRole('button', { name: 'Войти' }))
     expect(await screen.findByText('Сессия Иванова')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Выйти' }))
+    // Выход живёт в выпадающем меню пользователя — открываем его.
+    await userEvent.click(screen.getByRole('button', { name: 'Меню пользователя' }))
+    // Пункт меню — role="menuitem" (Mantine), а не button.
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Выйти', hidden: true }),
+    )
     await screen.findByText('Вход в boasi_s')
 
     await userEvent.type(screen.getByLabelText('Логин'), 'petrov')

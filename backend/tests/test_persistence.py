@@ -26,7 +26,8 @@ async def test_persist_restore_equivalent_scores(
 
     restored_service = _service(service_app, chunk_store, stub_llm)
     assert restored_service.list_documents() == []  # память пуста
-    assert await restored_service.restore_state() == 2
+    restored, stale = await restored_service.restore_state()
+    assert restored == 2
 
     chunks_after, _ = await restored_service.get_evidence("метод GF/F и хлорофилл-а")
 
@@ -41,9 +42,11 @@ async def test_restore_state_is_idempotent(
     await service.add_file(sample_text)
 
     second = _service(service_app, chunk_store, stub_llm)
-    assert await second.restore_state() == 1
-    assert await second.restore_state() == 0  # повторно ничего не дублируется
-    assert await second.restore_state(force=True) == 1  # принудительная перезагрузка
+    restored, stale = await second.restore_state()
+    assert restored == 1
+    assert await second.restore_state() == (0, 0)  # повторно ничего не дублируется
+    restored, stale = await second.restore_state(force=True)
+    assert restored == 1
     assert len(second.list_documents()) == 1
 
 
@@ -87,8 +90,10 @@ async def test_collections_persist_independently(
 
     fresh_global = _service(service_app, chunk_store, stub_llm, "global")
     fresh_session = _service(service_app, chunk_store, stub_llm, "session:s-42")
-    assert await fresh_global.restore_state() == 1
-    assert await fresh_session.restore_state() == 1
+    restored, stale = await fresh_global.restore_state()
+    assert restored == 1
+    restored, stale = await fresh_session.restore_state()
+    assert restored == 1
     assert {d.docname for d in fresh_global.list_documents()} != {
         d.docname for d in fresh_session.list_documents()}
 
@@ -133,7 +138,8 @@ async def test_chunks_survive_service_restart(
     document = await writer.add_file(sample_text)
 
     reader = _service(service_app, store, stub_llm)
-    assert await reader.restore_state() == 1
+    restored, stale = await reader.restore_state()
+    assert restored == 1
     assert reader.list_documents()[0].dockey == document.dockey
 
     chunks, _ = await reader.get_evidence("хлорофилл-а")
@@ -150,21 +156,106 @@ async def test_settings_md5_recorded(
     assert stored[0].settings_md5 == service.fingerprint
 
 
-@pytest.mark.parametrize("keep_embeddings", [True, False])
-async def test_restore_after_settings_change(
-    service_app, chunk_store, stub_llm, sample_text, keep_embeddings
+async def test_llm_change_keeps_chunks_valid(
+    service_app, chunk_store, stub_llm, sample_text
 ) -> None:
-    """Смена профиля (например, другой embedding) требует переиндексации."""
+    """Смена LLM не обесценивает индекс: чанки — это текст и эмбеддинги.
+
+    Переход с облачной модели на локальную (или наоборот) меняет формулировки
+    ответа, но не содержимое источников. Если бы отпечаток чанков зависел от
+    LLM, каждая такая смена требовала бы переиндексации всей базы.
+    """
     from app.services.pqa_profile import build_pqa_settings
 
     service = _service(service_app, chunk_store, stub_llm)
     await service.add_file(sample_text)
 
-    changed = service_app.model_copy(update={"evidence_k": 5})
+    changed = service_app.model_copy(update={"llm_model": "ollama/другая-модель"})
+    other = PaperQA2Service(changed, "global", chunk_store,
+                            pqa_settings=build_pqa_settings(changed), llm_model=stub_llm)
+    assert other.fingerprint == service.fingerprint
+
+    restored, stale = await other.restore_state()
+    assert stale == 0
+    assert restored >= 1
+    chunks, _ = await other.get_evidence("биомасса")
+    assert chunks  # источники на месте — индекс не пострадал
+
+
+@pytest.mark.parametrize("keep_embeddings", [True, False])
+async def test_restore_after_settings_change(
+    service_app, chunk_store, stub_llm, sample_text, keep_embeddings
+) -> None:
+    """Смена модели эмбеддингов требует переиндексации."""
+    from app.services.pqa_profile import build_pqa_settings
+
+    service = _service(service_app, chunk_store, stub_llm)
+    await service.add_file(sample_text)
+
+    changed = service_app.model_copy(update={
+        "embedding_model": "st-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    })
     other = PaperQA2Service(changed, "global", chunk_store,
                             pqa_settings=build_pqa_settings(changed), llm_model=stub_llm)
     assert other.fingerprint != service.fingerprint or not keep_embeddings
 
-    await other.restore_state()
+    restored, stale = await other.restore_state()
+    assert stale >= 1  # настройки изменились — чанки помечены устаревшими
     chunks, _ = await other.get_evidence("биомасса")
-    assert chunks  # контекст доступен в любом случае
+    assert not chunks  # пока не сделан reindex — результатов нет
+    result = await other.rebuild_index(drop_embeddings=True)
+    assert result["documents"] >= 1
+    chunks, _ = await other.get_evidence("биомасса")
+    assert chunks  # после переиндексации контекст доступен
+
+async def test_stale_schema_version_chunks_are_skipped(
+    service_app, chunk_store, stub_llm, sample_text
+) -> None:
+    """Документы с несовпадающей версией схемы пропускаются при restore_state."""
+    service = _service(service_app, chunk_store, stub_llm)
+    await service.add_file(sample_text)
+
+    # Эмулируем изменение схемы: портим schema_version напрямую в хранилище
+    for item in chunk_store._data["global"].values():
+        item.schema_version = 999
+
+    # Новый сервис — старые чанки пропускаются на этапе load
+    restored_service = _service(service_app, chunk_store, stub_llm)
+    restored, stale = await restored_service.restore_state()
+    assert restored == 0
+    assert stale == 0  # load() отфильтровала чанки с несовпадающей схемой
+
+
+async def test_schema_migration_rebuilds_embeddings(
+    service_app, chunk_store, stub_llm, sample_text
+) -> None:
+    """Полный переход со старой схемы на новую: restore_state пропускает старые
+    чанки, rebuild_index пересоздаёт их с текущим schema_version."""
+    service = _service(service_app, chunk_store, stub_llm)
+    await service.add_file(sample_text)
+
+    # Эмулируем изменение схемы: старые чанки имеют версию 999, а текущая — SCHEMA_VERSION
+    from app.services.chunk_store import SCHEMA_VERSION
+    for item in chunk_store._data["global"].values():
+        item.schema_version = 999  # старая версия
+
+    # restore_state должен пропустить старые чанки (settings_md5 тоже может не совпадать,
+    # но здесь фокус на schema_version — settings_md5 совпадает, а schema_version нет)
+    restored_service = _service(service_app, chunk_store, stub_llm)
+    restored, stale = await restored_service.restore_state()
+    assert restored == 0  # ничего не восстановлено — старые чанки отфильтрованы load()
+    assert stale == 0
+
+    # rebuild_index пересоздаёт чанки с текущим SCHEMA_VERSION
+    result = await restored_service.rebuild_index(drop_embeddings=True)
+    assert result["documents"] >= 1
+    assert result["chunks"] >= 1
+
+    # После переиндексации чанки доступны и эмбеддинги пересчитаны
+    chunks, _ = await restored_service.get_evidence("биомасса")
+    assert chunks
+    assert all(text.embedding is not None for text in restored_service.docs.texts)
+
+    # schema_version у сохранённых чанков теперь текущий
+    stored = await chunk_store.load("global")
+    assert all(item.schema_version == SCHEMA_VERSION for item in stored)

@@ -54,6 +54,7 @@ from app.schemas.api import (
     SessionResumeOut,
     SessionStateUpdate,
 )
+from app.services.session_cleanup import purge_session_artifacts
 
 log = logging.getLogger("boasi.api.sessions")
 
@@ -202,13 +203,14 @@ async def resume(session_id: str, request: Request,
     from app.services.pqa_registry import get_registry
 
     service = get_registry().session_service(session.id)
-    restored = await service.restore_state()
+    restored, stale = await service.restore_state()
 
     audit(db, action="session.resume", actor=user, target_type="session",
-          target_id=session.id, **_meta(request), restored=restored)
+          target_id=session.id, **_meta(request), restored=restored, stale=stale)
     _keepalive(session.id)
     return session_resume(
-        session, session_summary(db, session), state_snapshot(session),
+        session, session_summary(db, session),
+        {**state_snapshot(session), "stale_documents": stale},
         restored, days_left(session),
         last_exchange=list(messages_repo.last_exchange(db, session.id) or []) or None,
     )
@@ -227,11 +229,15 @@ def heartbeat(session_id: str, user: User = Depends(get_current_user),
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_session(session_id: str, request: Request,
-                   user: User = Depends(get_current_user),
-                   db: Session = Depends(get_db)) -> None:
+async def delete_session(session_id: str, request: Request,
+                          user: User = Depends(get_current_user),
+                          db: Session = Depends(get_db)) -> None:
     session = get_owned_session(db, session_id, user)
     info = hard_delete_session(db, session)
+    # Файлы сессии и её коллекция чанков: без этого они оставались лежать
+    # на диске и в `document_chunks` до следующего purge по TTL.
+    cleaned = await purge_session_artifacts(session.id, info["paths"])
     leases.drop(session.id)
     audit(db, action="session.delete", actor=user, target_type="session",
-          target_id=session_id, **_meta(request), files=len(info["paths"]))
+          target_id=session_id, **_meta(request),
+          files=cleaned["files_removed"], chunks=cleaned["chunks_removed"])

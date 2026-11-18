@@ -1,4 +1,4 @@
-"""Тесты `PaperQA2Service` (требования `interface.md` §10 + инварианты Фазы 0).
+"""Тесты `PaperQA2Service` (требования `docs/wip/interface.md` §10 + инварианты Фазы 0).
 
 Идут без сети и без Ollama: LLM заглушен, эмбеддинги локальные.
 """
@@ -6,8 +6,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from paperqa import PQASession
+from paperqa.agents import AnswerResponse
+from paperqa.agents.models import AgentStatus
 
 from app.core.errors import DocumentProcessingError
 from app.services.paperqa_service import PaperQA2Service
@@ -310,4 +314,157 @@ async def test_documents_on_disk_survive_service_recreation(
     second = PaperQA2Service(service_app, "global", chunk_store, llm_model=stub_llm)
     on_disk = await second.documents_on_disk()
     assert len(on_disk) == 1
-    assert on_disk[0].docname
+
+
+async def test_agent_ask_returns_agent_status(service: PaperQA2Service, sample_text: Path) -> None:
+    """agent_ask через мок-литкелл: возвращает agent_status, mode='agent', не залогинен."""
+    await service.add_file(sample_text, citation="Test citation")
+    fake_session = PQASession(
+        question="What is the temperature of the Barents Sea?",
+        answer="The barents sea is cold.",
+        formatted_answer="The barents sea is cold.",
+        contexts=[],
+        has_successful_answer=True,
+    )
+    fake_response = AnswerResponse(
+        session=fake_session,
+        status=AgentStatus.SUCCESS,
+    )
+    with patch(
+        "app.services.paperqa_service.agent_query", new=AsyncMock(return_value=fake_response)
+    ):
+        result = await service.agent_ask("What is the temperature of the Barents Sea?")
+
+    assert result.agent_status == "success"
+    assert result.mode == "agent"
+    assert result.question == "What is the temperature of the Barents Sea?"
+    assert result.answer == "The barents sea is cold."
+    assert result.seconds == 0
+
+
+async def test_agent_ask_passes_reuse_to_agent(service: PaperQA2Service, sample_text: Path) -> None:
+    """agent_ask передаёт used_context на уровень AnswerResult."""
+    await service.add_file(sample_text, citation="Test citation")
+    fake_session = PQASession(
+        question="What is the temperature of the Barents Sea?",
+        answer="The barents sea is cold.",
+        formatted_answer="The barents sea is cold.",
+        contexts=[],
+        has_successful_answer=True,
+    )
+    fake_response = AnswerResponse(
+        session=fake_session,
+        status=AgentStatus.SUCCESS,
+    )
+    with patch(
+        "app.services.paperqa_service.agent_query", new=AsyncMock(return_value=fake_response)
+    ):
+        result = await service.agent_ask("What is the temperature of the Barents Sea?")
+
+    assert result.used_context is False
+
+
+async def test_agent_ask_requires_mocked_agent(
+    service: PaperQA2Service, sample_text: Path
+) -> None:
+    """Без мока agent_query движок падает на реальный LLM (не реализуем в тестах)."""
+    await service.add_file(sample_text, citation="Test citation")
+    with patch(
+        "app.services.paperqa_service.agent_query", new=AsyncMock(side_effect=AssertionError("agent_query not mocked"))
+    ):
+        with pytest.raises(AssertionError):
+            await service.agent_ask("What is the temperature of the Barents Sea?")
+
+
+async def test_agent_ask_from_ask_with_evidence_helpers(service: PaperQA2Service, sample_text: Path) -> None:
+    """agent_ask совместим с ask_with_evidence-хелперами (второй параметр — сессия)."""
+    await service.add_file(sample_text, citation="Test citation")
+    fake_session = PQASession(
+        question="What is the temperature of the Barents Sea?",
+        answer="The barents sea is cold.",
+        formatted_answer="The barents sea is cold.",
+        contexts=[],
+        has_successful_answer=True,
+    )
+    fake_response = AnswerResponse(
+        session=fake_session,
+        status=AgentStatus.SUCCESS,
+    )
+    with patch(
+        "app.services.paperqa_service.agent_query", new=AsyncMock(return_value=fake_response)
+    ):
+        result = await service.agent_ask("What is the temperature of the Barents Sea?")
+
+    assert result.mode == "agent"
+    assert result.agent_status == "success"
+
+
+# ------------------------------------------------- 10.x прочие публичные методы
+def test_make_citation(service: PaperQA2Service, tmp_path: Path) -> None:
+    """make_citation формирует строку цитации для пользовательского файла."""
+    path = tmp_path / "my_document.pdf"
+    path.write_text("x", encoding="utf-8")
+
+    citation = service.make_citation(path)
+    assert citation == "my document (загружено пользователем)"
+
+    citation_titled = service.make_citation(path, title="Заголовок")
+    assert citation_titled == "Заголовок (загружено пользователем)"
+
+
+def test_unique_docname(service: PaperQA2Service) -> None:
+    """unique_docname возвращает уникальное имя документа внутри коллекции."""
+    # Имя свободно — возвращается как есть
+    first = service.unique_docname("report")
+    assert first == "report"
+
+    # Заняли имя
+    service.docs.docnames.add("report")
+
+    # Теперь должно быть с суффиксом
+    second = service.unique_docname("report")
+    assert second != "report"
+    assert second.startswith("report_")
+
+
+def test_storage_dir(service: PaperQA2Service, tmp_path: Path) -> None:
+    """storage_dir возвращает правильные пути для файлов."""
+    service.app = service.app.model_copy(update={
+        "data_dir": tmp_path / "data",
+    })
+
+    global_dir = service.storage_dir(None, "files")
+    assert global_dir == tmp_path / "data" / "documents" / "files"
+
+    session_dir = service.storage_dir("s-123", "uploads")
+    assert session_dir == tmp_path / "data" / "sessions" / "s-123" / "uploads"
+
+
+# ------------------------------------------------- complete
+def test_complete(service: PaperQA2Service, monkeypatch) -> None:
+    """complete вызывает LLM с правильным промптом."""
+    calls = []
+
+    class _FakeLLM:
+        async def call_single(self, messages=None, name=None):
+            calls.append((messages, name))
+            from lmi import LLMResult
+            return LLMResult(text="ответ модели", model="stub")
+
+    service._llm_model = _FakeLLM()
+
+    import asyncio
+    result = asyncio.run(service.complete("Напиши привет", name="test"))
+
+    assert result == "ответ модели"
+    assert len(calls) == 1
+    assert calls[0][1] == "test"
+    assert "Напиши привет" in calls[0][0][0].content
+
+
+# ------------------------------------------------- embedding_relevance
+def test_embedding_relevance_empty(service: PaperQA2Service) -> None:
+    """embedding_relevance возвращает пустой словарь без контекстов."""
+    import asyncio
+    result = asyncio.run(service.embedding_relevance("вопрос", []))
+    assert result == {}

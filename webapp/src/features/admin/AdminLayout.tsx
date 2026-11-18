@@ -4,7 +4,7 @@
  * Здесь НЕ должно быть своего AppShell и НЕ должно быть фиксированной панели табов.
  */
 
-import { useLocation } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 import { Stack, Skeleton } from '@mantine/core'
 import { useAuth } from '../auth/authStore'
@@ -46,7 +46,12 @@ export function AdminLayout() {
   const currentTab = location.pathname.split('/').filter(Boolean)[1] || 'users'
   const tabPath = currentTab === 'base' ? 'documents' : currentTab
   const knownTabs = Object.keys(TAB_COMPONENTS)
-  const activeTab = knownTabs.includes(tabPath) ? tabPath : 'users'
+  // Неизвестная вкладка: показываем «Пользователей», но и адрес приводим
+  // в порядок — иначе в меню не выделен ни один пункт.
+  if (!knownTabs.includes(tabPath)) {
+    return <Navigate to="/admin/users" replace />
+  }
+  const activeTab = tabPath
 
   const ActiveComponent = TAB_COMPONENTS[activeTab] || UsersPage
 

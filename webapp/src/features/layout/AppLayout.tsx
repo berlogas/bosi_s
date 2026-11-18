@@ -14,7 +14,6 @@ import {
   Center,
   Divider,
   Group,
-  Popover,
   Stack,
   Text,
   Title,
@@ -27,9 +26,9 @@ import {
   IconSun,
   IconUser,
 } from '@tabler/icons-react'
-import { Suspense, useEffect } from 'react'
+import { Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 
 import { client } from '../../api/client'
 import { RouteErrorBoundary } from '../../components/RouteErrorBoundary'
@@ -157,13 +156,13 @@ function DesktopHeader({ bootPending }: { bootPending: boolean }) {
 }
 
 export function AppLayout() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const { user } = useAuth()
   const bootPending = useAuth((state) => state.status === 'boot')
+  // Путь текущей сессии — из хука, а не из хранилища: пункт меню должен
+  // реагировать на смену сессии, а не читать его один раз при отрисовке.
   const currentSessionPath = useCurrentSessionPath()
 
-  const sections = getMenuSections(user)
+  const sections = getMenuSections(user, currentSessionPath)
 
   return (
     <TaskEventsProvider>

@@ -5,6 +5,7 @@
  * мутации с инвалидацией списка и лимитов сессии (summary в detail).
  */
 
+import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
@@ -23,13 +24,26 @@ export function useSessionDocuments(sessionId: string | null) {
   })
 }
 
+export function useSessionStyleGuideDocuments(sessionId: string | null) {
+  return useQuery({
+    queryKey: ['documents', sessionId, 'style_guide'] as const,
+    queryFn: () => client.sessionDocuments(sessionId as string, 'style_guide'),
+    enabled: sessionId !== null,
+  })
+}
+
 /**
  * Активные задачи сессии — прогресс индексации (план Фазы 3).
  * Поллинг 2 с, пока есть живые: загрузка файлов на диске индексируется
  * пачкой, юзеру важно видеть, что индекс ещё собирается.
  */
 export function useSessionIndexingTasks(sessionId: string | null) {
-  return useQuery({
+  const queryClient = useQueryClient()
+  // Задачи, чьё завершение мы уже учли: иначе каждый опрос заново
+  // инвалидировал бы список документов (опрос → инвалидация → опрос).
+  const accounted = useRef<Set<string>>(new Set())
+
+  const query = useQuery({
     queryKey: documentKeys.sessionTasks(sessionId ?? ''),
     queryFn: async () => {
       const body = await client.tasks({ sessionId: sessionId as string })
@@ -45,6 +59,23 @@ export function useSessionIndexingTasks(sessionId: string | null) {
     },
     refetchIntervalInBackground: false,
   })
+
+  // Индексация завершилась — список документов изменился.
+  useEffect(() => {
+    const tasks = query.data ?? []
+    const finished = tasks.filter(
+      (task) =>
+        (task.status === 'done' || task.status === 'error') &&
+        !accounted.current.has(task.id),
+    )
+    if (finished.length === 0) return
+    for (const task of finished) accounted.current.add(task.id)
+    void queryClient.invalidateQueries({
+      queryKey: documentKeys.list(sessionId ?? ''),
+    })
+  }, [query.data, queryClient, sessionId])
+
+  return query
 }
 
 /**
@@ -77,11 +108,14 @@ export function useAddDocumentByPath(sessionId: string) {
       path,
       category,
       tags,
+      forceReindex = false,
     }: {
       path: string
       category: string
       tags: string[]
-    }) => client.addDocumentByPath(sessionId, path, { category, tags }),
+      /** Переиндексировать, даже если документ уже в индексе. */
+      forceReindex?: boolean
+    }) => client.addDocumentByPath(sessionId, path, { category, tags, forceReindex }),
     onSuccess: invalidate,
   })
 }
@@ -102,6 +136,35 @@ export function useUploadDocuments(sessionId: string) {
       /** % отправленных байтов — из DocumentsTab (XHR onprogress). */
       onProgress?: (percent: number) => void
     }) => client.uploadDocuments(sessionId, files, { category, tags, onProgress }),
+    onSuccess: invalidate,
+  })
+}
+
+/**
+ * Фоновая загрузка файлов: сервер отвечает сразу `task_id`, индексация идёт
+ * в фоне, прогресс виден в панели задач.
+ *
+ * Список документов обновляет `useSessionIndexingTasks`, когда задача дошла
+ * до конца, — здесь только сбрасываем счётчик отправки.
+ */
+export function useUploadDocumentsAsync(sessionId: string) {
+  const invalidate = useInvalidateDocuments(sessionId)
+  return useMutation({
+    mutationFn: ({
+      files,
+      category,
+      tags,
+      onProgress,
+      replace = false,
+    }: {
+      files: File[]
+      category: string
+      tags: string
+      /** % отправленных байтов — из DocumentsTab (XHR onprogress). */
+      onProgress?: (percent: number) => void
+      /** Заменить прежние версии документов с теми же именами. */
+      replace?: boolean
+    }) => client.uploadDocumentsAsync(sessionId, files, { category, tags, onProgress, replace }),
     onSuccess: invalidate,
   })
 }

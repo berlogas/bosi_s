@@ -8,7 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { client } from '../../api/client'
-import type { ExportFormat, GenerateRequest } from '../../api/types'
+import type { ExportFormat } from '../../api/client'
 
 export const projectKeys = {
   journalStyles: () => ['journal-styles'] as const,
@@ -57,6 +57,9 @@ function useInvalidateProject(sessionId: string) {
       void queryClient.invalidateQueries({
         queryKey: projectKeys.documents(sessionId, projectId),
       })
+      void queryClient.invalidateQueries({
+        queryKey: ['project-versions', sessionId, projectId],
+      })
     }
   }
 }
@@ -64,8 +67,8 @@ function useInvalidateProject(sessionId: string) {
 export function useCreateProject(sessionId: string) {
   const invalidate = useInvalidateProject(sessionId)
   return useMutation({
-    mutationFn: ({ title, journal }: { title: string; journal: string }) =>
-      client.createProject(sessionId, title, journal),
+    mutationFn: ({ title, journal, language }: { title: string; journal: string; language: string }) =>
+      client.createProject(sessionId, title, journal, language),
     onSuccess: (project) => invalidate(project.id),
   })
 }
@@ -78,7 +81,7 @@ export function usePatchProject(sessionId: string) {
       fields,
     }: {
       projectId: string
-      fields: { status?: string; title?: string; target_journal?: string }
+      fields: { status?: string; title?: string; target_journal?: string; language?: string }
     }) => client.patchProject(sessionId, projectId, fields),
     onSuccess: (project) => invalidate(project.id),
   })
@@ -89,23 +92,6 @@ export function useDeleteProject(sessionId: string) {
   return useMutation({
     mutationFn: (projectId: string) => client.deleteProject(sessionId, projectId),
     onSuccess: () => invalidate(),
-  })
-}
-
-export function useSections(sessionId: string | null, projectId: string | null) {
-  return useQuery({
-    queryKey: projectKeys.sections(sessionId ?? '', projectId ?? ''),
-    queryFn: () => client.sections(sessionId as string, projectId as string),
-    enabled: sessionId !== null && projectId !== null,
-  })
-}
-
-export function useSaveSection(sessionId: string, projectId: string) {
-  const invalidate = useInvalidateProject(sessionId)
-  return useMutation({
-    mutationFn: ({ name, contentMd }: { name: string; contentMd: string }) =>
-      client.saveSection(sessionId, projectId, name, { content_md: contentMd }),
-    onSuccess: () => invalidate(projectId),
   })
 }
 
@@ -147,16 +133,6 @@ export function useProjectProgress(sessionId: string | null, projectId: string |
 }
 
 /** Генерация раздела/анализ — синхронная, результат сразу в руках. */
-export function useGenerate(sessionId: string, projectId: string) {
-  const invalidate = useInvalidateProject(sessionId)
-  return useMutation({
-    mutationFn: (payload: GenerateRequest) =>
-      client.generate(sessionId, projectId, payload),
-    // раздел мог записаться — разделы и прогресс читаем заново
-    onSuccess: () => invalidate(projectId),
-  })
-}
-
 /**
  * Экспорт статьи: ответ — файл, поэтому качаем blob'ом (обычный request
  * разбирает тело как JSON). Имя файла берём из Content-Disposition, чтобы
@@ -174,5 +150,37 @@ export function useExportProject(sessionId: string) {
       link.click()
       URL.revokeObjectURL(url)
     },
+  })
+}
+
+
+export function useSetProjectStyleGuide(sessionId: string) {
+  const invalidate = useInvalidateProject(sessionId)
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      documentId,
+    }: {
+      projectId: string
+      documentId: string | null
+    }) =>
+      client.setProjectStyleGuide(sessionId, projectId, documentId),
+    onSuccess: () => invalidate(),
+  })
+}
+
+/** Перевод раздела на целевой язык через бэкенд (LLM). */
+/** Переупорядочивание проектов — отправляет новый order для затронутых проектов. */
+export function useReorderProjects(sessionId: string) {
+  const invalidate = useInvalidateProject(sessionId)
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      order,
+    }: {
+      projectId: string
+      order: number
+    }) => client.patchProject(sessionId, projectId, { order }),
+    onSuccess: () => invalidate(),
   })
 }

@@ -44,6 +44,10 @@ export default defineConfig({
     env: { TZ: 'Europe/Moscow' },
     globals: true,
     css: false,
+    // Вкладки сессии грузятся лениво (React.lazy + code splitting): первый
+    // импорт графа модулей в холодном кэше занимает дольше 5 с, и тест
+    // падал по таймауту, не успев дождаться чанка.
+    testTimeout: 30000,
     // e2e гоняет Playwright, а не Vitest (см. playwright.config.ts)
     exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
   },

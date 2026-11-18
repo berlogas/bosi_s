@@ -8,7 +8,6 @@ import {
   IconHome,
   IconDatabase,
   IconClock,
-  IconSettings,
   IconUsers,
   IconListCheck,
   IconLayoutDashboard,
@@ -52,9 +51,15 @@ export function getCurrentSessionPath(user: User | null): string | null {
   }
 }
 
-/** Основная конфигурация меню */
-export function getMenuSections(user: User | null): MenuSection[] {
-  const sessionPath = getCurrentSessionPath(user)
+/**
+ * Основная конфигурация меню.
+ *
+ * `sessionPath` — путь текущей сессии; его должен передавать `useCurrentSessionPath`,
+ * иначе пункт «Текущая сессия» не обновится, когда сессия открылась или сменилась.
+ * Если путь не передан — берём из хранилища (как раньше).
+ */
+export function getMenuSections(user: User | null, sessionPath?: string | null): MenuSection[] {
+  const path = sessionPath !== undefined ? sessionPath : getCurrentSessionPath(user)
 
   return [
     {
@@ -64,10 +69,10 @@ export function getMenuSections(user: User | null): MenuSection[] {
         { to: '/', label: 'Информационная панель', icon: <IconHome size={16} />, enabled: true },
         { to: '/knowledge', label: 'База знаний', icon: <IconDatabase size={16} />, enabled: true },
         {
-          to: sessionPath || '',
+          to: path || '',
           label: 'Текущая сессия',
           icon: <IconClock size={16} />,
-          enabled: !!sessionPath,
+          enabled: !!path,
         },
       ],
     },
@@ -89,11 +94,17 @@ export function getMenuSections(user: User | null): MenuSection[] {
   ]
 }
 
+/** Старые адреса, которые ещё работают (AdminLayout их понимает). */
+const PATH_ALIASES: Record<string, string> = {
+  '/admin/base': '/admin/documents',
+}
+
 /** Проверить, активен ли пункт (или его родительская секция) */
 export function isItemActive(pathname: string, to: string): boolean {
   if (!to) return false
-  if (to === '/') return pathname === '/'
-  return pathname === to || pathname.startsWith(`${to}/`)
+  const path = PATH_ALIASES[pathname] ?? pathname
+  if (to === '/') return path === '/'
+  return path === to || path.startsWith(`${to}/`)
 }
 
 /** Проверить, активна ли секция (хотя бы один дочерний пункт активен) */

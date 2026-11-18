@@ -45,10 +45,10 @@ def test_limits_match_spec() -> None:
     assert s.max_sessions_per_user == 10
     assert s.max_documents_per_session == 50
     assert s.max_session_storage_mb == 500
-    assert s.max_projects_per_session == 5
+    assert s.max_projects_per_session == 100
     assert s.offline_mode is True
     assert s.multimodal is False
-    # PLAN.md §4: timeout=3600 нужен профилю «Ollama на CPU», иначе lmi
+    # docs/wip/PLAN.md §4: timeout=3600 нужен профилю «Ollama на CPU», иначе lmi
     # ретраит по 60 с. Для облачного endpoint это не так: там зависание
     # означает обрыв, а не медленную генерацию, и 3600 превращали молчание
     # на четверть часа (замер 2026-10-18). Поэтому нижняя граница зависит от

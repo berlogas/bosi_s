@@ -1,11 +1,14 @@
 /**
- * Простая таблица данных с пагинацией и синхронизацией URL.
+ * Простая таблица данных с пагинацией и сортировкой.
  * Не делает клиентскую фильтрацию/сортировку — ожидает, что data уже готов хуком.
+ *
+ * URL-параметрами занимается хук страницы (у каждого раздела свой префикс),
+ * таблица только сообщает об изменениях.
  */
 
-import { useRef, useEffect, useMemo, ReactNode } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { Group, Table } from '@mantine/core'
-import { useSearchParams } from 'react-router-dom'
 
 export interface SimpleColumn<T> {
   id: string
@@ -48,37 +51,19 @@ export function SimpleTable<T extends { id: string | number }>({
   isLoading = false,
   emptyMessage = 'Нет данных',
 }: SimpleTableProps<T>) {
-  const [, setSearchParams] = useSearchParams()
-
-  // Рефы для отслеживания предыдущих значений (избегаем бесконечного цикла навигации)
-  const prevPagination = useRef(pagination)
-  const prevSorting = useRef(sorting)
+  // URL-параметры ведёт хук страницы: у каждого раздела свой префикс
+  // (audit_, users_, sessions_…). Таблица только сообщает об изменениях
+  // (onPaginationChange / onSortingChange / onFiltersChange) — если писать
+  // в URL отсюда, параметры хука затираются: сортировка «откатывается»
+  // к умолчанию, а страницы сражаются друг с другом за адрес.
   const prevFilters = useRef(filters)
 
-  // Синхронизация с URL — только если значения реально изменились
+  // Сообщаем хуку об изменении фильтров извне (например, при вводе в поле поиска).
+  // Только когда они реально изменились: запись на старте конкурировала с
+  // действием пользователя и затирала его (сортировка «откатывалась»).
   useEffect(() => {
-    const paginationChanged =
-      prevPagination.current.pageIndex !== pagination.pageIndex ||
-      prevPagination.current.pageSize !== pagination.pageSize
-    const sortingChanged = JSON.stringify(prevSorting.current) !== JSON.stringify(sorting)
-    const filtersChanged = JSON.stringify(prevFilters.current) !== JSON.stringify(filters)
-
-    if (paginationChanged || sortingChanged || filtersChanged) {
-      prevPagination.current = pagination
-      prevSorting.current = sorting
-      prevFilters.current = filters
-
-      const params = new URLSearchParams()
-      params.set('page', String(pagination.pageIndex + 1))
-      params.set('size', String(pagination.pageSize))
-      if (sorting.length) params.set('sort', JSON.stringify(sorting))
-      if (filters.length) params.set('filters', JSON.stringify(filters))
-      setSearchParams(params, { replace: true })
-    }
-  }, [pagination, sorting, filters, setSearchParams])
-
-  // Сообщаем хуку (и URL) об изменении фильтров извне (например, при вводе в поле поиска)
-  useEffect(() => {
+    if (JSON.stringify(prevFilters.current) === JSON.stringify(filters)) return
+    prevFilters.current = filters
     onFiltersChange?.(filters)
   }, [filters, onFiltersChange])
 

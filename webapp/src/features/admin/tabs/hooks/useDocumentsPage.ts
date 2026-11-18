@@ -109,7 +109,32 @@ export function useDocumentsPage() {
   )
 
   // --- Данные ---
-  const data = documentsQuery.data ?? []
+  // Сортировка клиентская: бэкенд отдаёт полный список без параметра сортировки,
+  // а SimpleTable только режет его на страницы. Поэтому сортируем здесь, до
+  // пагинации: иначе клик по заголовку меняет значок, но не порядок строк.
+  const data = useMemo(() => {
+    const list = documentsQuery.data ?? []
+    const [first] = sorting
+    if (!first) return list
+    const valueOf = (row: unknown, key: string): number | string => {
+      const raw = (row as Record<string, unknown>)[key]
+      if (key === 'size_bytes' || key === 'chunk_count') {
+        const n = Number(raw)
+        return Number.isFinite(n) ? n : 0
+      }
+      if (key === 'tags') return Array.isArray(raw) ? raw.join(' ') : ''
+      return String(raw ?? '')
+    }
+    return [...list].sort((a, b) => {
+      const av = valueOf(a, first.id)
+      const bv = valueOf(b, first.id)
+      const cmp =
+        typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av).localeCompare(String(bv))
+      return first.desc ? -cmp : cmp
+    })
+  }, [documentsQuery.data, sorting])
   const isLoading = documentsQuery.isLoading
   const isError = documentsQuery.isError
   const error = documentsQuery.error

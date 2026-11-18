@@ -843,6 +843,48 @@ describe('админка', () => {
     expect(calls.some((c) => c.url.endsWith('/reindex'))).toBe(true)
   })
 
+  it('глобальная база: сортировка по заголовку меняет порядок строк', async () => {
+    const docs = [
+      { ...ADMIN_DOC, id: 'g-1', title: 'Альфа', filename: 'a.pdf', chunk_count: 30 },
+      { ...ADMIN_DOC, id: 'g-2', title: 'Бета', filename: 'b.pdf', chunk_count: 5 },
+    ]
+    mockApi(adminRoutes({ 'GET /api/admin/documents': docs }))
+    loginAs(TEST_ADMIN)
+
+    renderApp('/admin/documents')
+    expect(await screen.findByText('Альфа')).toBeInTheDocument()
+
+    // Порядок строк таблицы без шапки.
+    const titles = () =>
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.textContent ?? '')
+
+    // По умолчанию — по названию: «Альфа» выше «Беты».
+    await waitFor(() =>
+      expect(titles().findIndex((t) => t.includes('Альфа'))).toBeLessThan(
+        titles().findIndex((t) => t.includes('Бета')),
+      ),
+    )
+
+    // Клик по «Чанков» — по возрастанию: у «Беты» чанков меньше.
+    await userEvent.click(screen.getByText('Чанков'))
+    await waitFor(() =>
+      expect(titles().findIndex((t) => t.includes('Бета'))).toBeLessThan(
+        titles().findIndex((t) => t.includes('Альфа')),
+      ),
+    )
+
+    // Повторный клик — по убыванию.
+    await userEvent.click(screen.getByText('Чанков'))
+    await waitFor(() =>
+      expect(titles().findIndex((t) => t.includes('Альфа'))).toBeLessThan(
+        titles().findIndex((t) => t.includes('Бета')),
+      ),
+    )
+  })
+
   it('вкладка Задачи: панель прогресса и ошибка задачи', async () => {
     loginAs(TEST_ADMIN)
     mockApi(

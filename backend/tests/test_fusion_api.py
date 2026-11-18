@@ -608,6 +608,35 @@ async def test_no_fallback_when_skip_summary_is_configured(
     assert calls == [None]
 
 
+async def test_slow_summaries_fall_back_to_embeddings(
+        service_app, monkeypatch) -> None:
+    """Сводки дольше предела — не ждём их, отвечаем по эмбеддингам.
+
+    На CPU одна сводка идёт минуты, и без предела чат «висит» без ответа.
+    Проверяем, что по таймауту поиск повторяется с `skip_summary=True`.
+    """
+    from app.services.rag_retrieval import EvidenceRetriever
+
+    calls: list[bool | None] = []
+
+    async def fake_once(self, query, session_id, mode, k, catalog, skip_summary):
+        calls.append(skip_summary)
+        if skip_summary is None:
+            await asyncio.sleep(5)  # дольше таймаута
+        return ["эмбеддинги"]
+
+    monkeypatch.setattr(EvidenceRetriever, "_evidence_once", fake_once)
+    retriever = EvidenceRetriever(app=service_app.model_copy(
+        update={"evidence_summary_timeout_seconds": 0.05,
+                "evidence_skip_summary": False}))
+
+    result = await retriever._evidence("вопрос", "sid", SearchMode.hybrid, 10,
+                                       _empty_catalog())
+
+    assert calls == [None, True]
+    assert result == ["эмбеддинги"]
+
+
 # --------------------------------------------------------------------------- кто я
 # Жалоба 2026-10-19: на «ты кто?» чат отвечал «В предоставленных источниках нет
 # информации, чтобы ответить на этот вопрос». Отказ формально честный — вопрос

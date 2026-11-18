@@ -379,6 +379,27 @@ describe('чат: фоновая задача', () => {
     expect(screen.queryByText(/Не получилось ответить/)).toBeNull()
   }, 10_000)
 
+  it('потерянная задача показывает ошибку, а не пустоту', async () => {
+    // Рестарт backend стирает реестр задач: GET /api/tasks/{id} → 404.
+    // Раньше pending тихо гасился — вопрос исчезал, и в чате не оставалось
+    // ни строки, как будто ничего не отправляли.
+    sessionStorage.setItem(
+      'boasi.chat.task',
+      JSON.stringify({ sessionId: 's-1', taskId: 't-lost', question: 'долгий вопрос' }),
+    )
+    mockChatApi({
+      'GET /api/tasks/t-lost': json({ detail: 'Задача не найдена' }, 404),
+    })
+
+    renderApp()
+
+    expect(await screen.findByText('долгий вопрос')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Не получилось ответить: Задача не найдена/),
+    ).toBeInTheDocument()
+    expect(sessionStorage.getItem('boasi.chat.task')).toBeNull()
+  }, 10_000)
+
   it('F5 восстанавливает панель: задача из sessionStorage продолжает поллинг', async () => {
     sessionStorage.setItem(
       'boasi.chat.task',

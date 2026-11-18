@@ -22,7 +22,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db.models import DocumentCategory, DocumentStatus, SearchMode
+from app.db.models import DocumentCategory, SearchMode
 from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.rag_fusion import (
     Candidate,
@@ -95,10 +95,25 @@ class EvidenceRetriever:
         (замер 2026-10-12: 83 с и 0 кандидатов). Поэтому при пустом результате
         делаем один повтор без сводок — тогда релевантность считается по
         эмбеддингам (см. _restore_relevance). Медленно, но не «нет данных».
+
+        Сводки — это вызов LLM на каждый фрагмент, и на CPU они идут минутами.
+        Поэтому ожидание ограничено `EVIDENCE_SUMMARY_TIMEOUT_SECONDS`: лучше
+        ответ по эмбеддингам, чем «Вопрос обрабатывается…» без конца.
         """
-        candidates = await self._evidence_once(
-            query, session_id, mode, k, catalog, skip_summary=None)
-        if candidates or self._app.evidence_skip_summary:
+        if self._app.evidence_skip_summary:
+            return await self._evidence_once(
+                query, session_id, mode, k, catalog, skip_summary=None)
+        timeout = float(self._app.evidence_summary_timeout_seconds or 0)
+        try:
+            candidates = await asyncio.wait_for(
+                self._evidence_once(
+                    query, session_id, mode, k, catalog, skip_summary=None),
+                timeout=timeout if timeout > 0 else None)
+        except TimeoutError:
+            log.warning(
+                "fusion: сводки не уложились в %sс — поиск без них", timeout)
+            candidates = []
+        if candidates:
             return candidates
         log.warning("fusion: сводки не дали ни одного контекста — повтор без них")
         return await self._evidence_once(

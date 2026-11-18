@@ -120,6 +120,12 @@ class Settings(BaseSettings):
     # Сырой текст вместо LLM-сводок в контексте: честнее, но огромный
     # prefill (SPICE_REPORT: ответ 817 с) — включается только явно.
     evidence_skip_summary: bool = False
+    # Предел ожидания LLM-сводок при поиске, секунды. Сводка — один вызов LLM
+    # на каждый фрагмент выдачи: на CPU это минуты, а без предела чат просто
+    # «висит» без ответа. По истечении срока поиск повторяется без сводок
+    # (релевантность считается по эмбеддингам), чтобы ответ всё-таки пришёл.
+    # 0 — ждать столько, сколько потребуется.
+    evidence_summary_timeout_seconds: float = 120.0
     max_concurrent_requests: int = 1  # Ollama на CPU обрабатывает запросы последовательно
     chunk_chars: int = 4000
     chunk_overlap: int = 200
@@ -298,6 +304,15 @@ class Settings(BaseSettings):
         """Порог — доля от 1, вне диапазона он бессмысленен."""
         if not 0.0 <= value <= 1.0:
             raise ValueError("EVIDENCE_MIN_RELEVANCE_SCORE должен быть в диапазоне 0..1")
+        return value
+
+    @field_validator("evidence_summary_timeout_seconds")
+    @classmethod
+    def _check_summary_timeout(cls, value: float) -> float:
+        """Отрицательный предел ожидания сводок бессмысленен."""
+        if value < 0:
+            raise ValueError(
+                "EVIDENCE_SUMMARY_TIMEOUT_SECONDS не может быть отрицательным")
         return value
 
     def validate_runtime(self) -> list[str]:

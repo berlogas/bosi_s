@@ -168,11 +168,25 @@ export function ChatTab({
 
   useEffect(() => {
     if (task.isError && taskId) {
+      // Задача могла исчезнуть вместе с реестром (рестарт backend) или
+      // запрос статуса не прошёл. Раньше вопрос просто пропадал: pending
+      // гасился, и в чате не оставалось ни строки — «ответа нет, пусто».
+      const question = pending
       clearChatTask()
       setTaskId(null)
       setPending(null)
+      if (question) {
+        setFailed({
+          q: question,
+          kind: 'error',
+          text:
+            task.error instanceof Error && task.error.message
+              ? task.error.message
+              : 'не удалось получить состояние задачи — возможно, сервер перезапускался. Повторите вопрос.',
+        })
+      }
     }
-  }, [task.isError, taskId])
+  }, [task.isError, task.error, taskId, pending])
 
   useEffect(() => {
     if (!messages.data) return

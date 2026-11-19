@@ -136,6 +136,7 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 
 | 6 | UI / translate | «Перевести раздел»: несколько минут ждал — результата не получил, возможно, по таймауту | В `webapp/src/api/client.ts` у методов `translateSection` / `translateSectionV2` стоял `timeoutMs: 300_000`, что меньше фактического времени LLM-перевода на CPU (у генераций — 600_000) | исправлено: timeout перевода повышен до `600_000` (10 мин); тесты проектов (29 passed), typecheck, lint чисты |
 | 7 | UI / approve / rollback / translate | После нажатия «Одобрить» (или «Откатить», «Перевести») статус версий в истории не обновлялся до ручной перезагрузки страницы | `useInvalidateSectionPlans` в `webapp/src/features/projects/hooks/useSectionPlans.ts` инвалидировал только список планов и старые разделы; ключ кэша истории `['section-plan-history', sessionId, projectId, planId]` не трогали | исправлено: в инвалидацию добавлены префиксные ключи `['section-plan-history', sessionId, projectId]`, `['project-section-versions', sessionId, projectId]`, `['manuscript', sessionId, projectId]`; после approve/rollback/translate/сохранения список и рукопись обновляются без перезагрузки |
+| 8 | UI / rollback / branch / merge | При нажатии «Откатить к этой версии» (а также «Создать ветку», «Объединить ветки»): 500 Internal error, «Внутренняя ошибка сервера» | `app/services/history.py` в `rollback` / `create_branch` / `merge_branches` создавал `SectionVersion` через `SectionVersion.__table__.columns["id"].default.arg()`, который на текущей версии SQLAlchemy/SQLAlchemy-2-вызовов требует аргумент `ctx` | исправлено: создание версий переведено на штатный конструктор `new_id()` из `app.db.models`; проверено — rollback отрабатывает (200, новая draft-версия), 38 related-тестов passed |
 
 Итоги:
 
@@ -144,6 +145,10 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 - 4 неполадки исправлены кодом (см. таблицы `docs/ACCEPTANCE_RUN_2026-11-19.md` и
   коммиты): task registry, journal-suggested-plan, generate-async background-session,
   approve (missing import); плюс документационный путь загрузки документов.
+- Дополнительно (финальный штрих приёма): кнопка «Откатить к этой версии» (ветвление,
+  объединение) падала с `TypeError: new_id() missing 1 required positional argument: 'ctx'`
+  в `app/services/history.py` — исправлено на штатный `new_id()`; rollback проверен через API
+  (200, новая draft-версия создана).
 - Дополнительно (финальный штрих приёма): таймаут клиента перевода раздела был меньше
   фактического LLM-перевода (300 с против 600 с у генераций) — исправлен в
   `webapp/src/api/client.ts`.

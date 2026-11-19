@@ -15,6 +15,7 @@ from app.db.models import (
     SectionVersion,
     User,
     VersionStatus,
+    new_id,
 )
 from app.services.generation import validate_citations
 from app.services.pqa_registry import get_registry
@@ -265,7 +266,7 @@ class HistoryService:
 
         # Создаем новую версию на базе целевой
         new_version = SectionVersion(
-            id=SectionVersion.__table__.columns["id"].default.arg(),
+            id=new_id(),
             section_plan_id=section_plan.id,
             project_id=target.project_id,
             session_id=target.session_id,
@@ -311,7 +312,7 @@ class HistoryService:
             raise ValueError(f"SectionPlan {section_plan_id} not found")
 
         new_version = SectionVersion(
-            id=SectionVersion.__table__.columns["id"].default.arg(),
+            id=new_id(),
             section_plan_id=section_plan.id,
             project_id=base.project_id,
             session_id=base.session_id,
@@ -370,7 +371,7 @@ class HistoryService:
             merged_citations = self._merge_citations(target.citation_map, source.citation_map)
 
         new_version = SectionVersion(
-            id=SectionVersion.__table__.columns["id"].default.arg(),
+            id=new_id(),
             section_plan_id=section_plan.id,
             project_id=target.project_id,
             session_id=target.session_id,

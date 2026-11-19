@@ -135,6 +135,7 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 | 5 | UI / approve | При нажатии «Одобрить» в UI: 500 Internal error, «Не удалось одобрить» | `app/services/history.py` в `approve_version` использовал `SectionStatus` без импорта (NameError) | исправлено: добавлен импорт `SectionStatus`; проверено — все 6 разделов одобряются (200), рукопись из одобренных версий собирается полностью |
 
 | 6 | UI / translate | «Перевести раздел»: несколько минут ждал — результата не получил, возможно, по таймауту | В `webapp/src/api/client.ts` у методов `translateSection` / `translateSectionV2` стоял `timeoutMs: 300_000`, что меньше фактического времени LLM-перевода на CPU (у генераций — 600_000) | исправлено: timeout перевода повышен до `600_000` (10 мин); тесты проектов (29 passed), typecheck, lint чисты |
+| 7 | UI / approve / rollback / translate | После нажатия «Одобрить» (или «Откатить», «Перевести») статус версий в истории не обновлялся до ручной перезагрузки страницы | `useInvalidateSectionPlans` в `webapp/src/features/projects/hooks/useSectionPlans.ts` инвалидировал только список планов и старые разделы; ключ кэша истории `['section-plan-history', sessionId, projectId, planId]` не трогали | исправлено: в инвалидацию добавлены префиксные ключи `['section-plan-history', sessionId, projectId]`, `['project-section-versions', sessionId, projectId]`, `['manuscript', sessionId, projectId]`; после approve/rollback/translate/сохранения список и рукопись обновляются без перезагрузки |
 
 Итоги:
 
@@ -146,3 +147,7 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 - Дополнительно (финальный штрих приёма): таймаут клиента перевода раздела был меньше
   фактического LLM-перевода (300 с против 600 с у генераций) — исправлен в
   `webapp/src/api/client.ts`.
+- Дополнительно (финальный штрих приёма): после «Одобрить» в UI версия в истории не
+  перезапрашивалась до ручной перезагрузки страницы — исправлен неинвалидируемый ключ
+  кэша истории (`section-plan-history`) в `useSectionPlans.ts`; проверено: тесты проектов
+  (29 passed), typecheck, lint чисты.

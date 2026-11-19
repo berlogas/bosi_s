@@ -21,6 +21,11 @@ function useInvalidateSectionPlans(sessionId: string, projectId: string) {
   return (): void => {
     queryClient.invalidateQueries({ queryKey: sectionPlanKeys.list(sessionId, projectId) })
     queryClient.invalidateQueries({ queryKey: ['project-sections', sessionId, projectId] })
+    // История версий живёт под префиксным ключом с planId последним сегментом;
+    // инвалидируем по сессии+проекту, чтобы подхватить все планы проекта.
+    queryClient.invalidateQueries({ queryKey: ['section-plan-history', sessionId, projectId] })
+    queryClient.invalidateQueries({ queryKey: ['project-section-versions', sessionId, projectId] })
+    queryClient.invalidateQueries({ queryKey: ['manuscript', sessionId, projectId] })
   }
 }
 

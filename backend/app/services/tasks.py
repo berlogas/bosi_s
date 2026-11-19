@@ -231,6 +231,16 @@ class TaskRegistry:
             self._tasks.pop(task_id, None)
         return len(done)
 
+    def clear(self) -> int:
+        """Очистить реестр целиком, не подменяя объект.
+
+        Нужен полному сбросу: подмена объекта оставляла бы модули, которые
+        импортировали имя `tasks` при старте, со ссылкой на старый реестр.
+        """
+        count = len(self._tasks)
+        self._tasks.clear()
+        return count
+
 
 tasks = TaskRegistry()
 
@@ -240,8 +250,16 @@ def get_registry() -> TaskRegistry:
 
 
 def reset_registry() -> None:
-    global tasks
-    tasks = TaskRegistry()
+    """Очистить реестр задач на месте.
+
+    Раньше здесь создавался новый `TaskRegistry` и имя `tasks` в модуле
+    перепривязывалось. Модули, импортировавшие `tasks` при старте
+    (`app.api.tasks`, `app.api.metrics`), оставались со ссылкой на старый
+    реестр — и после полного сброса (он чистит и реестр задач) новые
+    фоновые задачи переставали быть видны в `GET /api/tasks*`: список
+    показывал только задачи, поставленные до сброса.
+    """
+    tasks.clear()
 
 
 class ProgressReporter:

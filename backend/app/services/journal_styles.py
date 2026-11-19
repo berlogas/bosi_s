@@ -208,45 +208,47 @@ def style_prompt(name: str | None, section: str) -> str:
 
 
 def get_suggested_section_plan(style_key: str | None) -> list[dict[str, Any]]:
-    """Получить предложенный план разделов для стиля журнала."""
+    """Предложенный план разделов — по основному шаблону группы.
+
+    Раньше разделы склеивались из **всех** шаблонов группы: у «серьёзной
+    науки» в план попадали trial_design/participants/interventions/outcomes/
+    statistical_analysis из шаблона клинического испытания, даже если статья
+    наблюдательная. Пользователь получал план, половина которого не про его
+    дизайн. Основной шаблон (`default_template`) — это и есть визитная
+    карточка группы, по ней и предлагаем разделы.
+    """
     style = find_style(style_key)
     if not style or not style.templates:
         return []
 
-    seen = set()
+    template = style.template_by_file(style.default_template)
+    if template is None:
+        return []
+
     ordered_sections = []
     order = 1
 
-    for template in style.templates:
-        for section_name in template.sections:
-            clean = section_name.strip().lower()
-            if clean and clean not in seen:
-                seen.add(clean)
-                kind = "standard"
-                if clean in ("literature review", "review", "related work", "background"):
-                    kind = "literature_review"
-                elif clean in ("methods", "materials", "materials and methods", "methodology"):
-                    kind = "standard"
-                elif clean in ("results", "findings"):
-                    kind = "standard"
-                elif clean in ("discussion", "conclusions", "conclusion"):
-                    kind = "discussion"
-                elif clean in ("abstract", "summary"):
-                    kind = "standard"
-                elif clean in ("introduction", "background"):
-                    kind = "standard"
+    for section_name in template.sections:
+        clean = section_name.strip().lower()
+        if not clean:
+            continue
+        kind = "standard"
+        if clean in ("literature review", "review", "related work", "background"):
+            kind = "literature_review"
+        elif clean in ("discussion", "conclusions", "conclusion"):
+            kind = "discussion"
 
-                ordered_sections.append({
-                    "name": section_name.strip().title(),
-                    "kind": kind,
-                    "order": order,
-                    "word_target": 500,
-                    "notes": "",
-                    "required": True,
-                    "language": "ru",
-                    "depends_on": [],
-                })
-                order += 1
+        ordered_sections.append({
+            "name": section_name.strip().title(),
+            "kind": kind,
+            "order": order,
+            "word_target": 500,
+            "notes": "",
+            "required": True,
+            "language": "ru",
+            "depends_on": [],
+        })
+        order += 1
 
     return ordered_sections
 

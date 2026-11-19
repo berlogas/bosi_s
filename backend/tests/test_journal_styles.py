@@ -254,3 +254,18 @@ def test_в_загруженных_шаблонах_нет_мест_под_да�
         for template in style.templates:
             assert "[ВСТАВЬТЕ" not in template.prompt, template.file
             assert "[PASTE" not in template.prompt, template.file
+
+
+def test_suggested_plan_uses_default_template_only() -> None:
+    """План по стилю — из основного шаблона, без разделов других шаблонов.
+
+    Регрессия: разделы склеивались из всех шаблонов группы, и в план
+    «серьёзной науки» попадали trial_design/participants/interventions/
+    outcomes/statistical_analysis из шаблона клинического испытания.
+    """
+    plan = js.get_suggested_section_plan("sound_science")
+
+    assert [item["name"] for item in plan] == [
+        "Abstract", "Introduction", "Methods", "Results",
+        "Discussion", "Conclusion", "References",
+    ]

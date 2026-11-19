@@ -87,7 +87,7 @@ PaperQA2 умеет искать по одной `Docs` коллекции. Ва
 
 ### 13. Нет rate limiting на загрузку документов
 
-`POST /api/documents/upload` не ограничен по частоте.
+`POST /api/admin/documents/upload` не ограничен по частоте.
 
 **Рекомендация:** Добавить rate limit на загрузку (например, 10 файлов/минуту) через существующий `app/core/rate_limit.py`.
 

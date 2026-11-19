@@ -212,6 +212,28 @@ async def test_registry_trims_finished_tasks() -> None:
     assert len(registry.list()) == 2
 
 
+async def test_reset_registry_clears_in_place() -> None:
+    """Сброс чистит реестр, а не подменяет объект.
+
+    Регрессия: `reset_registry()` перепривязывал модульное имя `tasks`, и
+    модули, импортировавшие его при старте (`app.api.tasks`), продолжали
+    смотреть в старый реестр. После полного сброса новые задачи не попадали
+    в `GET /api/tasks` — запрос отдавал 404 «Задача не найдена».
+    """
+    from app.services import tasks as task_service
+
+    async def body(task):
+        return "ok"
+
+    task = tasks.submit(body, kind="chat", title="до сброса")
+    await _wait_finished(task)
+
+    reset_registry()
+
+    assert tasks.get(task.id) is None
+    assert task_service.tasks is tasks
+
+
 def test_task_dict_shape_for_api() -> None:
     """Контракт, который читает UI: эти поля обязаны быть в to_dict()."""
     payload = {

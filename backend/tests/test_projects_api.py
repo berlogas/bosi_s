@@ -353,6 +353,60 @@ async def test_generate_v2_accepts_kind(client, researcher, project_id,
     assert discussion["kind"] == "discussion"
 
 
+async def test_generate_async_body_survives_request_session_close(
+        client, researcher, project_id, session_id, docs, monkeypatch) -> None:
+    """Тело фоновой генерации не зависит от request-сессии.
+
+    Регрессия: `generate-async` использовал `db` из зависимости FastAPI.
+    После ответа сессия закрывается, ORM-объекты отсоединяются — версия в
+    базе появлялась, а `current_version_id` у плана оставался пустым.
+    Здесь тело намеренно ждёт завершения запроса и только потом трогает ORM.
+    """
+    import asyncio
+
+    from sqlalchemy import text
+
+    from app.services.generation import GenerationResult
+    from app.services.projects import ProjectService
+    from app.services.tasks import tasks
+
+    captured: dict[str, int] = {}
+
+    async def fake_generate(self, db, *, project, session, user, request,
+                            kind=None):
+        await asyncio.sleep(0.1)  # запрос уже завершён
+        captured["plans"] = len(project.section_plans)
+        db.execute(text("SELECT 1"))
+        return GenerationResult(section=request.section,
+                                content_md="Введение [1].")
+
+    monkeypatch.setattr(ProjectService, "generate_section", fake_generate)
+
+    response = await client.post(
+        f"/api/sessions/{session_id}/projects/{project_id}/generate-async",
+        json={"section": "Introduction", "question": "Зачем измерять"},
+        headers=researcher)
+    assert response.status_code == 200, response.text
+
+    task = await _wait_task(tasks, response.json()["task_id"])
+    assert task.status.value == "done", task.error
+    assert task.result is not None
+    # ORM-доступ после закрытия request-сессии не должен падать.
+    assert captured["plans"] >= 0
+
+
+async def _wait_task(tasks, task_id: str, timeout: float = 10.0):
+    import asyncio
+
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        task = tasks.get(task_id)
+        if task is not None and task.finished:
+            return task
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"задача {task_id} не завершилась за {timeout} с")
+
+
 async def test_generation_writes_into_section_plan(client, researcher,
                                                     project_id, session_id,
                                                     docs) -> None:

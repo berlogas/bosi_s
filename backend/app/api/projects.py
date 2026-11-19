@@ -1082,30 +1082,54 @@ async def generate_section_async(
         language=payload.language,
     )
 
+    # Фоновое тело живёт дольше запроса: после ответа FastAPI закрывает
+    # request-сессию, ORM-объекты отсоединяются, и правки плана молча
+    # терялись — версия в базе появлялась, а `current_version_id` у плана
+    # оставался пустым (раздел «не сгенерирован» после перезагрузки).
+    # Поэтому в фоне работаем со своей сессией и заново читаем объекты.
+    from app.db.models import ResearchSession
+    from app.db.session import get_session_factory
+
+    project_key = project.id
+    session_key = session.id
+    user_key = user.id
+
     async def body(task: Task) -> dict[str, Any]:
         # Этапы: подготовка -> поиск контекста -> LLM -> сохранение
-        task.set_stage(10, "подготовка запроса")
-        service = ProjectService()
+        bg_db = get_session_factory()()
         try:
-            result = await service.generate_section(
-                db, project=project, session=session, user=user,
-                request=request_obj, kind=GenerationKind(request_obj.kind))
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("generate-async: ошибка генерации раздела %r",
-                          request_obj.section)
-            raise
+            bg_project = bg_db.get(Project, project_key)
+            bg_session = bg_db.get(ResearchSession, session_key)
+            bg_user = bg_db.get(User, user_key)
+            if bg_project is None or bg_session is None or bg_user is None:
+                raise NotFoundError("Проект или сессия не найдены")
 
-        touch_session(db, session, action_type="project.generate",
-                      action_label=f"Раздел: {request_obj.section}",
-                      snapshot={"tab": "projects", "active_project": project.id})
-        audit(db, action="project.generate", actor=user,
-             target_type="project", target_id=project.id,
-             **_meta(request), section=request_obj.section,
-             citations_ok=result.ok, sources=len(result.sources),
-             from_cache=result.from_cache, seconds=result.seconds)
-        return result.to_dict()
+            task.set_stage(10, "подготовка запроса")
+            service = ProjectService()
+            try:
+                result = await service.generate_section(
+                    bg_db, project=bg_project, session=bg_session,
+                    user=bg_user, request=request_obj,
+                    kind=GenerationKind(request_obj.kind))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("generate-async: ошибка генерации раздела %r",
+                              request_obj.section)
+                raise
+
+            touch_session(bg_db, bg_session, action_type="project.generate",
+                          action_label=f"Раздел: {request_obj.section}",
+                          snapshot={"tab": "projects",
+                                    "active_project": bg_project.id})
+            audit(bg_db, action="project.generate", actor=bg_user,
+                 target_type="project", target_id=bg_project.id,
+                 **_meta(request), section=request_obj.section,
+                 citations_ok=result.ok, sources=len(result.sources),
+                 from_cache=result.from_cache, seconds=result.seconds)
+            return result.to_dict()
+        finally:
+            bg_db.close()
 
     task = tasks.submit(body, kind="generate_section",
                         title=f"Раздел: {request_obj.section}",

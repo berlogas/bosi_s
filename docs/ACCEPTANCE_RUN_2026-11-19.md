@@ -134,6 +134,8 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 | 4 | 7.1 | Без `include_unapproved=true` рукопись пустая (0 разделов, 0 слов) — сгенерированные версии не одобрены | По умолчанию `compile_manuscript` берёт только одобренные версии | ожидается/замечание: использовался `include_unapproved=true`; UI обязан понимать статус drafts |
 | 5 | UI / approve | При нажатии «Одобрить» в UI: 500 Internal error, «Не удалось одобрить» | `app/services/history.py` в `approve_version` использовал `SectionStatus` без импорта (NameError) | исправлено: добавлен импорт `SectionStatus`; проверено — все 6 разделов одобряются (200), рукопись из одобренных версий собирается полностью |
 
+| 6 | UI / translate | «Перевести раздел»: несколько минут ждал — результата не получил, возможно, по таймауту | В `webapp/src/api/client.ts` у методов `translateSection` / `translateSectionV2` стоял `timeoutMs: 300_000`, что меньше фактического времени LLM-перевода на CPU (у генераций — 600_000) | исправлено: timeout перевода повышен до `600_000` (10 мин); тесты проектов (29 passed), typecheck, lint чисты |
+
 Итоги:
 
 - Приёмочный прогон через **весь цикл** приложений выполняется успешно: данные → вопрос →
@@ -141,3 +143,6 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 - 4 неполадки исправлены кодом (см. таблицы `docs/ACCEPTANCE_RUN_2026-11-19.md` и
   коммиты): task registry, journal-suggested-plan, generate-async background-session,
   approve (missing import); плюс документационный путь загрузки документов.
+- Дополнительно (финальный штрих приёма): таймаут клиента перевода раздела был меньше
+  фактического LLM-перевода (300 с против 600 с у генераций) — исправлен в
+  `webapp/src/api/client.ts`.

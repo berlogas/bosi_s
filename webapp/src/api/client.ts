@@ -859,7 +859,7 @@ class ApiClient {
           target_language: targetLanguage,
           source_language: sourceLanguage,
         },
-        timeoutMs: 300_000,
+        timeoutMs: 600_000,
       },
     )
   }

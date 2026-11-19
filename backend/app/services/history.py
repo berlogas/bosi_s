@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     SectionPlan,
+    SectionStatus,
     SectionVersion,
     User,
     VersionStatus,

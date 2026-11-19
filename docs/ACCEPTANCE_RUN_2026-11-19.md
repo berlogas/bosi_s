@@ -132,10 +132,12 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 | 2 | 6.1 | `POST …/generate-async` → 200 `task_id`, `GET /api/tasks/{id}` → 404; задача не попадала в `GET /api/tasks` | `reset_registry()` в `app/services/tasks.py` **подменял** объект `tasks`; `app/api/tasks.py` / `app/api/metrics.py` держали импортированную при старте ссылку | исправлено: реестр чистится на месте (`TaskRegistry.clear()`); тест `test_reset_registry_clears_in_place` |
 | 3 | 6.2–6.6 | Task завершается (`done`) с текстом, но раздел не попадает в план (`current_version_id` пуст, секции пустые) | Фоновое тело `generate-async` работало через request-сессию FastAPI; после ответа сессия закрывается, ORM-объекты отсоединяются, правки плана не сохранялись | исправлено: во фоне своя сессия (`get_session_factory()`), объекты перечитываются; тест `test_generate_async_body_survives_request_session_close` |
 | 4 | 7.1 | Без `include_unapproved=true` рукопись пустая (0 разделов, 0 слов) — сгенерированные версии не одобрены | По умолчанию `compile_manuscript` берёт только одобренные версии | ожидается/замечание: использовался `include_unapproved=true`; UI обязан понимать статус drafts |
+| 5 | UI / approve | При нажатии «Одобрить» в UI: 500 Internal error, «Не удалось одобрить» | `app/services/history.py` в `approve_version` использовал `SectionStatus` без импорта (NameError) | исправлено: добавлен импорт `SectionStatus`; проверено — все 6 разделов одобряются (200), рукопись из одобренных версий собирается полностью |
 
 Итоги:
 
 - Приёмочный прогон через **весь цикл** приложений выполняется успешно: данные → вопрос →
   генерация → рукопись → экспорт. Всего ошибок, свалившихся задач и падений драйвера: 0.
-- 3 неполадки исправлены кодом (см. таблицы `docs/ACCEPTANCE_RUN_2026-11-19.md` и
-  коммиты: task registry, journal-suggested-plan, generate-async session).
+- 4 неполадки исправлены кодом (см. таблицы `docs/ACCEPTANCE_RUN_2026-11-19.md` и
+  коммиты): task registry, journal-suggested-plan, generate-async background-session,
+  approve (missing import); плюс документационный путь загрузки документов.

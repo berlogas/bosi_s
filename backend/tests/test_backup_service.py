@@ -375,3 +375,47 @@ async def test_backup_task_reports_progress(client, admin_user, env,
     assert any("архивирование" in step for _, step in steps)
     assert task.progress == 100
 
+async def test_backup_does_not_block_api(client, admin_user, env,
+                                         monkeypatch) -> None:
+    """Пока копия пишется, API продолжает отвечать (иначе UI теряет backend)."""
+    import asyncio
+    import time
+
+    import app.api.admin as admin_api
+    import app.services.backup as svc
+    from tests.conftest import login_headers
+
+    monkeypatch.setattr(admin_api, "plan_backup", lambda *a, **k: svc.plan_backup(env))
+    monkeypatch.setattr(svc, "get_settings", lambda: env)
+    headers = await login_headers(client, "admin", "admin-pass-123")
+
+    loop = asyncio.get_running_loop()
+    started = loop.create_future()
+    original_run = svc.run_backup
+
+    def slow_run(*args, **kwargs):
+        on_progress = kwargs.get("on_progress")
+        if on_progress is not None:
+            on_progress(40, "архивирование файлов")
+        loop.call_soon_threadsafe(started.set_result, True)
+        time.sleep(0.6)  # синхронная работа в потоке, не в event loop
+        if on_progress is not None:
+            on_progress(100, "готово")
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr(svc, "run_backup", slow_run)
+
+    response = await client.post("/api/admin/backup", json={}, headers=headers)
+    assert response.status_code == 200, response.text
+    await asyncio.wait_for(started, timeout=2)
+
+    began = loop.time()
+    listing = await client.get("/api/admin/backup", headers=headers)
+    elapsed = loop.time() - began
+    assert listing.status_code == 200
+    assert elapsed < 0.4, f"API отвечал {elapsed:.2f} с — event loop заблокирован"
+
+    task = await _wait_backup_task(response.json()["task_id"])
+    assert task.progress == 100
+    assert task.result["entry"]["name"]
+

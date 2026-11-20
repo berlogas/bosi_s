@@ -69,7 +69,7 @@
 
 ## 5. Верификация после очистки
 
-- backend: полный прогон `pytest tests` — **752 passed**, 2 skipped, 2 deselected,
+- backend: полный прогон `pytest tests` — **753 passed**, 2 skipped, 2 deselected,
   0 failures.
 - проекты/экспорт: `tests/test_projects_api.py` — 41 passed,
   `tests/test_export.py` — 31 passed;
@@ -81,7 +81,8 @@
   генерации, фоновые задачи с прогрессом, регрессионные тесты backend/frontend;
 - создание резервной копии в «Администрировании» показывает процент и этап
   (снимок БД, архивирование с счётчиком файлов, контрольная сумма, ротация),
-  описание добавлено в `docs/ADMIN_GUIDE.md`;
+  выполняется в отдельном потоке и не блокирует API; описание добавлено
+  в `docs/ADMIN_GUIDE.md`;
 - контейнеры пересобраны (`docker compose up -d --build backend webapp`):
   backend `healthy`, webapp отвечает 200; `GET /api/health` → 200; в открытом
   OpenAPI 100 путей, удалённых эндпоинтов нет, `/progress` на месте.

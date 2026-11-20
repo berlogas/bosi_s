@@ -313,8 +313,13 @@ async def create_backup(
                 task.set_stage(percent, step)
 
             try:
-                result = backup_service.run_backup(
-                    keep=keep, actor=None, on_progress=on_progress)
+                # run_backup — синхронный (sqlite, tarfile, sha256). Прямой вызов
+                # здесь заблокировал бы event loop: SSE и API «зависали» на всё
+                # время копирования, хотя файл в итоге создавался.
+                result = await asyncio.to_thread(
+                    backup_service.run_backup,
+                    keep=keep, actor=None, on_progress=on_progress,
+                )
             except asyncio.CancelledError:
                 raise
             except OSError as exc:

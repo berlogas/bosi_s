@@ -88,15 +88,7 @@ export function useDeleteSectionPlan(sessionId: string, projectId: string) {
   })
 }
 
-export function useSyncSectionPlans(sessionId: string, projectId: string) {
-  const invalidate = useInvalidateSectionPlans(sessionId, projectId)
-  return useMutation({
-    mutationFn: () => client.syncSectionPlans(sessionId, projectId),
-    onSuccess: () => invalidate(),
-  })
-}
-
-// ============================================================ Generation v2
+// ============================================================ Generation
 
 export function useGenerateSectionV2(sessionId: string, projectId: string) {
   const invalidate = useInvalidateSectionPlans(sessionId, projectId)
@@ -136,10 +128,8 @@ export function useTranslateSectionV2(sessionId: string, projectId: string) {
 /**
  * Сохранить текст раздела, набранный в редакторе.
  *
- * Правка уходит в новую модель (`section_versions`) по id плана, а бэкенд
- * зеркалит её в старую (`project.sections`) — обе модели показывают одно
- * и то же. После сохранения обновляем планы: текст приезжает в них из
- * `current_version`.
+ * Правка уходит в `section_versions` по id плана. После сохранения обновляем
+ * планы: текст приезжает в них из `current_version`.
  */
 export function useSaveSectionContent(sessionId: string, projectId: string) {
   const invalidate = useInvalidateSectionPlans(sessionId, projectId)

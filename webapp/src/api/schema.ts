@@ -602,7 +602,7 @@ export interface paths {
         post?: never;
         /**
          * Clear All
-         * @description Полная очистка глобальной базы (индекс + реестр).
+         * @description Полная очистка глобальной базы (индекс + реестр + файлы).
          */
         delete: operations["clear_all_api_admin_documents_delete"];
         options?: never;
@@ -1329,26 +1329,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/projects/{project_id}/sections/{name}/translate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Translate Section
-         * @description Перевести раздел статьи на целевой язык через LLM.
-         */
-        post: operations["translate_section_api_sessions__session_id__projects__project_id__sections__name__translate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/projects/{project_id}/section-plans": {
         parameters: {
             query?: never;
@@ -1358,7 +1338,7 @@ export interface paths {
         };
         /**
          * List Section Plans
-         * @description Список планов разделов (новая система SectionPlan).
+         * @description Список планов разделов проекта.
          *
          *     Вместе с планом отдаём текущую версию **и её текст** — иначе
          *     интерфейс после перезагрузки страницы не может показать сохранённый
@@ -1389,8 +1369,8 @@ export interface paths {
          * Save Section Content
          * @description Сохранить текст раздела, набранный в редакторе.
          *
-         *     Правка попадает в новую модель (новая версия раздела) и зеркалится
-         *     в старую (`project.sections`) — её читают прогресс проекта и выгрузка.
+         *     Правка попадает в новую версию плана: её читают прогресс,
+         *     манускрипт и выгрузка.
          */
         put: operations["save_section_content_api_sessions__session_id__projects__project_id__section_plans__plan_id__content_put"];
         post?: never;
@@ -1409,11 +1389,7 @@ export interface paths {
         };
         /**
          * List Section Versions
-         * @description Все версии разделов проекта — реальная история генераций.
-         *
-         *     Старая модель (`project_versions`) пишется только старым генератором;
-         *     генерация через SectionAgent кладёт версии в `section_versions`,
-         *     поэтому отдельная выдача нужна для панели «История».
+         * @description Все версии разделов проекта — история генераций и правок.
          */
         get: operations["list_section_versions_api_sessions__session_id__projects__project_id__section_versions_get"];
         put?: never;
@@ -1448,26 +1424,6 @@ export interface paths {
         patch: operations["update_section_plan_api_sessions__session_id__projects__project_id__section_plans__plan_id__patch"];
         trace?: never;
     };
-    "/api/sessions/{session_id}/projects/{project_id}/section-plans/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Sync Sections To Plans
-         * @description Синхронизировать старый JSON project.sections в новые SectionPlan.
-         */
-        post: operations["sync_sections_to_plans_api_sessions__session_id__projects__project_id__section_plans_sync_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/projects/{project_id}/generate-v2": {
         parameters: {
             query?: never;
@@ -1479,7 +1435,7 @@ export interface paths {
         put?: never;
         /**
          * Generate Section V2
-         * @description Новая генерация раздела через SectionAgent (возвращает SectionVersion).
+         * @description Генерация раздела через SectionAgent (возвращает SectionVersion).
          *
          *     В теле — `kind`: вид генерации (обычный раздел, обзор литературы,
          *     сверка с данными, обсуждение, пробелы, отчёт, разбор черновика).
@@ -1502,7 +1458,7 @@ export interface paths {
         put?: never;
         /**
          * Translate Section V2
-         * @description Перевести раздел на целевой язык (новая система).
+         * @description Перевести раздел на целевой язык.
          */
         post: operations["translate_section_v2_api_sessions__session_id__projects__project_id__section_plans__plan_id__translate_post"];
         delete?: never;
@@ -1726,26 +1682,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/projects/{project_id}/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Generate
-         * @description Сгенерировать раздел статьи по контексту проекта.
-         */
-        post: operations["generate_api_sessions__session_id__projects__project_id__generate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/projects/{project_id}/generate-async": {
         parameters: {
             query?: never;
@@ -1759,8 +1695,7 @@ export interface paths {
          * Generate Section Async
          * @description Фоновая генерация раздела: возвращает task_id, UI опрашивает /api/tasks/{id}.
          *
-         *     Генерация может занимать минуты, поэтому синхронный POST /generate
-         *     (для скриптов и тестов) дополняется фоновым режимом.
+         *     Генерация может занимать минуты, поэтому она всегда идёт в фоне.
          */
         post: operations["generate_section_async_api_sessions__session_id__projects__project_id__generate_async_post"];
         delete?: never;
@@ -1785,46 +1720,6 @@ export interface paths {
          *     возвращает оценочный диапазон 120–240 с.
          */
         get: operations["project_generate_eta_api_sessions__session_id__projects__project_id__eta_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/projects/{project_id}/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Versions
-         * @description История генераций: снапшот на каждый запуск — черновик не теряется.
-         */
-        get: operations["list_versions_api_sessions__session_id__projects__project_id__versions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/projects/{project_id}/versions/diff": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Diff Versions
-         * @description Построчный diff двух версий раздела (снапшот до/после генерации).
-         */
-        get: operations["diff_versions_api_sessions__session_id__projects__project_id__versions_diff_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2587,58 +2482,6 @@ export interface components {
              * @default false
              */
             no_cache: boolean;
-            /** Template Md */
-            template_md?: string | null;
-            /** Data Document Ids */
-            data_document_ids?: string[] | null;
-            /** Language */
-            language?: string | null;
-        };
-        /** GenerateResultOut */
-        GenerateResultOut: {
-            /** Project Id */
-            project_id: string;
-            /** Section */
-            section: string;
-            /** Content Md */
-            content_md: string;
-            /** Word Count */
-            word_count: number;
-            /** Sources */
-            sources?: {
-                [key: string]: unknown;
-            }[];
-            /** References */
-            references?: string[];
-            /**
-             * Citations Ok
-             * @default true
-             */
-            citations_ok: boolean;
-            /** Citation Check */
-            citation_check?: {
-                [key: string]: unknown;
-            } | null;
-            /** Citations */
-            citations?: {
-                [key: string]: unknown;
-            }[];
-            /** Warnings */
-            warnings?: string[];
-            /**
-             * Seconds
-             * @default 0
-             */
-            seconds: number;
-            /**
-             * From Cache
-             * @default false
-             */
-            from_cache: boolean;
-            /** Analysis */
-            analysis?: {
-                [key: string]: unknown;
-            } | null;
         };
         /**
          * GlobalDocumentOut
@@ -3058,34 +2901,6 @@ export interface components {
              * @description ID документа «Правила оформления». None — отвязать текущий стиль.
              */
             document_id?: string | null;
-        };
-        /** ProjectVersionOut */
-        ProjectVersionOut: {
-            /** Id */
-            id: string;
-            /** Project Id */
-            project_id: string;
-            /** Section Name */
-            section_name?: string | null;
-            /** Kind */
-            kind: string;
-            /** Content Md */
-            content_md: string;
-            /** Word Count */
-            word_count: number;
-            /** Citation Map */
-            citation_map?: {
-                [key: string]: unknown;
-            }[];
-            /** Stats */
-            stats?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
         };
         /** QuickQueryRequest */
         QuickQueryRequest: {
@@ -3550,43 +3365,6 @@ export interface components {
             token_type: string;
             /** Expires In */
             expires_in: number;
-        };
-        /**
-         * TranslateSectionRequest
-         * @description Параметры перевода раздела статьи на другой язык.
-         */
-        TranslateSectionRequest: {
-            /**
-             * Target Language
-             * @description Код целевого языка (например, 'en', 'ru', 'de', 'fr')
-             */
-            target_language: string;
-            /**
-             * Source Language
-             * @description Код исходного языка. Если не задан — берется из ANSWER_LANGUAGE или 'ru'
-             */
-            source_language?: string | null;
-        };
-        /**
-         * TranslateSectionResultOut
-         * @description Результат перевода раздела.
-         */
-        TranslateSectionResultOut: {
-            /** Name */
-            name: string;
-            /** Target Language */
-            target_language: string;
-            /** Source Language */
-            source_language: string | null;
-            /** Content Md */
-            content_md: string;
-            /** Words */
-            words: number;
-            /**
-             * Written
-             * @default true
-             */
-            written: boolean;
         };
         /** UserOut */
         UserOut: {
@@ -6122,43 +5900,6 @@ export interface operations {
             };
         };
     };
-    translate_section_api_sessions__session_id__projects__project_id__sections__name__translate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-                project_id: string;
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TranslateSectionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TranslateSectionResultOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_section_plans_api_sessions__session_id__projects__project_id__section_plans_get: {
         parameters: {
             query?: never;
@@ -6351,40 +6092,6 @@ export interface operations {
                 };
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    sync_sections_to_plans_api_sessions__session_id__projects__project_id__section_plans_sync_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6994,42 +6701,6 @@ export interface operations {
             };
         };
     };
-    generate_api_sessions__session_id__projects__project_id__generate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GenerateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenerateResultOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     generate_section_async_api_sessions__session_id__projects__project_id__generate_async_post: {
         parameters: {
             query?: never;
@@ -7071,75 +6742,6 @@ export interface operations {
     project_generate_eta_api_sessions__session_id__projects__project_id__eta_get: {
         parameters: {
             query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_versions_api_sessions__session_id__projects__project_id__versions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectVersionOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    diff_versions_api_sessions__session_id__projects__project_id__versions_diff_get: {
-        parameters: {
-            query: {
-                left: string;
-                right: string;
-            };
             header?: never;
             path: {
                 session_id: string;

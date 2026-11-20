@@ -1,5 +1,10 @@
 # Implementation Summary: Section Generation Redesign (Phases 1-5)
 
+> Исторический документ (2026-11). С 2026-11-20 эндпоинт
+> `POST /section-plans/sync` удалён вместе со всем совместимым слоем: план
+> разделов создаётся при создании проекта, генерация идёт только через
+> SectionAgent.
+
 ## Completed
 
 ### Phase 1: Data Model & Migrations ✅

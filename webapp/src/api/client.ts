@@ -20,8 +20,6 @@ import type {
   DocumentBatchResult,
   DocumentOut,
   DraftAnalysis,
-  GenerateRequest,
-  GenerateResult,
   GlobalDocumentOut,
   MessagePage,
   ProjectDocumentItem,
@@ -830,40 +828,6 @@ class ApiClient {
     )
   }
 
-  /** Генерация раздела/анализ — синхронный, ждём (LLM, минуты). */
-  generate(
-    sessionId: string,
-    projectId: string,
-    payload: GenerateRequest,
-  ): Promise<GenerateResult> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/generate`, {
-      method: 'POST',
-      json: payload,
-      timeoutMs: 600_000,
-    })
-  }
-
-  /** Перевести раздел статьи на целевой язык через LLM. */
-  translateSection(
-    sessionId: string,
-    projectId: string,
-    sectionName: string,
-    targetLanguage: string,
-    sourceLanguage?: string,
-  ): Promise<ProjectSection> {
-    return this.request(
-      `/api/sessions/${sessionId}/projects/${projectId}/sections/${encodeURIComponent(sectionName)}/translate`,
-      {
-        method: 'POST',
-        json: {
-          target_language: targetLanguage,
-          source_language: sourceLanguage,
-        },
-        timeoutMs: 600_000,
-      },
-    )
-  }
-
   /** Разбор черновика без LLM: быстрый, детерминированный. */
   draftAnalysis(sessionId: string, projectId: string): Promise<DraftAnalysis> {
     return this.request(
@@ -888,7 +852,7 @@ class ApiClient {
     )
   }
 
-  // ------------------------------------------------------------ SectionPlan / SectionVersion (новая система)
+  // ------------------------------------------------------------ SectionPlan / SectionVersion
   /** Список планов разделов */
   sectionPlans(sessionId: string, projectId: string): Promise<SectionPlan[]> {
     return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans`)
@@ -926,13 +890,6 @@ class ApiClient {
     })
   }
 
-  /** Синхронизировать старый JSON в новые SectionPlan */
-  syncSectionPlans(sessionId: string, projectId: string): Promise<{ synced: number; plans: Array<{ id: string; name: string }> }> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/sync`, {
-      method: 'POST',
-    })
-  }
-
   /** Генерация раздела v2 (через SectionAgent) */
   generateSectionV2(
     sessionId: string,
@@ -953,7 +910,7 @@ class ApiClient {
     })
   }
 
-  /** Перевести раздел v2 (новая система) */
+  /** Перевести раздел на целевой язык через LLM */
   translateSectionV2(
     sessionId: string,
     projectId: string,

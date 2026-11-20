@@ -99,7 +99,7 @@ async def test_foreign_session_resources_are_404(client, petrov, ivanov_assets) 
         ("DELETE", f"/api/sessions/{session_id}/projects/{project_id}"),
         ("GET", f"/api/sessions/{session_id}/projects/{project_id}/sections"),
         ("GET", f"/api/sessions/{session_id}/projects/{project_id}/documents"),
-        ("GET", f"/api/sessions/{session_id}/projects/{project_id}/versions"),
+        ("GET", f"/api/sessions/{session_id}/projects/{project_id}/section-versions"),
         ("GET", f"/api/sessions/{session_id}/projects/{project_id}/export"),
         ("GET", f"/api/chat/messages?session_id={session_id}"),
         ("DELETE", f"/api/chat/messages?session_id={session_id}"),

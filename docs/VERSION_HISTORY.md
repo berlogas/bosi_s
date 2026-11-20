@@ -39,7 +39,7 @@
 
 ## 2. Все варианты работы с историей версий
 
-### A. Генерация раздела (generate / generate-async / generate-v2 / «пустая»)
+### A. Генерация раздела (generate-async / generate-v2 / «пустая»)
 
 1. Создаётся новая `SectionVersion` со статусом **`draft`**.
 2. Если был текущий — он переводится в **`superseded`** (`_save_version`).
@@ -163,7 +163,7 @@
 | 4 | Approve версии со статуса `Архив` | разрешено, работает как restore | разрешить явно + документировать |
 | 5 | Статус при сборке | approved (strict) / любой (include_unapproved) | без изменений, фиксация |
 | 6 | Approve из `superseded` | не запрещено (не должно происходить валидно) | запретить в v1 |
-| 7 | Translation → current | не обновляет current | предложить обновление |
+| 7 | Translation → current | обновляет current (с 2026-11-20) | без изменений, фиксация |
 | 8 | VersionStatus.review | объявлен, но не используется | либо убрать, либо использовать для «на ревью» версий |
 
 ---
@@ -174,3 +174,29 @@
 2. **Одобрение** → version `approved`, plan `approved`; старый approved-current → `archived`; approve допускает `draft`→`approved` и `archived`→`approved` (restore).
 3. **Сборка** строгая берёт `current_version_id` со статусом `approved`; иначе — warning и пропуск.
 4. **История** — дерево через `parent_version_id`; «текущая» версия — через `plan.current_version_id`.
+
+---
+
+## 7. Удаление устаревшего совместимого слоя (2026-11-20)
+
+Проект находится в разработке, устаревших данных нет: все проекты создаются через API
+сразу с планом разделов. Поэтому поддержка старой модели полностью убрана:
+
+- удалены `POST /section-plans/sync`, `POST /generate`, старый
+  `POST /sections/{name}/translate` и `GET /versions{,/diff}`;
+  скрипт `backend/scripts/sync_section_plans.py` удалён;
+- ETA генерации (`GET /eta`) считается по `SectionVersion.seconds` с группировкой
+  по типу плана, а не по старым `project_versions`;
+- `generate-async` работает через `ProjectService.generate_section_v2`
+  (SectionAgent) и возвращает в `task.result` словарь с `section`, `content_md`,
+  `word_count`, `sources`, `citations_ok`, `from_cache`, `seconds`;
+- убраны `ensure_section_plans`, `_compile_manuscript_legacy`, зеркало записей в
+  `project.sections` и fallback-чтение `project.sections` / `project.versions`;
+- стартовый план разделов создаётся при `POST /projects` методом
+  `ProjectService.set_section_plans` — это инициализация нового проекта, а не
+  миграция;
+- экспорт (`app/services/export.py`) и прогресс проекта читают только
+  `section_plans` + текущие `section_versions`.
+
+Внутренний тип `GenerationResult` остался в `app/services/generation.py` как
+результат работы LLM внутри `SectionAgent` — это не совместимый слой.

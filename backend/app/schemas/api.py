@@ -537,37 +537,6 @@ class GenerateRequest(BaseModel):
     word_target: int | None = Field(default=None, ge=0, le=20000)
     notes: str | None = Field(default=None, max_length=2000)
     no_cache: bool = False
-    template_md: str | None = Field(default=None, max_length=20000)
-    data_document_ids: list[str] | None = None
-    language: str | None = Field(default=None, max_length=10)
-
-
-class GenerateResultOut(BaseModel):
-    project_id: str
-    section: str
-    content_md: str
-    word_count: int
-    sources: list[dict[str, Any]] = Field(default_factory=list)
-    references: list[str] = Field(default_factory=list)
-    citations_ok: bool = True
-    citation_check: dict[str, Any] | None = None
-    citations: list[dict[str, Any]] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    seconds: float = 0.0
-    from_cache: bool = False
-    analysis: dict[str, Any] | None = None
-
-
-class ProjectVersionOut(BaseModel):
-    id: str
-    project_id: str
-    section_name: str | None = None
-    kind: str
-    content_md: str
-    word_count: int
-    citation_map: list[dict[str, Any]] = Field(default_factory=list)
-    stats: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime
 
 
 class ExportFormat(str, Enum):
@@ -758,31 +727,3 @@ class CitationReportOut(BaseModel):
     dangling: list[int] = Field(default_factory=list)
     uncited: bool = False
     warnings: list[str] = Field(default_factory=list)
-
-
-class TranslateSectionRequest(BaseModel):
-    """Параметры перевода раздела статьи на другой язык."""
-
-    target_language: str = Field(
-        ...,
-        min_length=2,
-        max_length=10,
-        description="Код целевого языка (например, 'en', 'ru', 'de', 'fr')",
-    )
-    source_language: str | None = Field(
-        default=None,
-        min_length=2,
-        max_length=10,
-        description="Код исходного языка. Если не задан — берется из ANSWER_LANGUAGE или 'ru'",
-    )
-
-
-class TranslateSectionResultOut(BaseModel):
-    """Результат перевода раздела."""
-
-    name: str
-    target_language: str
-    source_language: str | None
-    content_md: str
-    words: int
-    written: bool = True

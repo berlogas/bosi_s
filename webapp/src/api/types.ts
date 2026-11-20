@@ -62,9 +62,7 @@ export type ProjectOut = components['schemas']['ProjectOut'] & {
 }
 export type ProjectSection = components['schemas']['ProjectSectionOut']
 export type ProjectSectionUpdate = components['schemas']['ProjectSectionUpdate']
-export type ProjectVersionOut = components['schemas']['ProjectVersionOut']
 export type GenerateRequest = components['schemas']['GenerateRequest']
-export type GenerateResult = components['schemas']['GenerateResultOut']
 export type ExportFormat = components['schemas']['ExportFormat']
 
 /** Элемент GET .../projects/{id}/documents: { document, role }. */
@@ -167,7 +165,7 @@ export interface AnswerChecks {
   [key: string]: unknown
 }
 
-// ============================================================ SectionPlan / SectionVersion (новая система)
+// ============================================================ SectionPlan / SectionVersion
 /** Тип раздела из SectionKind enum. */
 export type SectionKind = 'standard' | 'literature_review' | 'data' | 'discussion' | 'custom'
 

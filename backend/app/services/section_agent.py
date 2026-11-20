@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,13 +19,10 @@ from app.db.models import (
     Project,
     ProjectDocRole,
     ProjectStatus,
-    ProjectLanguagePolicy,
     ResearchSession,
-    SectionKind,
     SectionPlan,
     SectionStatus,
     SectionVersion,
-    TerminologyGlossary,
     User,
     VersionStatus,
 )
@@ -36,11 +32,9 @@ from app.services.generation import (
     build_citation_map,
     build_prompt,
     citations_required,
-    normalize_sections,
     validate_citations,
 )
 from app.services.journal_styles import style_prompt
-from app.services.paperqa_service import PaperQA2Service
 from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.project_sections import project_sections
 from app.services.rag_service import RagFusionService
@@ -751,42 +745,8 @@ class SectionAgent:
         section_plan.status = SectionStatus.review
         section_plan.updated_at = version.created_at
 
-        # Синхронизируем с старым JSON в проекте (для обратной совместимости)
-        self._sync_to_project_json(project, section_plan, generation.content_md)
-
         db.commit()
         return version
-
-    def _sync_to_project_json(
-        self,
-        project: Project,
-        section_plan: SectionPlan,
-        content_md: str,
-    ) -> None:
-        """Синхронизация с Project.sections JSON для обратной совместимости.
-
-        Словари копируем: JSON-колонка отслеживает изменение по значению,
-        и правка «на месте» не была бы замечена — текст не сохранился бы.
-        """
-        sections: list[dict[str, Any]] = []
-        found = False
-        for raw in project.sections or []:
-            item = dict(raw)
-            if item.get("name", "").lower() == section_plan.name.lower():
-                item["content_md"] = content_md
-                found = True
-            sections.append(item)
-        if not found:
-            sections.append({
-                "name": section_plan.name,
-                "required": section_plan.required,
-                "order": section_plan.order,
-                "word_target": section_plan.word_target,
-                "notes": section_plan.notes,
-                "content_md": content_md,
-            })
-        project.sections = sections
-        project.updated_at = section_plan.updated_at or datetime.utcnow()
 
 
 # --------------------------------------------------------------------------- Translation

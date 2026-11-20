@@ -3859,89 +3859,13 @@
         }
       }
     },
-    "/api/sessions/{session_id}/projects/{project_id}/sections/{name}/translate": {
-      "post": {
-        "tags": [
-          "projects"
-        ],
-        "summary": "Translate Section",
-        "description": "Перевести раздел статьи на целевой язык через LLM.",
-        "operationId": "translate_section_api_sessions__session_id__projects__project_id__sections__name__translate_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TranslateSectionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TranslateSectionResultOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sessions/{session_id}/projects/{project_id}/section-plans": {
       "get": {
         "tags": [
           "projects"
         ],
         "summary": "List Section Plans",
-        "description": "Список планов разделов (новая система SectionPlan).\n\nВместе с планом отдаём текущую версию **и её текст** — иначе\nинтерфейс после перезагрузки страницы не может показать сохранённый\nтекст раздела.",
+        "description": "Список планов разделов проекта.\n\nВместе с планом отдаём текущую версию **и её текст** — иначе\nинтерфейс после перезагрузки страницы не может показать сохранённый\nтекст раздела.",
         "operationId": "list_section_plans_api_sessions__session_id__projects__project_id__section_plans_get",
         "security": [
           {
@@ -4071,7 +3995,7 @@
           "projects"
         ],
         "summary": "Save Section Content",
-        "description": "Сохранить текст раздела, набранный в редакторе.\n\nПравка попадает в новую модель (новая версия раздела) и зеркалится\nв старую (`project.sections`) — её читают прогресс проекта и выгрузка.",
+        "description": "Сохранить текст раздела, набранный в редакторе.\n\nПравка попадает в новую версию плана: её читают прогресс,\nманускрипт и выгрузка.",
         "operationId": "save_section_content_api_sessions__session_id__projects__project_id__section_plans__plan_id__content_put",
         "security": [
           {
@@ -4149,7 +4073,7 @@
           "projects"
         ],
         "summary": "List Section Versions",
-        "description": "Все версии разделов проекта — реальная история генераций.\n\nСтарая модель (`project_versions`) пишется только старым генератором;\nгенерация через SectionAgent кладёт версии в `section_versions`,\nпоэтому отдельная выдача нужна для панели «История».",
+        "description": "Все версии разделов проекта — история генераций и правок.",
         "operationId": "list_section_versions_api_sessions__session_id__projects__project_id__section_versions_get",
         "security": [
           {
@@ -4341,72 +4265,13 @@
         }
       }
     },
-    "/api/sessions/{session_id}/projects/{project_id}/section-plans/sync": {
-      "post": {
-        "tags": [
-          "projects"
-        ],
-        "summary": "Sync Sections To Plans",
-        "description": "Синхронизировать старый JSON project.sections в новые SectionPlan.",
-        "operationId": "sync_sections_to_plans_api_sessions__session_id__projects__project_id__section_plans_sync_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Sync Sections To Plans Api Sessions  Session Id  Projects  Project Id  Section Plans Sync Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sessions/{session_id}/projects/{project_id}/generate-v2": {
       "post": {
         "tags": [
           "projects"
         ],
         "summary": "Generate Section V2",
-        "description": "Новая генерация раздела через SectionAgent (возвращает SectionVersion).\n\nВ теле — `kind`: вид генерации (обычный раздел, обзор литературы,\nсверка с данными, обсуждение, пробелы, отчёт, разбор черновика).",
+        "description": "Генерация раздела через SectionAgent (возвращает SectionVersion).\n\nВ теле — `kind`: вид генерации (обычный раздел, обзор литературы,\nсверка с данными, обсуждение, пробелы, отчёт, разбор черновика).",
         "operationId": "generate_section_v2_api_sessions__session_id__projects__project_id__generate_v2_post",
         "security": [
           {
@@ -4477,7 +4342,7 @@
           "projects"
         ],
         "summary": "Translate Section V2",
-        "description": "Перевести раздел на целевой язык (новая система).",
+        "description": "Перевести раздел на целевой язык.",
         "operationId": "translate_section_v2_api_sessions__session_id__projects__project_id__section_plans__plan_id__translate_post",
         "security": [
           {
@@ -5486,80 +5351,13 @@
         }
       }
     },
-    "/api/sessions/{session_id}/projects/{project_id}/generate": {
-      "post": {
-        "tags": [
-          "projects"
-        ],
-        "summary": "Generate",
-        "description": "Сгенерировать раздел статьи по контексту проекта.",
-        "operationId": "generate_api_sessions__session_id__projects__project_id__generate_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GenerateRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GenerateResultOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sessions/{session_id}/projects/{project_id}/generate-async": {
       "post": {
         "tags": [
           "projects"
         ],
         "summary": "Generate Section Async",
-        "description": "Фоновая генерация раздела: возвращает task_id, UI опрашивает /api/tasks/{id}.\n\nГенерация может занимать минуты, поэтому синхронный POST /generate\n(для скриптов и тестов) дополняется фоновым режимом.",
+        "description": "Фоновая генерация раздела: возвращает task_id, UI опрашивает /api/tasks/{id}.\n\nГенерация может занимать минуты, поэтому она всегда идёт в фоне.",
         "operationId": "generate_section_async_api_sessions__session_id__projects__project_id__generate_async_post",
         "security": [
           {
@@ -5664,144 +5462,6 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Project Generate Eta Api Sessions  Session Id  Projects  Project Id  Eta Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/projects/{project_id}/versions": {
-      "get": {
-        "tags": [
-          "projects"
-        ],
-        "summary": "List Versions",
-        "description": "История генераций: снапшот на каждый запуск — черновик не теряется.",
-        "operationId": "list_versions_api_sessions__session_id__projects__project_id__versions_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProjectVersionOut"
-                  },
-                  "title": "Response List Versions Api Sessions  Session Id  Projects  Project Id  Versions Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/projects/{project_id}/versions/diff": {
-      "get": {
-        "tags": [
-          "projects"
-        ],
-        "summary": "Diff Versions",
-        "description": "Построчный diff двух версий раздела (снапшот до/после генерации).",
-        "operationId": "diff_versions_api_sessions__session_id__projects__project_id__versions_diff_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          },
-          {
-            "name": "left",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Left"
-            }
-          },
-          {
-            "name": "right",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Right"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Diff Versions Api Sessions  Session Id  Projects  Project Id  Versions Diff Get"
                 }
               }
             }
@@ -7883,145 +7543,10 @@
             "type": "boolean",
             "title": "No Cache",
             "default": false
-          },
-          "template_md": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 20000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Template Md"
-          },
-          "data_document_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data Document Ids"
-          },
-          "language": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 10
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Language"
           }
         },
         "type": "object",
         "title": "GenerateRequest"
-      },
-      "GenerateResultOut": {
-        "properties": {
-          "project_id": {
-            "type": "string",
-            "title": "Project Id"
-          },
-          "section": {
-            "type": "string",
-            "title": "Section"
-          },
-          "content_md": {
-            "type": "string",
-            "title": "Content Md"
-          },
-          "word_count": {
-            "type": "integer",
-            "title": "Word Count"
-          },
-          "sources": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Sources"
-          },
-          "references": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "References"
-          },
-          "citations_ok": {
-            "type": "boolean",
-            "title": "Citations Ok",
-            "default": true
-          },
-          "citation_check": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Citation Check"
-          },
-          "citations": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Citations"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Warnings"
-          },
-          "seconds": {
-            "type": "number",
-            "title": "Seconds",
-            "default": 0.0
-          },
-          "from_cache": {
-            "type": "boolean",
-            "title": "From Cache",
-            "default": false
-          },
-          "analysis": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Analysis"
-          }
-        },
-        "type": "object",
-        "required": [
-          "project_id",
-          "section",
-          "content_md",
-          "word_count"
-        ],
-        "title": "GenerateResultOut"
       },
       "GlobalDocumentOut": {
         "properties": {
@@ -9088,69 +8613,6 @@
         "type": "object",
         "title": "ProjectStyleGuideRequest",
         "description": "Привязать/отвязать документ «Правила оформления» журнала к проекту как стиль оформления."
-      },
-      "ProjectVersionOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "project_id": {
-            "type": "string",
-            "title": "Project Id"
-          },
-          "section_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Section Name"
-          },
-          "kind": {
-            "type": "string",
-            "title": "Kind"
-          },
-          "content_md": {
-            "type": "string",
-            "title": "Content Md"
-          },
-          "word_count": {
-            "type": "integer",
-            "title": "Word Count"
-          },
-          "citation_map": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Citation Map"
-          },
-          "stats": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Stats"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "project_id",
-          "kind",
-          "content_md",
-          "word_count",
-          "created_at"
-        ],
-        "title": "ProjectVersionOut"
       },
       "QuickQueryRequest": {
         "properties": {
@@ -10236,83 +9698,6 @@
           "expires_in"
         ],
         "title": "TokenPair"
-      },
-      "TranslateSectionRequest": {
-        "properties": {
-          "target_language": {
-            "type": "string",
-            "maxLength": 10,
-            "minLength": 2,
-            "title": "Target Language",
-            "description": "Код целевого языка (например, 'en', 'ru', 'de', 'fr')"
-          },
-          "source_language": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 10,
-                "minLength": 2
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Language",
-            "description": "Код исходного языка. Если не задан — берется из ANSWER_LANGUAGE или 'ru'"
-          }
-        },
-        "type": "object",
-        "required": [
-          "target_language"
-        ],
-        "title": "TranslateSectionRequest",
-        "description": "Параметры перевода раздела статьи на другой язык."
-      },
-      "TranslateSectionResultOut": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "target_language": {
-            "type": "string",
-            "title": "Target Language"
-          },
-          "source_language": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Language"
-          },
-          "content_md": {
-            "type": "string",
-            "title": "Content Md"
-          },
-          "words": {
-            "type": "integer",
-            "title": "Words"
-          },
-          "written": {
-            "type": "boolean",
-            "title": "Written",
-            "default": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "target_language",
-          "source_language",
-          "content_md",
-          "words"
-        ],
-        "title": "TranslateSectionResultOut",
-        "description": "Результат перевода раздела."
       },
       "UserOut": {
         "properties": {

@@ -30,15 +30,12 @@ from app.db.models import (
     GenerationKind,
     Project,
     ProjectDocRole,
-    ProjectLanguagePolicy,
-    ProjectVersion as ProjectVersionModel,
     SectionKind,
     SectionPlan,
     SectionStatus,
     SectionVersion,
     TerminologyGlossary,
     User,
-    VersionStatus,
     new_id,
 )
 from app.db.repositories import documents as docs_repo
@@ -47,7 +44,6 @@ from app.db.session import get_db
 from app.schemas.api import (
     ExportFormat,
     GenerateRequest,
-    GenerateResultOut,
     JournalStyleOut,
     ProjectCreate,
     ProjectDocBind,
@@ -56,23 +52,18 @@ from app.schemas.api import (
     ProjectSectionOut,
     ProjectSectionUpdate,
     ProjectStyleGuideRequest,
-    ProjectVersionOut,
     SectionPlanOut,
     SectionVersionOut,
-    TranslateSectionRequest,
-    TranslateSectionResultOut,
     VersionNodeOut,
     VersionTreeOut,
 )
 from app.services import analyses
 from app.services import export as export_service
-from app.services.generation import missing_sections, normalize_sections
+from app.services.generation import missing_sections
 from app.services.project_sections import project_sections
 from app.services.journal_styles import style_options
-from app.services.paperqa_service import PaperQA2Service
 from app.services.pqa_registry import get_registry
 from app.services.projects import (
-    GenerationRequest,
     ProjectService,
     find_project,
     linked_documents,
@@ -82,7 +73,6 @@ from app.db.models import (
     SectionPlan,
     SectionStatus,
     SectionVersion,
-    VersionStatus,
 )
 from app.services.section_labels import section_title
 
@@ -139,11 +129,14 @@ def create_project(session_id: str, payload: ProjectCreate, request: Request,
         target_journal=payload.target_journal,
         language=payload.language,
         status=payload.status,
-        sections=normalize_sections(payload.sections),
         order=max_order + 1,
     )
     db.add(project)
     db.commit()
+    db.refresh(project)
+
+    # Стартовый план разделов — источник истины о структуре статьи.
+    ProjectService().set_section_plans(db, project, payload.sections)
     db.refresh(project)
 
     touch_session(db, session, action_type="project.create",
@@ -177,7 +170,8 @@ def patch_project(session_id: str, project_id: str, payload: ProjectPatch,
         project.status = payload.status
         changed.append("status")
     if payload.sections is not None:
-        project.sections = normalize_sections(payload.sections)
+        ProjectService().set_section_plans(db, project, payload.sections)
+        db.refresh(project)
         changed.append("sections")
     if payload.style_guide_document_id is not None:
         project.style_guide_document_id = payload.style_guide_document_id
@@ -233,57 +227,37 @@ def update_section(session_id: str, project_id: str, name: str,
                    db: Session = Depends(get_db)) -> ProjectSectionOut:
     """Ручная правка раздела (в т.ч. вставка своего черновика)."""
     project = _owned(db, project_id, session_id, user)
-    sections = normalize_sections(project.sections)
-    target = next(
-        (section for section in sections
-         if section["name"].lower() == name.lower()),
+    plan = next(
+        (candidate for candidate in project.section_plans
+         if candidate.name.lower() == name.lower()),
         None,
     )
-    if target is None:
-        # Раздела нет в старой модели — значит он создан в новой (SectionPlan).
-        # Берём его оттуда и добавляем в старую, чтобы прогресс и выгрузка
-        # тоже его видели.
-        plan = next(
-            (candidate for candidate in project.section_plans
-             if candidate.name.lower() == name.lower()),
-            None,
-        )
-        if plan is None:
-            raise NotFoundError(
-                f"Раздел «{section_title(name)}» не найден в плане проекта")
-        target = {
-            "name": plan.name,
-            "required": plan.required,
-            "order": plan.order,
-            "word_target": plan.word_target,
-            "notes": plan.notes,
-            "content_md": "",
-        }
-        sections.append(target)
+    if plan is None:
+        raise NotFoundError(
+            f"Раздел «{section_title(name)}» не найден в плане проекта")
 
     if payload.notes is not None:
-        target["notes"] = payload.notes
+        plan.notes = payload.notes
     if payload.word_target is not None:
-        target["word_target"] = payload.word_target
-    if payload.content_md is not None:
-        target["content_md"] = payload.content_md
+        plan.word_target = payload.word_target
+        plan.word_min = max(100, payload.word_target // 2)
+        plan.word_max = payload.word_target * 4
     if payload.required is not None:
-        target["required"] = payload.required
-    project.sections = sections
+        plan.required = payload.required
     if payload.content_md is not None:
-        # Правка должна быть видна в обеих моделях: экспорт и прогресс
-        # читают `project.sections`, интерфейс — `section_versions`.
         ProjectService().apply_manual_section_text(
-            db, project, target["name"], payload.content_md
+            db, project, plan.name, payload.content_md
         )
     db.commit()
     db.refresh(project)
     audit(db, action="project.section_update", actor=user,
           target_type="project", target_id=project.id, **_meta(request),
           section=name)
+    section = next(s for s in project_sections(project)
+                   if s["name"].lower() == name.lower())
     return ProjectSectionOut(
-        **target, words=len((target.get("content_md") or "").split()),
-        written=bool((target.get("content_md") or "").strip()))
+        **section, words=len((section.get("content_md") or "").split()),
+        written=bool((section.get("content_md") or "").strip()))
 
 
 # --------------------------------------------------------------------------- стиль журнала (правила оформления)
@@ -325,96 +299,13 @@ def set_project_style_guide(
     }
 
 
-# --------------------------------------------------------------------------- перевод раздела
-@router.post("/{session_id}/projects/{project_id}/sections/{name}/translate",
-             response_model=TranslateSectionResultOut)
-async def translate_section(
-    session_id: str,
-    project_id: str,
-    name: str,
-    payload: TranslateSectionRequest,
-    request: Request,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> TranslateSectionResultOut:
-    """Перевести раздел статьи на целевой язык через LLM."""
-    project = _owned(db, project_id, session_id, user)
-    sections = project_sections(project)
-
-    section_idx = None
-    for i, s in enumerate(sections):
-        if s["name"].lower() == name.lower():
-            section_idx = i
-            break
-    if section_idx is None:
-        raise NotFoundError(
-            f"Раздел \"{section_title(name)}\" не найден в плане проекта")
-
-    section = sections[section_idx]
-    original_text = section.get("content_md") or ""
-    if not original_text.strip():
-        raise ConflictError(
-            f"Раздел \"{name}\" пуст - нечего переводи")
-
-    target_lang = payload.target_language
-    source_lang = payload.source_language or "ru"
-
-    translations = section.get("translations") or {}
-    if target_lang in translations:
-        existing = translations[target_lang]
-        return TranslateSectionResultOut(
-            name=section["name"],
-            target_language=target_lang,
-            source_language=source_lang,
-            content_md=existing,
-            words=len(existing.split()),
-            written=True,
-        )
-
-    registry = get_registry()
-    service = registry.global_service()
-    translated = await service.translate_text(
-        text=original_text,
-        target_language=target_lang,
-        source_language=source_lang,
-    )
-
-    translations[target_lang] = translated
-    section["translations"] = translations
-    sections[section_idx] = section
-    project.sections = sections
-    db.commit()
-    db.refresh(project)
-
-    audit(
-        db,
-        action="project.section_translate",
-        actor=user,
-        target_type="project",
-        target_id=project.id,
-        **_meta(request),
-        section=name,
-        target_language=target_lang,
-        source_language=source_lang,
-    )
-
-    return TranslateSectionResultOut(
-        name=section["name"],
-        target_language=target_lang,
-        source_language=source_lang,
-        content_md=translated,
-        words=len(translated.split()),
-        written=True,
-    )
-
-
-# --------------------------------------------------------------------------- SectionPlan / SectionVersion (новая система)
+# --------------------------------------------------------------------------- SectionPlan / SectionVersion
 @router.get("/{session_id}/projects/{project_id}/section-plans",
             response_model=list[SectionPlanOut])
 def list_section_plans(session_id: str, project_id: str,
                        user: User = Depends(get_current_user),
                        db: Session = Depends(get_db)) -> list[SectionPlanOut]:
-    """Список планов разделов (новая система SectionPlan).
+    """Список планов разделов проекта.
 
     Вместе с планом отдаём текущую версию **и её текст** — иначе
     интерфейс после перезагрузки страницы не может показать сохранённый
@@ -459,8 +350,8 @@ def save_section_content(
 ) -> SectionVersionOut:
     """Сохранить текст раздела, набранный в редакторе.
 
-    Правка попадает в новую модель (новая версия раздела) и зеркалится
-    в старую (`project.sections`) — её читают прогресс проекта и выгрузка.
+    Правка попадает в новую версию плана: её читают прогресс,
+    манускрипт и выгрузка.
     """
     project = _owned(db, project_id, session_id, user)
     plan = db.get(SectionPlan, plan_id)
@@ -484,12 +375,7 @@ def save_section_content(
 def list_section_versions(session_id: str, project_id: str,
                            user: User = Depends(get_current_user),
                            db: Session = Depends(get_db)) -> list[SectionVersionOut]:
-    """Все версии разделов проекта — реальная история генераций.
-
-    Старая модель (`project_versions`) пишется только старым генератором;
-    генерация через SectionAgent кладёт версии в `section_versions`,
-    поэтому отдельная выдача нужна для панели «История».
-    """
+    """Все версии разделов проекта — история генераций и правок."""
     project = _owned(db, project_id, session_id, user)
     versions = db.execute(
         select(SectionVersion)
@@ -592,20 +478,6 @@ def delete_section_plan(session_id: str, project_id: str, plan_id: str,
           section_plan_id=plan_id, name=plan.name)
 
 
-@router.post("/{session_id}/projects/{project_id}/section-plans/sync")
-def sync_sections_to_plans(session_id: str, project_id: str, request: Request,
-                           user: User = Depends(get_current_user),
-                           db: Session = Depends(get_db)) -> dict:
-    """Синхронизировать старый JSON project.sections в новые SectionPlan."""
-    project = _owned(db, project_id, session_id, user)
-    service = ProjectService()
-    plans = service.sync_project_sections_to_plans(db, project)
-    audit(db, action="project.section_plan.sync", actor=user,
-          target_type="project", target_id=project.id, **_meta(request),
-          count=len(plans))
-    return {"synced": len(plans), "plans": [{"id": p.id, "name": p.name} for p in plans]}
-
-
 @router.post("/{session_id}/projects/{project_id}/generate-v2",
              response_model=dict)
 async def generate_section_v2(
@@ -613,7 +485,7 @@ async def generate_section_v2(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Новая генерация раздела через SectionAgent (возвращает SectionVersion).
+    """Генерация раздела через SectionAgent (возвращает SectionVersion).
 
     В теле — `kind`: вид генерации (обычный раздел, обзор литературы,
     сверка с данными, обсуждение, пробелы, отчёт, разбор черновика).
@@ -670,7 +542,7 @@ async def translate_section_v2(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Перевести раздел на целевой язык (новая система)."""
+    """Перевести раздел на целевой язык."""
     project = _owned(db, project_id, session_id, user)
     version_id = payload.get("version_id")
     target_language = payload["target_language"]
@@ -1018,44 +890,6 @@ def draft_analysis(session_id: str, project_id: str,
             "rendered": analyses.render_gaps(analysis)}
 
 
-@router.post("/{session_id}/projects/{project_id}/generate",
-             response_model=GenerateResultOut)
-async def generate(session_id: str, project_id: str, payload: GenerateRequest,
-                   request: Request, user: User = Depends(get_current_user),
-                   db: Session = Depends(get_db)) -> GenerateResultOut:
-    """Сгенерировать раздел статьи по контексту проекта."""
-    session = get_owned_session(db, session_id, user)
-    project = _owned(db, project_id, session_id, user)
-
-    request_obj = GenerationRequest(
-        section=payload.section.strip(),
-        question=payload.question.strip(),
-        word_target=payload.word_target,
-        notes=payload.notes,
-        use_cache=not payload.no_cache,
-        template_md=payload.template_md,
-        data_document_ids=payload.data_document_ids,
-        language=payload.language,
-    )
-    try:
-        result = await ProjectService().generate_section(
-            db, project=project, session=session, user=user,
-            request=request_obj, kind=GenerationKind(payload.kind))
-    except Exception:
-        log.exception("generate: ошибка генерации раздела %r", payload.section)
-        raise
-
-    touch_session(db, session, action_type="project.generate",
-                  action_label=f"Раздел: {request_obj.section}",
-                  snapshot={"tab": "projects", "active_project": project.id})
-    audit(db, action="project.generate", actor=user, target_type="project",
-          target_id=project.id, **_meta(request), section=request_obj.section,
-          citations_ok=result.ok, sources=len(result.sources),
-          from_cache=result.from_cache, seconds=result.seconds)
-
-    return GenerateResultOut(**result.to_dict(), project_id=project.id)
-
-
 @router.post("/{session_id}/projects/{project_id}/generate-async")
 async def generate_section_async(
     session_id: str, project_id: str, payload: GenerateRequest,
@@ -1063,24 +897,22 @@ async def generate_section_async(
     db: Session = Depends(get_db)) -> dict[str, Any]:
     """Фоновая генерация раздела: возвращает task_id, UI опрашивает /api/tasks/{id}.
 
-    Генерация может занимать минуты, поэтому синхронный POST /generate
-    (для скриптов и тестов) дополняется фоновым режимом.
+    Генерация может занимать минуты, поэтому она всегда идёт в фоне.
     """
     from app.services.tasks import Task, tasks
 
     session = get_owned_session(db, session_id, user)
     project = _owned(db, project_id, session_id, user)
 
-    request_obj = GenerationRequest(
-        section=payload.section.strip(),
-        question=payload.question.strip(),
-        word_target=payload.word_target,
-        notes=payload.notes,
-        use_cache=not payload.no_cache,
-        template_md=payload.template_md,
-        data_document_ids=payload.data_document_ids,
-        language=payload.language,
-    )
+    section_name = payload.section.strip()
+    question = payload.question.strip()
+    try:
+        kind = GenerationKind(payload.kind)
+    except ValueError:
+        kind = GenerationKind.section
+    notes = payload.notes
+    word_target = payload.word_target
+    use_cache = not payload.no_cache
 
     # Фоновое тело живёт дольше запроса: после ответа FastAPI закрывает
     # request-сессию, ORM-объекты отсоединяются, и правки плана молча
@@ -1107,37 +939,52 @@ async def generate_section_async(
             task.set_stage(10, "подготовка запроса")
             service = ProjectService()
             try:
-                result = await service.generate_section(
+                version = await service.generate_section_v2(
                     bg_db, project=bg_project, session=bg_session,
-                    user=bg_user, request=request_obj,
-                    kind=GenerationKind(request_obj.kind))
+                    user=bg_user, section_name=section_name,
+                    question=question, notes=notes,
+                    word_target=word_target, use_cache=use_cache, kind=kind,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("generate-async: ошибка генерации раздела %r",
-                              request_obj.section)
+                              section_name)
                 raise
 
             touch_session(bg_db, bg_session, action_type="project.generate",
-                          action_label=f"Раздел: {request_obj.section}",
+                          action_label=f"Раздел: {section_name}",
                           snapshot={"tab": "projects",
                                     "active_project": bg_project.id})
+            report = version.quality_report or {}
+            citations_ok = (report.get("citations_ok")
+                            if isinstance(report, dict) else None)
             audit(bg_db, action="project.generate", actor=bg_user,
-                 target_type="project", target_id=bg_project.id,
-                 **_meta(request), section=request_obj.section,
-                 citations_ok=result.ok, sources=len(result.sources),
-                 from_cache=result.from_cache, seconds=result.seconds)
-            return result.to_dict()
+                  target_type="project", target_id=bg_project.id,
+                  **_meta(request), section=section_name,
+                  citations_ok=citations_ok, sources=len(version.citation_map),
+                  seconds=version.seconds)
+            return {
+                "version_id": version.id,
+                "section": section_name,
+                "content_md": version.content_md,
+                "word_count": version.word_count,
+                "sources": list(version.citation_map or []),
+                "citations_ok": citations_ok,
+                "from_cache": bool(
+                    (version.generation_params or {}).get("from_cache")),
+                "seconds": version.seconds,
+            }
         finally:
             bg_db.close()
 
     task = tasks.submit(body, kind="generate_section",
-                        title=f"Раздел: {request_obj.section}",
+                        title=f"Раздел: {section_name}",
                         user_id=user.id, session_id=session_id,
                         project_id=project_id)
     audit(db, action="project.generate.async", actor=user,
           target_type="project", target_id=project.id,
-          **_meta(request), section=request_obj.section,
+          **_meta(request), section=section_name,
           task_id=task.id)
     return {"task_id": task.id}
 
@@ -1154,11 +1001,11 @@ def project_generate_eta(
     возвращает оценочный диапазон 120–240 с.
     """
     project = _owned(db, project_id, session_id, user)
-    rows = db.scalars(
-        select(ProjectVersionModel).where(
-            ProjectVersionModel.project_id == project.id,
-            ProjectVersionModel.seconds.is_not(None),
-        )
+    rows = db.execute(
+        select(SectionVersion.seconds, SectionPlan.kind)
+        .join(SectionPlan, SectionPlan.id == SectionVersion.section_plan_id)
+        .where(SectionVersion.project_id == project.id,
+               SectionVersion.seconds.is_not(None))
     ).all()
 
     if not rows:
@@ -1171,8 +1018,9 @@ def project_generate_eta(
 
     from statistics import mean
     by_kind: dict[str, list[float]] = {}
-    for r in rows:
-        by_kind.setdefault(str(r.kind), []).append(r.seconds)
+    for seconds, kind in rows:
+        kind_value = getattr(kind, "value", kind)
+        by_kind.setdefault(str(kind_value), []).append(float(seconds))
 
     all_seconds = [s for secs in by_kind.values() for s in secs]
     return {
@@ -1193,55 +1041,20 @@ def project_generate_eta(
     }
 
 
-@router.get("/{session_id}/projects/{project_id}/versions",
-            response_model=list[ProjectVersionOut])
-def list_versions(session_id: str, project_id: str,
-                  user: User = Depends(get_current_user),
-                  db: Session = Depends(get_db)) -> list[ProjectVersionOut]:
-    """История генераций: снапшот на каждый запуск — черновик не теряется."""
-    project = _owned(db, project_id, session_id, user)
-    return [
-        ProjectVersionOut(
-            id=v.id, project_id=v.project_id, section_name=v.section_name,
-            kind=getattr(v.kind, "value", str(v.kind)), content_md=v.content_md,
-            word_count=v.word_count, citation_map=list(v.citation_map or []),
-            stats=dict(v.stats or {}), created_at=v.created_at)
-        for v in project.versions
-    ]
-
-
-@router.get("/{session_id}/projects/{project_id}/versions/diff")
-def diff_versions(session_id: str, project_id: str, left: str, right: str,
-                  user: User = Depends(get_current_user),
-                  db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Построчный diff двух версий раздела (снапшот до/после генерации)."""
-    import difflib
-
-    project = _owned(db, project_id, session_id, user)
-    by_id = {v.id: v for v in project.versions}
-    if left not in by_id or right not in by_id:
-        raise NotFoundError("Одна из версий не найдена")
-
-    before = (by_id[left].content_md or "").splitlines()
-    after = (by_id[right].content_md or "").splitlines()
-    diff = list(difflib.unified_diff(before, after, fromfile=left[:8],
-                                     tofile=right[:8], lineterm=""))
-    return {"left": left, "right": right, "diff": diff,
-            "changed_lines": sum(1 for line in diff
-                                 if line.startswith(("+", "-"))
-                                 and not line.startswith(("+++", "---")))}
-
-
 @router.get("/{session_id}/projects/{project_id}/progress")
 def project_progress(session_id: str, project_id: str,
                      user: User = Depends(get_current_user),
                      db: Session = Depends(get_db)) -> dict[str, Any]:
     project = _owned(db, project_id, session_id, user)
     sections = project_sections(project)
+    versions_count = db.scalar(
+        select(func.count()).select_from(SectionVersion)
+        .where(SectionVersion.project_id == project.id)
+    ) or 0
     return {"project_id": project.id, "status": project.status.value,
             **ProjectService.plan_progress(project),
             "missing_sections": missing_sections(sections),
-            "versions": len(project.versions)}
+            "versions": versions_count}
 
 
 # --------------------------------------------------------------------------- экспорт

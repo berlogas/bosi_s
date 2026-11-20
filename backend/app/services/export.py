@@ -116,14 +116,10 @@ class CitationPlan:
     references: list[BibliographyEntry]
 
 
-def _section_number_maps(project: Project,
-                         sections: Sequence[dict[str, Any]]
-                         ) -> dict[str, dict[int, str]]:
+def _section_number_maps(project: Project) -> dict[str, dict[int, str]]:
     """Карта `номер -> dockey` для текста каждого раздела.
 
-    Основной источник — текущая версия раздела в новой модели. Старые
-    версии (`project_versions`) перебираются вторым: разделы, написанные
-    до перехода, хранят карту цитат только там.
+    Источник — текущая версия плана раздела.
     """
     maps: dict[str, dict[int, str]] = {}
     for plan in getattr(project, "section_plans", None) or []:
@@ -140,29 +136,6 @@ def _section_number_maps(project: Project,
         if numbers:
             maps[plan.name] = numbers
 
-    # Откат на старые версии: раздел может быть написан до перехода,
-    # и тогда карта цитат лежит только в project_versions.
-    versions = list(project.versions or [])
-    for section in sections:
-        name = str(section.get("name") or "")
-        if maps.get(name):
-            continue
-        content = section.get("content_md") or ""
-        same_section = [v for v in versions
-                        if str(getattr(v, "section_name", "") or "").lower()
-                        == name.lower()]
-        exact = [v for v in same_section
-                 if (getattr(v, "content_md", "") or "") == content]
-        chosen = exact[-1] if exact else (same_section[-1] if same_section else None)
-        numbers = {}
-        for entry in getattr(chosen, "citation_map", None) or []:
-            index = entry.get("index")
-            key = str(entry.get("dockey") or "").strip()
-            if index is None or not key:
-                continue
-            numbers[int(index)] = key
-        if numbers:
-            maps[name] = numbers
     return maps
 
 
@@ -228,19 +201,13 @@ def plan_citations(project: Project,
     """
     sections = list(sections if sections is not None
                     else project_sections(project))
-    number_maps = _section_number_maps(project, sections)
+    number_maps = _section_number_maps(project)
     label_by_key: dict[str, str] = {}
-    # Подписи источников: сначала новая модель, потом старые версии.
+    # Подписи источников — из текущих версий разделов.
     for entry in citation_entries(project):
         key = str(entry.get("dockey") or "").strip()
         if key:
             label_by_key.setdefault(key, _source_label(entry))
-    for version in project.versions or []:
-        for entry in version.citation_map or []:
-            key = str(entry.get("dockey") or "").strip()
-            if key:
-                label_by_key.setdefault(key, _source_label(entry))
-
     order: list[str] = []
     numbers_by_key: dict[str, int] = {}
     old_numbers: dict[str, list[int]] = {}
@@ -305,14 +272,13 @@ def _source_label(entry: dict[str, Any]) -> str:
 
 
 def project_citation_index(project: Project) -> dict[int, str]:
-    """Карта `номер -> подпись источника` из последней версии проекта."""
+    """Карта `номер -> подпись источника` из текущих версий разделов."""
     index: dict[int, str] = {}
-    for version in reversed(project.versions or []):
-        for entry in version.citation_map or []:
-            number = entry.get("index")
-            if number is None:
-                continue
-            index[int(number)] = _source_label(entry)
+    for entry in citation_entries(project):
+        number = entry.get("index")
+        if number is None:
+            continue
+        index[int(number)] = _source_label(entry)
     return index
 
 

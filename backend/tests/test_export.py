@@ -17,9 +17,10 @@ from app.services import export as export_service
 
 def _version(citation_map: list[dict], section_name: str = "",
              content_md: str = "") -> object:
-    """Версия проекта: экспорт сопоставляет раздел с версией по тексту."""
+    """Версия раздела: экспорт сопоставляет раздел с версией по плану."""
     class _V:
         def __init__(self, mapping, name, text):
+            self.id = "v-" + str(abs(hash((name, text, id(mapping)))))
             self.citation_map = mapping
             self.section_name = name
             self.content_md = text
@@ -32,6 +33,23 @@ def _versions_for(sections, mapping: list[dict]) -> list[object]:
             for section in sections if (section.get("content_md") or "").strip()]
 
 
+class _Plan:
+    """Минимальный план раздела с текущей версией."""
+
+    def __init__(self, section: dict, version: object | None):
+        self.name = section["name"]
+        self.required = section.get("required", True)
+        self.order = section.get("order", 0)
+        self.word_target = section.get("word_target", 500)
+        self.notes = section.get("notes", "")
+        content = section.get("content_md") or ""
+        if version is None:
+            version = _version([], self.name, content)
+        else:
+            # Текущая версия всегда содержит актуальный текст раздела.
+            version.content_md = content
+        self.versions = [version]
+        self.current_version_id = version.id
 
 
 class _Project:
@@ -43,6 +61,12 @@ class _Project:
         self.status = "drafting"
         self.sections = sections
         self.versions = versions or []
+        self.section_plans = [
+            _Plan(section, next(
+                (v for v in reversed(self.versions)
+                 if getattr(v, "section_name", "") == section["name"]), None))
+            for section in sections
+        ]
 
 
 SECTIONS = [

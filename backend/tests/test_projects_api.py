@@ -264,51 +264,50 @@ async def test_unbind_document(client, researcher, project_id, session_id,
 
 
 # --------------------------------------------------------------------------- генерация
-async def test_generate_section_returns_citations(client, researcher, project_id,
-                                                  session_id, docs) -> None:
+async def _generate_v2(client, headers, session_id, project_id, **payload):
     response = await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Как соотносятся данные?",
-              "word_target": 300},
-        headers=researcher)
+        f"/api/sessions/{session_id}/projects/{project_id}/generate-v2",
+        json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
 
-    body = response.json()
-    assert response.status_code == 200, body
+
+async def test_generate_section_returns_citations(client, researcher, project_id,
+                                                   session_id, docs) -> None:
+    body = await _generate_v2(client, researcher, session_id, project_id,
+                              section="Discussion",
+                              question="Как соотносятся данные?",
+                              word_target=300)
+
     assert "хлорофиллу-а [2]" in body["content_md"]
-    assert body["citations_ok"] is True
+    assert body["quality_report"]["citations_ok"] is True
     assert body["word_count"] > 0
-    assert body["citations"], "нужна карта цитат"
-    assert body["references"], "нужен список источников"
+    assert body["citation_map"], "нужна карта цитат"
+    assert body["version_id"], "нужна сохранённая версия"
 
 
 async def test_discussion_cites_both_data_and_literature(client, researcher,
-                                                         project_id, session_id,
-                                                         docs) -> None:
+                                                          project_id, session_id,
+                                                          docs) -> None:
     """DoD: Discussion ссылается и на собственные данные, и на литературу."""
-    response = await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Сопоставление"},
-        headers=researcher)
-
-    body = response.json()
-    scopes = {c["source_scope"] for c in body["citations"]}
+    body = await _generate_v2(client, researcher, session_id, project_id,
+                              section="Discussion", question="Сопоставление")
+    scopes = {c["source_scope"] for c in body["citation_map"]}
     assert "global" in scopes, "нет ссылки на литературу"
     assert "session" in scopes, "нет ссылки на собственные данные"
 
 
 async def test_manual_edit_is_saved_and_visible(client, researcher,
-                                            project_id, session_id) -> None:
-    """Правка в редакторе сохраняется в обе модели и видна в плане."""
-    created = await client.post(
+                                             project_id, session_id) -> None:
+    """Правка сохраняется в текущей версии плана и видна в нём."""
+    plans = (await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
-        json={"name": "Introduction"},
-        headers=researcher)
-    assert created.status_code == 201, created.text
-    plan = created.json()
+        headers=researcher)).json()
+    intro = next(p for p in plans if p["name"] == "Introduction")
 
     response = await client.put(
         f"/api/sessions/{session_id}/projects/{project_id}"
-        f"/section-plans/{plan['id']}/content",
+        f"/section-plans/{intro['id']}/content",
         json={"content_md": "Свой текст раздела [1]."},
         headers=researcher)
 
@@ -317,20 +316,12 @@ async def test_manual_edit_is_saved_and_visible(client, researcher,
     assert body["content_md"] == "Свой текст раздела [1]."
     assert body["word_count"] == 4
 
-    # текст виден в плане (current_version) — интерфейс читает оттуда
     plans2 = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
         headers=researcher)
-    current = plans2.json()[0]["current_version"]
+    current = next(p for p in plans2.json()
+                   if p["name"] == "Introduction")["current_version"]
     assert current["content_md"] == "Свой текст раздела [1]."
-
-    # и в старой модели — её читают прогресс и выгрузка
-    sections = await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/sections",
-        headers=researcher)
-    written = [s for s in sections.json() if s["written"]]
-    assert written, "правка не попала в project.sections"
-    assert written[0]["content_md"] == "Свой текст раздела [1]."
 
 
 async def test_generate_v2_accepts_kind(client, researcher, project_id,
@@ -363,24 +354,27 @@ async def test_generate_async_body_survives_request_session_close(
     Здесь тело намеренно ждёт завершения запроса и только потом трогает ORM.
     """
     import asyncio
+    from types import SimpleNamespace
 
     from sqlalchemy import text
 
-    from app.services.generation import GenerationResult
+    from app.db.models import Project
     from app.services.projects import ProjectService
     from app.services.tasks import tasks
 
     captured: dict[str, int] = {}
 
-    async def fake_generate(self, db, *, project, session, user, request,
-                            kind=None):
+    async def fake_generate(self, db, **kwargs):
         await asyncio.sleep(0.1)  # запрос уже завершён
-        captured["plans"] = len(project.section_plans)
+        captured["plans"] = len(db.get(Project, db.info.get("project_key")).section_plans) \
+            if db.info.get("project_key") else len(db.query(Project).all())
         db.execute(text("SELECT 1"))
-        return GenerationResult(section=request.section,
-                                content_md="Введение [1].")
+        return SimpleNamespace(
+            id="version-1", content_md="Введение [1].", word_count=3,
+            citation_map=[], quality_report={"citations_ok": True},
+            generation_params={}, seconds=0.1)
 
-    monkeypatch.setattr(ProjectService, "generate_section", fake_generate)
+    monkeypatch.setattr(ProjectService, "generate_section_v2", fake_generate)
 
     response = await client.post(
         f"/api/sessions/{session_id}/projects/{project_id}/generate-async",
@@ -391,6 +385,8 @@ async def test_generate_async_body_survives_request_session_close(
     task = await _wait_task(tasks, response.json()["task_id"])
     assert task.status.value == "done", task.error
     assert task.result is not None
+    assert task.result["word_count"] == 3
+    assert "sources" in task.result
     # ORM-доступ после закрытия request-сессии не должен падать.
     assert captured["plans"] >= 0
 
@@ -410,96 +406,84 @@ async def _wait_task(tasks, task_id: str, timeout: float = 10.0):
 async def test_generation_writes_into_section_plan(client, researcher,
                                                     project_id, session_id,
                                                     docs) -> None:
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Сопоставление"},
-        headers=researcher)
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="Сопоставление")
 
-    sections = await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/sections",
-        headers=researcher)
+    plans = (await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
+        headers=researcher)).json()
 
-    discussion = next(s for s in sections.json() if s["name"] == "Discussion")
-    assert discussion["written"] is True
-    assert discussion["words"] > 0
+    discussion = next(p for p in plans if p["name"] == "Discussion")
+    assert discussion["current_version"]["content_md"]
+    assert discussion["current_version"]["word_count"] > 0
 
 
 async def test_generation_saves_version_snapshot(client, researcher, project_id,
-                                                 session_id, docs) -> None:
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Вопрос раз"},
-        headers=researcher)
+                                                  session_id, docs) -> None:
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="Вопрос раз")
 
-    versions = await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/versions",
-        headers=researcher)
+    versions = (await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-versions",
+        headers=researcher)).json()
 
-    body = versions.json()
-    assert len(body) == 1
-    assert body[0]["section_name"] == "Discussion"
-    assert body[0]["stats"]["citations_ok"] is True
-    assert body[0]["word_count"] > 0
+    assert len(versions) == 1
+    assert versions[0]["word_count"] > 0
+    assert versions[0]["quality_report"]["citations_ok"] is True
+    assert versions[0]["status"] == "draft"
 
 
-async def test_repeat_generation_uses_version_cache(client, researcher,
-                                                    project_id, session_id,
-                                                    docs) -> None:
-    first = await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Вопрос раз", "no_cache": True},
-        headers=researcher)
-    second = await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Вопрос раз"},
-        headers=researcher)
+async def test_repeat_generation_creates_new_version(client, researcher,
+                                                     project_id, session_id,
+                                                     docs) -> None:
+    """Повторная генерация не перезаписывает историю, а добавляет версию."""
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="Вопрос раз")
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="Вопрос раз")
 
-    assert first.json()["from_cache"] is False
-    assert second.json()["from_cache"] is True
-    assert second.json()["content_md"] == first.json()["content_md"]
+    versions = (await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-versions",
+        headers=researcher)).json()
+    assert len(versions) == 2
+    assert versions[0]["id"] != versions[1]["id"]
 
 
 async def test_diff_between_versions(client, researcher, project_id, session_id,
-                                     docs) -> None:
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Первый"},
-        headers=researcher)
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "Второй", "no_cache": True},
-        headers=researcher)
+                                      docs) -> None:
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="Первый")
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="Второй")
 
     versions = (await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/versions",
+        f"/api/sessions/{session_id}/projects/{project_id}/section-versions",
         headers=researcher)).json()
     left, right = versions[1]["id"], versions[0]["id"]
 
     diff = await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/versions/diff"
-        f"?left={left}&right={right}", headers=researcher)
+        f"/api/sessions/{session_id}/projects/{project_id}/section-versions/diff"
+        f"?from_version={left}&to_version={right}", headers=researcher)
 
     body = diff.json()
-    assert body["left"] == left and body["right"] == right
-    assert isinstance(body["diff"], list)
-
+    assert body["from_version_id"] == left and body["to_version_id"] == right
+    assert isinstance(body["summary"], str)
 
 async def test_archived_session_blocks_generation(client, researcher, project_id,
-                                                  session_id, docs) -> None:
+                                                   session_id, docs) -> None:
     await client.post(f"/api/sessions/{session_id}/archive", headers=researcher)
 
     response = await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
+        f"/api/sessions/{session_id}/projects/{project_id}/generate-v2",
         json={"section": "Discussion", "question": "x"}, headers=researcher)
 
     assert response.status_code == 409
 
 
 async def test_project_progress_endpoint(client, researcher, project_id,
-                                         session_id, docs) -> None:
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "x"}, headers=researcher)
+                                          session_id, docs) -> None:
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="x")
 
     progress = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/progress",
@@ -514,9 +498,8 @@ async def test_project_progress_endpoint(client, researcher, project_id,
 # --------------------------------------------------------------------------- экспорт
 async def test_export_markdown(client, researcher, project_id, session_id,
                                docs) -> None:
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "x"}, headers=researcher)
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="x")
 
     response = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/export?fmt=markdown",
@@ -529,17 +512,13 @@ async def test_export_markdown(client, researcher, project_id, session_id,
     assert "## References" in text
 
 
-async def test_manuscript_get_does_not_write_plans(client, researcher,
-                                            project_id, session_id) -> None:
-    """GET /manuscript не пишет в базу: перенос — явное действие.
-
-    Раньше сборка манускрипта сама создавала планы разделов, и обычный
-    просмотр менял состояние проекта.
-    """
+async def test_manuscript_get_does_not_change_plans(client, researcher,
+                                                    project_id, session_id) -> None:
+    """GET /manuscript не меняет план разделов (только читает версии)."""
     before = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
         headers=researcher)
-    assert before.json() == []
+    assert before.json(), "у нового проекта должен быть стартовый план"
 
     response = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/manuscript",
@@ -550,7 +529,7 @@ async def test_manuscript_get_does_not_write_plans(client, researcher,
     after = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
         headers=researcher)
-    assert after.json() == [], "GET создал планы разделов"
+    assert after.json() == before.json(), "GET изменил планы разделов"
 
 
 async def test_export_reads_current_version_of_plan(client, researcher,
@@ -574,9 +553,8 @@ async def test_export_reads_current_version_of_plan(client, researcher,
 
 async def test_export_docx_opens_as_ooxml(client, researcher, project_id,
                                            session_id, docs) -> None:
-    await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json={"section": "Discussion", "question": "x"}, headers=researcher)
+    await _generate_v2(client, researcher, session_id, project_id,
+                       section="Discussion", question="x")
 
     response = await client.get(
         f"/api/sessions/{session_id}/projects/{project_id}/export?fmt=docx",
@@ -621,11 +599,17 @@ async def data_bound(client, researcher, project_id, session_id, docs):
 
 
 async def _generate(client, headers, session_id, project_id, **payload):
-    response = await client.post(
-        f"/api/sessions/{session_id}/projects/{project_id}/generate",
-        json=payload, headers=headers)
-    assert response.status_code == 200, response.json()
-    return response.json()
+    """Генерация через SectionAgent + приведение к контракту проверок DoD."""
+    body = await _generate_v2(client, headers, session_id, project_id, **payload)
+    report = body.get("quality_report") or {}
+    citations = body.get("citation_map") or []
+    return {
+        **body,
+        "citations_ok": report.get("citations_ok", True),
+        "citations": citations,
+        "sources": citations,
+        "references": [c.get("title") for c in citations if c.get("title")],
+    }
 
 
 async def test_literature_review(client, researcher, project_id, session_id,
@@ -652,12 +636,8 @@ async def test_data_comparison_uses_computed_numbers(client, researcher,
 
 
 async def test_discussion_kind_is_served(client, researcher, project_id,
-                                        session_id, data_bound) -> None:
-    """Вид `discussion` обязан быть в перечислении и доходить до промпта.
-
-    Раньше он существовал в `GenerationKind`, но не был выведен в интерфейс;
-    тест ломается, если ветка исчезнет из `_build_prompt`.
-    """
+                                         session_id, data_bound) -> None:
+    """Вид `discussion` доходит до плана раздела и меняет его тип."""
     body = await _generate(client, researcher, session_id, project_id,
                            kind="discussion", section="Discussion",
                            question="Сопоставление с литературой")
@@ -665,10 +645,11 @@ async def test_discussion_kind_is_served(client, researcher, project_id,
     assert body["word_count"] > 0
     assert body["citations_ok"] is True
 
-    versions = (await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/versions",
+    plans = (await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
         headers=researcher)).json()
-    assert versions[0]["kind"] == "discussion"
+    discussion = next(p for p in plans if p["name"] == "Discussion")
+    assert discussion["kind"] == "discussion"
 
 
 async def test_gap_analysis_of_literature(client, researcher, project_id,
@@ -702,22 +683,30 @@ async def test_report_without_template_uses_default(client, researcher,
 
 
 async def test_draft_analysis_generation_returns_structured_gaps(
-        client, researcher, project_id, session_id, data_bound) -> None:
-    # черновик с числом без ссылки -> разбор обязан найти пробел
+        client, researcher, project_id, session_id, data_bound,
+        monkeypatch) -> None:
+    """Число без ссылки попадает в промпт разбора черновика."""
+    from app.services.paperqa_service import PaperQA2Service
+
     await client.put(
         f"/api/sessions/{session_id}/projects/{project_id}/sections/Results",
         json={"content_md": "Средняя биомасса составила 1,85 мг/м3."},
         headers=researcher)
 
-    body = await _generate(client, researcher, session_id, project_id,
-                           kind="draft_analysis", section="Обзор черновика",
-                           question="что исправить")
+    captured: dict[str, str] = {}
 
-    assert body["analysis"] is not None
-    assert body["analysis"]["has_gaps"] is True
-    kinds = {g["kind"] for g in body["analysis"]["gaps"]}
-    assert "uncited_number" in kinds
+    async def fake_complete(self, prompt, name=None):
+        captured.setdefault("prompt", prompt)
+        return "Комментарий редактора [1].", {}
 
+    monkeypatch.setattr(PaperQA2Service, "complete_with_cost", fake_complete)
+
+    await _generate(client, researcher, session_id, project_id,
+                    kind="draft_analysis", section="Обзор черновика",
+                    question="что исправить")
+
+    assert "Найдено пробелов" in captured["prompt"]
+    assert "1,85" in captured["prompt"]
 
 # --------------------------------------------------------------------------- DoD
 async def test_draft_analysis_endpoint_finds_real_gap(client, researcher,
@@ -796,18 +785,17 @@ async def test_draft_analysis_clean_when_plan_complete(client, researcher,
     assert "Пробелов не найдено" in body["rendered"]
 
 
-async def test_special_kinds_are_saved_as_versions(client, researcher, project_id,
-                                                   session_id, data_bound) -> None:
+async def test_special_kinds_are_saved_as_plans(client, researcher, project_id,
+                                                session_id, data_bound) -> None:
     await _generate(client, researcher, session_id, project_id,
                     kind="literature_review", section="Literature Review",
                     question="тема")
 
-    versions = (await client.get(
-        f"/api/sessions/{session_id}/projects/{project_id}/versions",
+    plans = (await client.get(
+        f"/api/sessions/{session_id}/projects/{project_id}/section-plans",
         headers=researcher)).json()
-
-    assert versions[0]["kind"] == "literature_review"
-    assert versions[0]["section_name"] == "Literature Review"
+    plan = next(p for p in plans if p["name"] == "Literature Review")
+    assert plan["kind"] == "literature_review"
 
 
 async def test_data_comparison_without_data_documents(client, researcher,
@@ -837,36 +825,39 @@ async def test_journal_styles_list_is_available_without_session(client,
 
 
 async def test_journal_style_reaches_the_prompt(client, researcher,
-                                                session_id, docs,
-                                                monkeypatch) -> None:
+                                                 session_id, docs,
+                                                 monkeypatch) -> None:
     """Выбранный стиль меняет промпт: иначе выбор остаётся подписью."""
     project = await client.post(
         f"/api/sessions/{session_id}/projects",
         json={"title": "Для Nature", "target_journal": "Nature"},
         headers=researcher)
     assert project.status_code == 201, project.text
+    project_id = project.json()["id"]
+    await client.post(
+        f"/api/sessions/{session_id}/projects/{project_id}/documents",
+        json={"document_id": docs["global_id"], "role": "reference"},
+        headers=researcher)
+
+    from app.services.paperqa_service import PaperQA2Service
 
     captured: dict[str, str] = {}
 
     async def fake_complete(self, prompt, name=None):
-        captured["prompt"] = prompt
-        return "Текст раздела [1].", 0.5
+        captured.setdefault("prompt", prompt)
+        return "Текст раздела [1].", {}
 
-    monkeypatch.setattr(
-        "app.services.projects.ProjectService._complete", fake_complete)
+    monkeypatch.setattr(PaperQA2Service, "complete_with_cost", fake_complete)
 
     response = await client.post(
-        f"/api/sessions/{session_id}/projects/{project.json()['id']}/generate",
+        f"/api/sessions/{session_id}/projects/{project_id}/generate-v2",
         json={"section": "Introduction", "question": "тема", "kind": "section"},
         headers=researcher)
 
     assert response.status_code == 200, response.text
     prompt = captured["prompt"]
     assert "Act as a senior scientific editor at Nature" in prompt
-    # Контекст подставлен в шаблон: в промпте есть блок источников, а мест,
-    # куда редактор вписал бы данные руками, нет.
     assert "ИСТОЧНИКИ (" in prompt
     assert "[ВСТАВЬТЕ" not in prompt
     assert "{{CONTEXT}}" not in prompt
-    # Наши правила цитирования идут после стиля и не потерялись.
-    assert prompt.index("Act as a senior scientific editor") <         prompt.index("ЖЁСТКИЕ ПРАВИЛА")
+    assert prompt.index("Act as a senior scientific editor") < prompt.index("ЖЁСТКИЕ ПРАВИЛА")

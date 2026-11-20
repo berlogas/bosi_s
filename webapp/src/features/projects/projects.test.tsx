@@ -488,38 +488,6 @@ describe('вкладка Проекты', () => {
     })
   })
 
-  it('план разделов: «Синхронизировать из JSON» зовёт сервер', async () => {
-    const { routes } = baseRoutes({
-      'POST /api/sessions/s-1/projects/p-1/section-plans/sync': {
-        synced: 5,
-        plans: [{ id: 'plan-1', name: 'Introduction' }],
-      },
-    })
-    const { calls } = mockApi(routes)
-
-    renderApp()
-    await waitForProject()
-
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Документы проекта' }),
-    )
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'План разделов' }),
-    )
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Синхронизировать из JSON' }),
-    )
-
-    await waitFor(() =>
-      expect(
-        calls.some(
-          (c) =>
-            c.init.method === 'POST' && c.url.includes('/section-plans/sync'),
-        ),
-      ).toBe(true),
-    )
-  })
-
   it('план разделов: «Добавить раздел» создаёт раздел', async () => {
     const { routes } = baseRoutes({
       'POST /api/sessions/s-1/projects/p-1/section-plans': { id: 'plan-2', name: 'Методы' },

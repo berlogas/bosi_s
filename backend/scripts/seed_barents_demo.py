@@ -11,8 +11,7 @@
     ../.venv/Scripts/python.exe scripts/seed_barents_demo.py --fresh    # отдельный чистый проект
 
 `--fresh` нужен для проверки с нуля: у проекта с уже сгенерированными
-разделами повторная генерация того же раздела с тем же вопросом отдаёт
-прошлую версию из кэша, и легко решить, что стиль не сработал.
+разделами повторный прогон не показывает, как стиль влияет на новую версию.
 """
 
 from __future__ import annotations
@@ -27,6 +26,7 @@ from app.db.models import Document, DocumentLink, Project, ProjectDocRole, Resea
 from app.db.session import session_scope
 from app.services.generation import DEFAULT_SECTIONS
 from app.services.journal_styles import find_style
+from app.services.projects import ProjectService
 
 DEMO_ROOT = Path(__file__).resolve().parents[2] / "demo" / "barents-article"
 
@@ -100,17 +100,17 @@ def main() -> None:
                 session_id=session.id,
                 title=title,
                 target_journal=style_key,
-                sections=_plan_sections(),
                 status="planning")
             db.add(project)
             db.flush()
+            ProjectService().set_section_plans(db, project, _plan_sections())
             print(f"создан проект {project.id} — {title}")
         else:
             if project.target_journal != style_key:
                 project.target_journal = style_key
                 print(f"стиль проекта: {style.title}")
-            if not project.sections:
-                project.sections = _plan_sections()
+            if not project.section_plans:
+                ProjectService().set_section_plans(db, project, _plan_sections())
                 print("добавлен план разделов по умолчанию")
 
         # Документы опознаются по dockey-префиксу в имени файла: он уже

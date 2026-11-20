@@ -1,12 +1,7 @@
-"""Разделы проекта из новой модели (`section_plans` + `section_versions`).
+"""Разделы проекта из планов (`section_plans` + `section_versions`).
 
-Новая модель — источник истины: текст разделов, ссылки и номера цитат
-берутся из неё. Старая (`projects.sections`, `project_versions`) осталась
-зеркалом для совместимости (её читают старые скрипты и отчёты), но читать
-из неё перестали.
-
-Пока планов нет (проект до перехода) — откат на старую модель, чтобы
-переход можно было делать по частям.
+Планы разделов и их текущие версии — единственный источник истины о
+тексте статьи, ссылках и номерах цитат.
 """
 
 from __future__ import annotations
@@ -14,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.db.models import Project, SectionPlan, SectionVersion
-from app.services.generation import normalize_sections
 
 
 def current_version(plan: SectionPlan) -> SectionVersion | None:
@@ -33,8 +27,7 @@ def project_sections(project: Project) -> list[dict[str, Any]]:
     plans = sorted(getattr(project, "section_plans", None) or [],
                    key=lambda p: p.order)
     if not plans:
-        # Проект ещё не переведён на новую модель — откат на старую.
-        return normalize_sections(project.sections)
+        return []
 
     sections: list[dict[str, Any]] = []
     for plan in plans:

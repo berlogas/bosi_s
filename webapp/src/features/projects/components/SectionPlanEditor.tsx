@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Stack, TextInput, NumberInput, Button, Group, Badge, Checkbox, Table, Modal, Select, Text } from '@mantine/core'
 import { showNotification } from '@mantine/notifications'
-import { IconPlus, IconDownload, IconX, IconWand, IconGripVertical, IconRefresh } from '@tabler/icons-react'
+import { IconPlus, IconX, IconWand, IconGripVertical, IconRefresh } from '@tabler/icons-react'
 import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -10,7 +10,6 @@ import {
   useCreateSectionPlan,
   useUpdateSectionPlan,
   useDeleteSectionPlan,
-  useSyncSectionPlans,
   useBatchRegenerateSections,
 } from '../hooks'
 import { client } from '../../../api/client'
@@ -71,7 +70,6 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
   const createPlan = useCreateSectionPlan(sessionId, projectId)
   const updatePlan = useUpdateSectionPlan(sessionId, projectId)
   const deletePlan = useDeleteSectionPlan(sessionId, projectId)
-  const syncPlans = useSyncSectionPlans(sessionId, projectId)
   const regenerate = useBatchRegenerateSections(sessionId, projectId)
 
   const [draft, setDraft] = useState<PlanDraft | null>(null)
@@ -118,24 +116,6 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
       showNotification({ title: 'Ошибка', message: e instanceof Error ? e.message : 'Неизвестная ошибка', color: 'red' })
     }
   }, [projectTargetJournal, createPlan])
-
-  // Перенос текста из старой модели (project.sections) в новую.
-  const handleSync = useCallback(() => {
-    syncPlans.mutate(undefined, {
-      onSuccess: (result) =>
-        showNotification({
-          title: 'Синхронизировано',
-          message: `Разделов в плане: ${result.synced}`,
-          color: 'green',
-        }),
-      onError: (cause) =>
-        showNotification({
-          title: 'Не удалось синхронизировать',
-          message: cause instanceof Error ? cause.message : 'Неизвестная ошибка',
-          color: 'red',
-        }),
-    })
-  }, [syncPlans])
 
   const handleCreate = () => {
     setDraft({ ...EMPTY_DRAFT, order: (plans?.length ?? 0) + 1 })
@@ -209,9 +189,6 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
       <Group justify="space-between" align="center">
         <Text fw={600}>План разделов</Text>
         <Group gap="xs">
-          <Button onClick={handleSync} leftSection={<IconDownload size={14} />} variant="subtle" loading={syncPlans.isPending} disabled={readOnly}>
-            Синхронизировать из JSON
-          </Button>
           <Button onClick={handleSuggestFromJournal} leftSection={<IconWand size={14} />} variant="filled" disabled={!projectTargetJournal}>
             Предложить по стилю журнала
           </Button>

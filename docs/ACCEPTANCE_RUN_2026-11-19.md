@@ -163,3 +163,29 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
   перезапрашивалась до ручной перезагрузки страницы — исправлен неинвалидируемый ключ
   кэша истории (`section-plan-history`) в `useSectionPlans.ts`; проверено: тесты проектов
   (29 passed), typecheck, lint чисты.
+
+## 9. Финальная очистка: удаление совместимого слоя (2026-11-20)
+
+- [x] 9.1. Удалены эндпоинты `POST /section-plans/sync` и `POST /generate`;
+      фоновая генерация `POST /generate-async` переведена на
+      `ProjectService.generate_section_v2` (SectionAgent) и сохраняет контракт
+      `task.result` для драйвера приёма (`word_count`, `sources`, `section`).
+- [x] 9.2. Удалены `ensure_section_plans`, `_compile_manuscript_legacy`,
+      `_save_version`/`_write_into_plan`/`_find_cached`, старый билдер промптов,
+      зеркало записей в `project.sections`, `_sync_to_project_json` в агенте и
+      скрипт `backend/scripts/sync_section_plans.py`. Старые `/sections/{name}/translate`
+      и `/versions` удалены; ETA переведено на `SectionVersion.seconds`.
+- [x] 9.3. Стартовый план разделов теперь создаётся при создании проекта
+      (`ProjectService.set_section_plans`); чтение разделов, прогресса, экспорта
+      и сборки идёт только из `section_plans` + текущих `section_versions`.
+- [x] 9.4. Обновлены OpenAPI-контракт (`webapp/openapi/spec.json`,
+      `webapp/src/api/schema.ts`), клиент и UI: кнопка «Синхронизировать из JSON»
+      и связанный хук удалены.
+- [x] 9.5. Проверки после очистки: `tests/test_projects_api.py` — 41 passed,
+      `tests/test_export.py` — 31 passed, TypeScript/lint/визуальные тесты
+      проектов чисты; полный backend-прогон: **750 passed**, 2 skipped,
+      2 deselected (0 failures).
+
+Статус предыдущих шагов (0–8) не изменился: приёмочный цикл «данные → генерация →
+рукопись → экспорт» пройден, ошибок драйвера 0. Очистка не меняет пользовательский
+сценарий — убирает только неиспользуемые пути, которые были нужны старым данным.

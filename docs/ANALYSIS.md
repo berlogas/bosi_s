@@ -1,5 +1,11 @@
 # Анализ приложения boasi_s
 
+> **Обновление 2026-11-20:** совместимый слой удалён. Пункты, упоминающие
+> `generate_section`, `ensure_section_plans`, `sync_project_sections_to_plans`,
+> зеркало `project.sections` и эндпоинт `POST /section-plans/sync`, отражают
+> состояние на момент анализа и более не актуальны. Единственный путь генерации —
+> `generate_section_v2` → SectionAgent; стартовый план создаётся при создании проекта.
+
 ## 0. Что анализировалось
 
 - Backend: `backend/` (FastAPI, PaperQA2, SQLAlchemy, SQLite), сервисные модули, эндпоинты, тесты (`pytest`, 728 запущено).

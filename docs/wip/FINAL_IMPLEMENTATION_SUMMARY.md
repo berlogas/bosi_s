@@ -1,5 +1,9 @@
 # Implementation Summary: Section Generation Redesign (Phases 1-5 Complete)
 
+> Исторический документ (2026-11). «Full backward compatibility» больше не
+> сохраняется: с 2026-11-20 слой совместимости (синхронизация, миграционный
+> скрипт, зеркало `project.sections`, старый `/generate`) удалён.
+
 ## Overview
 Successfully implemented a complete redesign of the section generation system, inspired by PaperQA2/WikiCrow patterns, with full backward compatibility.
 

@@ -860,6 +860,14 @@ class SectionTranslator:
         )
         db.add(new_version)
         db.commit()
+        # Перевод становится текущей версией раздела: compile_manuscript берёт
+        # material из plan.current_version_id, поэтому без этого переведённый
+        # текст до approve не попал бы в сборку.
+        plan = self.db.get(SectionPlan, version.section_plan_id)
+        if plan is not None:
+            plan.current_version_id = new_version.id
+            plan.status = SectionStatus.review
+            db.commit()
         return new_version
 
     def _build_translation_prompt(

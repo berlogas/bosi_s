@@ -1063,25 +1063,70 @@ async def batch_regenerate_sections(
     session_id: str, project_id: str, payload: dict, request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> dict:
-    """Пакетная перегенерация устаревших разделов.
-    
+) -> dict[str, Any]:
+    """Фоновая перегенерация устаревших разделов; возвращает `task_id`.
+
     Payload:
     - force: bool (default false) — перегенерировать всё принудительно
     """
+    from app.services.tasks import Task, tasks
+
     session = get_owned_session(db, session_id, user)
     project = _owned(db, project_id, session_id, user)
-    force = payload.get("force", False)
-    
-    service = ProjectService()
-    result = await service.regenerate_outdated_sections(
-        db, project=project, session=session, user=user, force=force
-    )
-    
-    audit(db, action="project.batch_regenerate", actor=user,
-          target_type="project", target_id=project.id, **_meta(request),
-          force=force, result=result)
-    return result
+    force = bool(payload.get("force", False))
+
+    # Как и при обычной генерации: тело задачи живёт дольше запроса, поэтому
+    # работает в отдельной сессии и заново читает ORM-объекты.
+    from app.db.models import ResearchSession
+    from app.db.session import get_session_factory
+
+    project_key = project.id
+    session_key = session.id
+    user_key = user.id
+
+    async def body(task: Task) -> dict[str, Any]:
+        bg_db = get_session_factory()()
+        try:
+            bg_project = bg_db.get(Project, project_key)
+            bg_session = bg_db.get(ResearchSession, session_key)
+            bg_user = bg_db.get(User, user_key)
+            if bg_project is None or bg_session is None or bg_user is None:
+                raise NotFoundError("Проект или сессия не найдены")
+
+            task.set_stage(5, "подготовка")
+            service = ProjectService()
+
+            def on_progress(percent: int, step: str) -> None:
+                task.set_stage(5 + percent * 9 // 10, step)
+
+            try:
+                result = await service.regenerate_outdated_sections(
+                    bg_db, project=bg_project, session=bg_session,
+                    user=bg_user, force=force, on_progress=on_progress,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("batch-regenerate: ошибка перегенерации проекта %s",
+                              project_key)
+                raise
+
+            task.set_stage(100, "готово")
+            audit(bg_db, action="project.batch_regenerate", actor=bg_user,
+                  target_type="project", target_id=bg_project.id,
+                  **_meta(request), force=force, result=result)
+            return result
+        finally:
+            bg_db.close()
+
+    task = tasks.submit(body, kind="regenerate_sections",
+                        title="Перегенерация разделов",
+                        user_id=user.id, session_id=session_id,
+                        project_id=project_id)
+    audit(db, action="project.batch_regenerate.async", actor=user,
+          target_type="project", target_id=project.id,
+          **_meta(request), force=force, task_id=task.id)
+    return {"task_id": task.id}
 
 
 @router.post("/{session_id}/projects/{project_id}/section-plans/{plan_id}/merge")

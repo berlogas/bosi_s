@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from sqlalchemy import select
@@ -276,7 +276,73 @@ class ProjectService:
             use_cache=use_cache,
             kind=kind,
         )
+        self._stamp_context(db, project, plan, version)
         return version
+
+    @staticmethod
+    def _context_signature(
+        db: Session, project: Project, plan: SectionPlan,
+    ) -> dict[str, Any]:
+        """Снимок того, от чего зависит текст раздела.
+
+        Хранится в `SectionVersion.generation_params`, чтобы позже можно было
+        точно сказать, устарел раздел или нет: изменились листочники, версии
+        разделов-зависимостей или настройки самого плана.
+        """
+        rows = db.execute(
+            select(Document.dockey, Document.updated_at)
+            .join(DocumentLink, DocumentLink.document_id == Document.id)
+            .where(DocumentLink.project_id == project.id)
+        ).all()
+        documents = sorted(
+            ({"dockey": key, "updated_at": ts.isoformat() if ts else ""}
+             for key, ts in rows if key),
+            key=lambda item: item["dockey"],
+        )
+        dependencies: dict[str, str] = {}
+        for dep_id in plan.depends_on or []:
+            dep = db.get(SectionPlan, dep_id)
+            if dep is not None:
+                dependencies[dep_id] = dep.current_version_id or ""
+        return {
+            "documents": documents,
+            "dependencies": dependencies,
+            "word_target": plan.word_target,
+            "notes": plan.notes or "",
+            "journal": project.target_journal or "",
+        }
+
+    def _stamp_context(
+        self, db: Session, project: Project, plan: SectionPlan,
+        version: SectionVersion,
+    ) -> None:
+        """Записать снимок контекста в параметры созданной версии."""
+        params = dict(version.generation_params or {})
+        params["context_signature"] = self._context_signature(db, project, plan)
+        version.generation_params = params
+        db.commit()
+
+    @staticmethod
+    def _outdated_reasons(
+        db: Session, project: Project, plan: SectionPlan,
+        version: SectionVersion | None,
+    ) -> list[str]:
+        """Почему текущая версия раздела считается устаревшей."""
+        if version is None:
+            return ["нет текущей версии"]
+        stored = (version.generation_params or {}).get("context_signature")
+        if not isinstance(stored, dict):
+            return ["нет снимка контекста генерации"]
+        actual = ProjectService._context_signature(db, project, plan)
+        reasons: list[str] = []
+        if stored.get("documents") != actual["documents"]:
+            reasons.append("источники изменились")
+        if stored.get("dependencies") != actual["dependencies"]:
+            reasons.append("зависимости изменились")
+        if any(stored.get(key) != actual[key]
+               for key in ("word_target", "notes", "journal")):
+            reasons.append("настройки раздела изменились")
+        return reasons
 
     async def translate_section(
         self,
@@ -357,50 +423,44 @@ class ProjectService:
         session: ResearchSession,
         user: User,
         force: bool = False,
+        on_progress: Callable[[int, str], None] | None = None,
     ) -> dict[str, Any]:
-        """Перегенерировать все разделы, у которых устарели источники или нет контента.
+        """Перегенерировать разделы, у которых изменился контекст генерации.
 
-        Раздел считается устаревшим, если:
-        - нет контента (пустой)
-        - force=True
-        - у раздела есть depends_on и зависимости обновились
-
-        Возвращает отчёт о перегенерации.
+        Раздел считается устаревшим, если у него нет версии, изменились
+        привязанные к проекту документы, версии разделов из `depends_on`
+        или настройки плана (объём, указания, стиль журнала). `force=True`
+        перегенерирует все разделы независимо от снимка контекста.
         """
         if session.status.value not in {"active", "paused"}:
             from app.core.errors import ConflictError
             raise ConflictError("Сессия архивирована — генерация недоступна")
 
-        # Синхронизируем планы если нужно
-        plans = project.section_plans
-
+        plans = sorted(project.section_plans, key=lambda p: p.order)
         agent = SectionAgent(registry=self.registry, project=project)
-        results = {
+        results: dict[str, Any] = {
             "total": len(plans),
             "regenerated": [],
             "skipped": [],
             "failed": [],
         }
 
-        for plan in plans:
-            # Проверяем нужно ли перегенерировать
-            current_version = plan.current_version_id
-            needs_regen = force or not current_version
+        for index, plan in enumerate(plans):
+            if on_progress is not None:
+                on_progress(int(100 * index / max(len(plans), 1)), plan.name)
 
-            # Если есть зависимые разделы, проверяем их версии
-            if not needs_regen:
-                for dep_id in plan.depends_on:
-                    dep_plan = db.get(SectionPlan, dep_id)
-                    if dep_plan and dep_plan.current_version_id != current_version:
-                        needs_regen = True
-                        break
-
-            if not needs_regen:
-                results["skipped"].append({"section": plan.name, "reason": "up to date"})
+            current = (
+                db.get(SectionVersion, plan.current_version_id)
+                if plan.current_version_id else None
+            )
+            reasons = (["принудительная перегенерация"] if force else
+                       self._outdated_reasons(db, project, plan, current))
+            if not reasons:
+                results["skipped"].append(
+                    {"section": plan.name, "reason": "up to date"})
                 continue
 
             try:
-                # Генерируем вопрос на основе названия раздела и заметок
                 question = f"Напиши раздел '{plan.name}' научной статьи."
                 if plan.notes:
                     question += f" Указания: {plan.notes}"
@@ -414,17 +474,22 @@ class ProjectService:
                     question=question,
                     notes=plan.notes,
                     word_target=plan.word_target,
-                    use_cache=False,  # принудительно перегенерируем
+                    use_cache=False,
                 )
+                self._stamp_context(db, project, plan, version)
                 results["regenerated"].append({
                     "section": plan.name,
                     "version_id": version.id,
                     "word_count": version.word_count,
+                    "reasons": reasons,
                 })
             except Exception as e:
-                log.exception(f"Batch regen failed for section {plan.name}")
-                results["failed"].append({"section": plan.name, "error": str(e)})
+                log.exception("Batch regen failed for section %s", plan.name)
+                results["failed"].append(
+                    {"section": plan.name, "error": str(e)})
 
+        if on_progress is not None:
+            on_progress(100, "готово")
         return results
 
     def compile_manuscript(

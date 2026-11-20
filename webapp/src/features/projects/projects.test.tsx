@@ -488,6 +488,68 @@ describe('вкладка Проекты', () => {
     })
   })
 
+
+  it('план разделов: перегенерация идёт фоновой задачей и показывает итог', async () => {
+    let polls = 0
+    const makeTask = (patch: Record<string, unknown> = {}) => ({
+      id: 'regen-1',
+      kind: 'regenerate_sections',
+      title: 'Перегенерация разделов',
+      status: 'running',
+      progress: 40,
+      step: 'Introduction',
+      error: null,
+      cancel_requested: false,
+      user_id: 'u-1',
+      session_id: 's-1',
+      project_id: 'p-1',
+      created_at: '2026-11-20T09:00:00+00:00',
+      started_at: '2026-11-20T09:00:01+00:00',
+      finished_at: null,
+      seconds: 3,
+      stage_seconds: 1,
+      result: null,
+      ...patch,
+    })
+    const { calls } = mockApi(baseRoutes({
+      'POST /api/sessions/s-1/projects/p-1/batch-regenerate': { task_id: 'regen-1' },
+      'GET /api/tasks/regen-1': () => {
+        polls += 1
+        return json(polls < 2
+          ? makeTask()
+          : makeTask({
+              status: 'done',
+              progress: 100,
+              step: 'готово',
+              result: {
+                total: 1,
+                regenerated: [{ section: 'Introduction', version_id: 'v-2', word_count: 10 }],
+                skipped: [],
+                failed: [],
+              },
+            }))
+      },
+    }).routes)
+
+    renderApp()
+    await waitForProject()
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Документы проекта' }),
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'План разделов' }),
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Перегенерировать устаревшие' }),
+    )
+
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes('/batch-regenerate'))).toBe(true),
+    )
+    expect(await screen.findByText(/Перегенерация: Introduction/)).toBeInTheDocument()
+    expect(await screen.findByText(/Обновлено: 1/)).toBeInTheDocument()
+  })
+
   it('план разделов: «Добавить раздел» создаёт раздел', async () => {
     const { routes } = baseRoutes({
       'POST /api/sessions/s-1/projects/p-1/section-plans': { id: 'plan-2', name: 'Методы' },

@@ -43,7 +43,6 @@ import type {
   PreGenerationCheckResult,
   SectionKind,
   SectionPlanStatus,
-  BatchRegenerateResult,
 } from './types'
 
 
@@ -1013,16 +1012,15 @@ class ApiClient {
     })
   }
 
-  /** Пакетная перегенерация устаревших разделов */
+  /** Пакетная перегенерация устаревших разделов: возвращает task_id. */
   batchRegenerateSections(
     sessionId: string,
     projectId: string,
     force = false,
-  ): Promise<BatchRegenerateResult> {
+  ): Promise<{ task_id: string }> {
     return this.request(`/api/sessions/${sessionId}/projects/${projectId}/batch-regenerate`, {
       method: 'POST',
       json: { force },
-      timeoutMs: 1_800_000, // 30 min
     })
   }
 

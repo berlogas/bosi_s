@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Stack, TextInput, NumberInput, Button, Group, Badge, Checkbox, Table, Modal, Select, Text } from '@mantine/core'
 import { showNotification } from '@mantine/notifications'
 import { IconPlus, IconX, IconWand, IconGripVertical, IconRefresh } from '@tabler/icons-react'
@@ -11,9 +11,11 @@ import {
   useUpdateSectionPlan,
   useDeleteSectionPlan,
   useBatchRegenerateSections,
+  useInvalidateSectionPlans,
 } from '../hooks'
+import { useTask } from '../../chat/queries'
 import { client } from '../../../api/client'
-import type { SectionPlan, SectionKind } from '../../../api/types'
+import type { BatchRegenerateResult, SectionPlan, SectionKind } from '../../../api/types'
 
 const KIND_LABELS: Record<string, string> = {
   standard: 'Стандартный',
@@ -70,7 +72,46 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
   const createPlan = useCreateSectionPlan(sessionId, projectId)
   const updatePlan = useUpdateSectionPlan(sessionId, projectId)
   const deletePlan = useDeleteSectionPlan(sessionId, projectId)
+  const invalidate = useInvalidateSectionPlans(sessionId, projectId)
   const regenerate = useBatchRegenerateSections(sessionId, projectId)
+  const [regenTaskId, setRegenTaskId] = useState<string | null>(null)
+  const regenTask = useTask(regenTaskId)
+  const regenBusy = regenerate.isPending || regenTaskId !== null
+
+  useEffect(() => {
+    const task = regenTask.data
+    if (!regenTaskId || !task) return
+    if (task.status === 'done') {
+      const result = task.result as BatchRegenerateResult | undefined
+      showNotification({
+        title: 'Перегенерация завершена',
+        message: `Обновлено: ${result?.regenerated?.length ?? 0}, пропущено: ${result?.skipped?.length ?? 0}, ошибок: ${result?.failed?.length ?? 0}`,
+        color: 'green',
+      })
+      invalidate()
+      setRegenTaskId(null)
+    } else if (task.status === 'error' || task.status === 'cancelled') {
+      showNotification({
+        title: 'Перегенерация не выполнена',
+        message: task.error ?? 'Задача отменена',
+        color: 'red',
+      })
+      setRegenTaskId(null)
+    }
+  }, [regenTask.data, regenTaskId, invalidate])
+
+  useEffect(() => {
+    if (regenTask.isError && regenTaskId) {
+      showNotification({
+        title: 'Не удалось получить статус перегенерации',
+        message: regenTask.error instanceof Error
+          ? regenTask.error.message
+          : 'Задача могла быть потеряна после перезапуска backend',
+        color: 'red',
+      })
+      setRegenTaskId(null)
+    }
+  }, [regenTask.isError, regenTask.error, regenTaskId])
 
   const [draft, setDraft] = useState<PlanDraft | null>(null)
 
@@ -180,6 +221,18 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
     })
   }
 
+  const handleRegenerate = () => {
+    regenerate.mutate(false, {
+      onSuccess: ({ task_id }) => setRegenTaskId(task_id),
+      onError: (cause) =>
+        showNotification({
+          title: 'Не удалось запустить перегенерацию',
+          message: cause instanceof Error ? cause.message : 'Неизвестная ошибка',
+          color: 'red',
+        }),
+    })
+  }
+
   const planIds = useMemo(() => (plans ?? []).map((p) => p.id), [plans])
 
   if (isLoading) return <Text size="sm" c="dimmed">Загрузка плана…</Text>
@@ -196,16 +249,22 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
             Добавить раздел
           </Button>
           <Button
-            onClick={() => regenerate.mutate(false)}
+            onClick={handleRegenerate}
             variant="subtle"
             leftSection={<IconRefresh size={14} />}
-            disabled={readOnly}
-            loading={regenerate.isPending}
+            disabled={readOnly || regenBusy}
+            loading={regenBusy}
           >
             Перегенерировать устаревшие
           </Button>
         </Group>
       </Group>
+
+      {regenTaskId && regenTask.data && (
+        <Text size="sm" c="dimmed">
+          Перегенерация: {regenTask.data.step ?? 'запуск'} ({regenTask.data.progress}%)
+        </Text>
+      )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={planIds} strategy={verticalListSortingStrategy}>

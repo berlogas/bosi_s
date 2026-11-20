@@ -5543,7 +5543,7 @@
           "projects"
         ],
         "summary": "Batch Regenerate Sections",
-        "description": "Пакетная перегенерация устаревших разделов.\n\nPayload:\n- force: bool (default false) — перегенерировать всё принудительно",
+        "description": "Фоновая перегенерация устаревших разделов; возвращает `task_id`.\n\nPayload:\n- force: bool (default false) — перегенерировать всё принудительно",
         "operationId": "batch_regenerate_sections_api_sessions__session_id__projects__project_id__batch_regenerate_post",
         "security": [
           {

@@ -861,3 +861,56 @@ async def test_journal_style_reaches_the_prompt(client, researcher,
     assert "[ВСТАВЬТЕ" not in prompt
     assert "{{CONTEXT}}" not in prompt
     assert prompt.index("Act as a senior scientific editor") < prompt.index("ЖЁСТКИЕ ПРАВИЛА")
+
+async def _run_batch_regeneration(client, headers, session_id, project_id):
+    from app.services.tasks import tasks
+
+    response = await client.post(
+        f"/api/sessions/{session_id}/projects/{project_id}/batch-regenerate",
+        json={"force": False}, headers=headers)
+    assert response.status_code == 200, response.text
+    task = await _wait_task(tasks, response.json()["task_id"])
+    assert task.status.value == "done", task.error
+    return task.result
+
+
+async def test_batch_regeneration_tracks_context_and_runs_in_task(
+        client, researcher, project_id, session_id, docs, monkeypatch) -> None:
+    """Кнопка «Перегенерировать устаревшие» запускает фоновую задачу.
+
+    Раздел устарел, если изменился снимок контекста (источники, зависимости,
+    настройки плана). Повторный запуск без изменений ничего не трогает.
+    """
+    from app.services.projects import ProjectService
+    from app.services.section_agent import SectionAgent
+
+    async def fake_generate(self, db, *, section_plan, project, session, user,
+                            question, notes=None, word_target=None,
+                            use_cache=True, kind=None):
+        return ProjectService().apply_manual_section_text(
+            db, project, section_plan.name, f"Текст {section_plan.name}",
+            source="test")
+
+    monkeypatch.setattr(SectionAgent, "generate", fake_generate)
+
+    first = await _run_batch_regeneration(client, researcher, session_id, project_id)
+    assert first["total"] == 5
+    assert len(first["regenerated"]) == 5
+    assert not first["failed"]
+    assert first["regenerated"][0]["reasons"] == ["нет текущей версии"]
+
+    second = await _run_batch_regeneration(client, researcher, session_id, project_id)
+    assert second["regenerated"] == []
+    assert len(second["skipped"]) == 5
+
+    bound = await client.post(
+        f"/api/sessions/{session_id}/projects/{project_id}/documents",
+        json={"document_id": docs["data_id"], "role": "data"},
+        headers=researcher)
+    assert bound.status_code == 204, bound.text
+
+    third = await _run_batch_regeneration(client, researcher, session_id, project_id)
+    assert len(third["regenerated"]) == 5
+    assert all("источники изменились" in item["reasons"]
+               for item in third["regenerated"])
+

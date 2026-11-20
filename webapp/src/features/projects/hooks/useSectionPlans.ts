@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { client } from '../../../api/client'
-import type { SectionKind, SectionPlanStatus, BatchRegenerateResult } from '../../../api/types'
+import type { SectionKind, SectionPlanStatus } from '../../../api/types'
 
 export const sectionPlanKeys = {
   list: (sessionId: string, projectId: string) => ['section-plans', sessionId, projectId] as const,
@@ -16,7 +16,7 @@ export const sectionPlanKeys = {
   manuscript: (sessionId: string, projectId: string, language?: string) => ['manuscript', sessionId, projectId, language] as const,
 }
 
-function useInvalidateSectionPlans(sessionId: string, projectId: string) {
+export function useInvalidateSectionPlans(sessionId: string, projectId: string) {
   const queryClient = useQueryClient()
   return (): void => {
     queryClient.invalidateQueries({ queryKey: sectionPlanKeys.list(sessionId, projectId) })
@@ -246,10 +246,8 @@ export function useDeleteGlossaryEntry(sessionId: string, projectId: string) {
 // ============================================================ Batch Operations
 
 export function useBatchRegenerateSections(sessionId: string, projectId: string) {
-  const invalidate = useInvalidateSectionPlans(sessionId, projectId)
-  return useMutation<BatchRegenerateResult, Error, boolean, unknown>({
+  return useMutation<{ task_id: string }, Error, boolean, unknown>({
     mutationFn: (force = false) => client.batchRegenerateSections(sessionId, projectId, force),
-    onSuccess: (): void => { invalidate() },
   })
 }
 

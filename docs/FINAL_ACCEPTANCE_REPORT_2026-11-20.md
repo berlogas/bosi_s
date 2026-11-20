@@ -69,7 +69,7 @@
 
 ## 5. Верификация после очистки
 
-- backend: полный прогон `pytest tests` — **750 passed**, 2 skipped, 2 deselected,
+- backend: полный прогон `pytest tests` — **751 passed**, 2 skipped, 2 deselected,
   0 failures.
 - проекты/экспорт: `tests/test_projects_api.py` — 41 passed,
   `tests/test_export.py` — 31 passed;
@@ -77,6 +77,8 @@
 - frontend: `tsc -b`, `eslint` (0 errors, 1 существующее предупреждение React
   Compiler), `vitest` проектов — 28 passed;
 - OpenAPI-контракт совпадает с кодом;
+- кнопка «Перегенерировать устаревшие» исправлена: корректный снимок контекста
+  генерации, фоновые задачи с прогрессом, регрессионные тесты backend/frontend;
 - контейнеры пересобраны (`docker compose up -d --build backend webapp`):
   backend `healthy`, webapp отвечает 200; `GET /api/health` → 200; в открытом
   OpenAPI 100 путей, удалённых эндпоинтов нет, `/progress` на месте.

@@ -1756,7 +1756,7 @@ export interface paths {
         put?: never;
         /**
          * Batch Regenerate Sections
-         * @description Пакетная перегенерация устаревших разделов.
+         * @description Фоновая перегенерация устаревших разделов; возвращает `task_id`.
          *
          *     Payload:
          *     - force: bool (default false) — перегенерировать всё принудительно

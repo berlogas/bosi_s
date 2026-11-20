@@ -5,6 +5,8 @@ spikes/fixture_state.json
 *.pyc
 __pycache__/
 .env
+scripts/.envold
+.tmp/
 data/
 .test_data/
 backups/

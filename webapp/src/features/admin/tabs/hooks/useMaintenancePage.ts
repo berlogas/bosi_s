@@ -13,7 +13,7 @@ import {
   useResetState,
 } from '../../queries'
 import { useTask } from '../../../chat/queries'
-import type { ResetScope } from '../../../../api/client'
+import type { BackupEntry, ResetScope } from '../../../../api/client'
 
 export const RESET_SCOPES = [
   {
@@ -53,14 +53,35 @@ export function useMaintenancePage() {
     })
   }
 
+  const refetchBackups = backups.refetch
+
   useEffect(() => {
     const task = backupTask.data
     if (!backupTaskId || !task) return
     if (task.status === 'done') {
-      void queryClient.invalidateQueries({ queryKey: adminKeys.backups })
+      const result = task.result as
+        | { entry?: BackupEntry; deleted_old?: string[] }
+        | undefined
+      // Сначала кладём готовую копию в кэш: даже если перезапрос не дойдёт,
+      // пользователь сразу видит результат. Затем синхронизируем с сервером.
+      queryClient.setQueryData<{ backups: BackupEntry[] }>(
+        adminKeys.backups,
+        (old) => {
+          if (!old) return old
+          const removed = new Set(result?.deleted_old ?? [])
+          const kept = old.backups.filter(
+            (item) => !removed.has(item.name)
+                  && item.name !== result?.entry?.name)
+          return {
+            ...old,
+            backups: result?.entry ? [result.entry, ...kept] : kept,
+          }
+        },
+      )
+      void refetchBackups()
       notifications.show({
         title: 'Копия создана',
-        message: 'Резервная копия появилась в списке',
+        message: result?.entry?.name ?? 'Резервная копия появилась в списке',
         color: 'green',
       })
       setBackupTaskId(null)
@@ -72,7 +93,7 @@ export function useMaintenancePage() {
       })
       setBackupTaskId(null)
     }
-  }, [backupTask.data, backupTaskId, queryClient])
+  }, [backupTask.data, backupTaskId, queryClient, refetchBackups])
 
   useEffect(() => {
     if (backupTask.isError && backupTaskId) {

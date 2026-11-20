@@ -192,32 +192,25 @@ describe('раздел «Обслуживание»', () => {
   it('после создания список обновляется', async () => {
     loginAs(TEST_ADMIN)
     const calls: { url: string; init: RequestInit }[] = []
-    let created = false
+    const NEW = { ...BACKUP, name: 'boasi-20261008-130000.tar.gz' }
     mockApi(
       routes({
-        'GET /api/admin/backup': () =>
-          Promise.resolve(
-            json({
-              backups: created
-                ? [{ ...BACKUP, name: 'boasi-20261008-130000.tar.gz' }, BACKUP]
-                : [BACKUP],
-              plan: PLAN,
-            }),
-          ),
+        // сервер может ответить старым списком — кэш всё равно покажет копию
+        'GET /api/admin/backup': () => Promise.resolve(
+          json({ backups: [BACKUP], plan: PLAN }),
+        ),
         'POST /api/admin/backup': (url: string, init: RequestInit) => {
           calls.push({ url, init })
           return Promise.resolve(json({ task_id: 'bk-2' }))
         },
-        'GET /api/tasks/bk-2': () => {
-          created = true
-          return json({
-            id: 'bk-2', kind: 'backup', title: 'Резервная копия',
-            status: 'done', progress: 100, step: 'готово', error: null,
-            cancel_requested: false, user_id: 'u-admin', session_id: null,
-            project_id: null, created_at: null, started_at: null,
-            finished_at: null, seconds: 1, stage_seconds: null, result: null,
-          })
-        },
+        'GET /api/tasks/bk-2': () => json({
+          id: 'bk-2', kind: 'backup', title: 'Резервная копия',
+          status: 'done', progress: 100, step: 'готово', error: null,
+          cancel_requested: false, user_id: 'u-admin', session_id: null,
+          project_id: null, created_at: null, started_at: null,
+          finished_at: null, seconds: 1, stage_seconds: null,
+          result: { entry: NEW, deleted_old: [] },
+        }),
       }),
     )
     await openServiceTab()

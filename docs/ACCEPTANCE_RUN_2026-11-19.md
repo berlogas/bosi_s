@@ -77,17 +77,22 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
 - [x] 6.6. Abstract — task `e506502f-…`, 246 с, 194 слова, sources=5, ok
 - [x] 6.7. Все 6 разделов имеют привязанную версию (`current_version_id` не пустой),
       статус `review`, `GET …/section-plans` их показывает
+- [x] 6.8. References (продолжение цикла приёма) — task `0e1c7d12-…`, task done, ~270 с,
+      146 слов, sources=5, citations_ok=False; версия одобрена, финальная рукопись
+      собирается с References
 
 ## 7. Сборка и экспорт
 
 - [x] 7.1. Собрать рукопись `GET …/manuscript?include_unapproved=true` — 6 разделов,
-      `total_words=1569`, предупреждение: нет раздела References
-- [x] 7.2. Экспорт markdown — `.tmp/acceptance/exports/article.md`, 13376 символов,
+      `total_words=1569`, предупреждение: нет раздела References; после генерации
+      References (6.8) — финальная рукопись из одобренных версий: 7 разделов,
+      `total_words=1739`, sources=5, предупреждения только по Abstract и Conclusion
+- [x] 7.2. Экспорт markdown — `.tmp/acceptance/exports/final_article.md`, 24304 байт,
       заголовки: title, Abstract, Introduction, Methods, Results, Discussion, Conclusion,
       References
-- [x] 7.3. Экспорт docx — `article.docx`, 42846 байт, zip без повреждений (17 файлов),
+- [x] 7.3. Экспорт docx — `final_article.docx`, 43620 байт, zip без повреждений (17 файлов),
       `word/document.xml` ~29 КБ
-- [x] 7.4. Экспорт zip — `article.zip`, 47728 байт, 4 записи (md, docx, `references.bib`,
+- [x] 7.4. Экспорт zip — `final_article.zip`, 49294 байт, 4 записи (md, docx, `references.bib`,
       `references_paperqa.txt`), integrity ok
 - [x] 7.5. Экспорт непустой, содержит сгенерированные разделы
 
@@ -102,9 +107,11 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
       - `tests/test_projects_api.py` — 41 passed (включая новый регрессионный тест)
       - полный набор бэкенда: 749 passed, 1 failed, 2 skipped, 2 deselected
       - FAIL: `tests/test_fusion_api.py::test_summary_fallback_when_llm_scores_everything_zero`
-        (fallback-сводки в `EvidenceRetriever._evidence`) — не связан с правками
-        приёма (проверен изолированно, не затрагивается изменённым кодом); требует
-        отдельного разбора
+        (fallback-сводки в `EvidenceRetriever._evidence`) — исправлен в этой же
+        сессии приёма: тест не изолировал `evidence_skip_summary` (ambient `.env`
+        ставил `EVIDENCE_SKIP_SUMMARY=true`), из-за чего рантайм-ветка fallback не
+        доходила до повтора; тест переведён на `evidence_skip_summary=False` —
+        теперь проходит вместе с соседними fusion-тестами (6 passed)
 - [x] 8.3. Зафиксировать итоговое время ключевых операций (журнал прогона выше)
 
 ## Журнал прогона

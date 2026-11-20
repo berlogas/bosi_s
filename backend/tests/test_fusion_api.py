@@ -560,7 +560,8 @@ async def test_summary_fallback_when_llm_scores_everything_zero(
         return [] if skip_summary is None else ["fallback-ok"]
 
     monkeypatch.setattr(EvidenceRetriever, "_evidence_once", fake_once)
-    retriever = EvidenceRetriever(app=service_app)
+    retriever = EvidenceRetriever(app=service_app.model_copy(
+        update={"evidence_skip_summary": False}))
 
     result = await retriever._evidence("вопрос", "sid", SearchMode.hybrid, 10, _empty_catalog())
 

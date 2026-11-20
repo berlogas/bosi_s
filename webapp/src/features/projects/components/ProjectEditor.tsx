@@ -211,7 +211,7 @@ export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectE
           <Accordion.Control>
             <Group>
               <IconFiles size={16} />
-              <Text fw={500}>План разделов (новая система)</Text>
+              <Text fw={500}>План разделов</Text>
             </Group>
           </Accordion.Control>
           <Accordion.Panel>

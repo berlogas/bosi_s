@@ -181,7 +181,7 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
                 />
               )}
               {kind === 'section' && sectionChoices.length === 0 && (
-                <Text size="sm" c="dimmed">Нет разделов для генерации. Создайте план в разделе «План разделов (новая система)» или нажмите «Предложить по стилю журнала».</Text>
+                <Text size="sm" c="dimmed">Нет разделов для генерации. Создайте план в разделе «План разделов» или нажмите «Предложить по стилю журнала».</Text>
               )}
               <TextInput
                 label="Вопрос или тема"

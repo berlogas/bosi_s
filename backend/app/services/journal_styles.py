@@ -39,6 +39,9 @@ class StyleTemplate:
     sections: tuple[str, ...]
     prompt: str
     path: Path
+    # Рекомендованные объёмы разделов от стиля/сообщества (секция -> слова).
+    # Без данных — fallback 500 слов (историческое поведение).
+    word_counts: dict[str, int] = field(default_factory=dict)
 
     def matches(self, section: str) -> bool:
         """Подходит ли шаблон разделу — по вхождению слова в название.
@@ -138,13 +141,22 @@ def _build_style(meta: dict[str, Any]) -> JournalStyle | None:
         except (OSError, UnicodeDecodeError):
             continue
         prompt = raw.strip()
+        word_counts_raw = item.get("word_counts") or {}
+        word_counts: dict[str, int] = {}
+        if isinstance(word_counts_raw, dict):
+            for section_key, section_value in word_counts_raw.items():
+                try:
+                    word_counts[str(section_key).strip().lower()] = max(1, int(section_value))
+                except (TypeError, ValueError):
+                    continue
         templates.append(StyleTemplate(
             file=file_name,
             label=str(item.get("label") or file_name).strip(),
             sections=tuple(str(word).strip().lower()
                            for word in item.get("sections", []) if str(word).strip()),
             prompt=prompt,
-            path=path))
+            path=path,
+            word_counts=word_counts))
     if not templates:
         return None
     return JournalStyle(key=key, title=title, summary=summary,
@@ -242,7 +254,7 @@ def get_suggested_section_plan(style_key: str | None) -> list[dict[str, Any]]:
             "name": section_name.strip().title(),
             "kind": kind,
             "order": order,
-            "word_target": 500,
+            "word_target": int(template.word_counts.get(clean, 500)),
             "notes": "",
             "required": True,
             "language": "ru",

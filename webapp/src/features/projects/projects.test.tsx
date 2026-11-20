@@ -504,7 +504,7 @@ describe('вкладка Проекты', () => {
       await screen.findByRole('button', { name: 'Документы проекта' }),
     )
     await userEvent.click(
-      await screen.findByRole('button', { name: 'План разделов (новая система)' }),
+      await screen.findByRole('button', { name: 'План разделов' }),
     )
     await userEvent.click(
       await screen.findByRole('button', { name: 'Синхронизировать из JSON' }),
@@ -533,7 +533,7 @@ describe('вкладка Проекты', () => {
       await screen.findByRole('button', { name: 'Документы проекта' }),
     )
     await userEvent.click(
-      await screen.findByRole('button', { name: 'План разделов (новая система)' }),
+      await screen.findByRole('button', { name: 'План разделов' }),
     )
     await userEvent.click(
       await screen.findByRole('button', { name: 'Добавить раздел' }),

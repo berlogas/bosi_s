@@ -82,6 +82,7 @@ default_template = "clinical_standard.md"
 file = "clinical_standard.md"
 label = "Клиническое исследование"
 sections = ["abstract", "introduction", "methods", "results", "discussion", "conclusion", "references"]
+word_counts = { abstract = 250, introduction = 350, methods = 400, results = 300, discussion = 350, conclusion = 250, references = 150 }
 
 [[styles.templates]]
 file = "clinical_trial.md"

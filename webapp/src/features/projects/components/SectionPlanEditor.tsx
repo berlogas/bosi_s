@@ -39,6 +39,13 @@ const STATUS_COLORS: Record<string, string> = {
   approved: 'green',
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Ожидает',
+  in_progress: 'В работе',
+  review: 'На ревью',
+  approved: 'Утверждён',
+}
+
 const KIND_OPTIONS = Object.entries(KIND_LABELS).map(([value, label]) => ({ value, label }))
 
 interface PlanDraft {
@@ -392,7 +399,7 @@ function SortablePlanRow({
       </td>
       <td style={{ width: 100 }}>
         <Badge variant="light" color={STATUS_COLORS[plan.status] || 'gray'} size="xs">
-          {plan.status}
+          {STATUS_LABELS[plan.status] || plan.status}
         </Badge>
       </td>
       <td style={{ width: 80 }}>

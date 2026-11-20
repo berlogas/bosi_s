@@ -703,7 +703,7 @@
           "admin"
         ],
         "summary": "Create Backup",
-        "description": "Снять копию.\n\nФразы подтверждения здесь нет намеренно: операция неразрушающая, её\nплатный исход — свободное место (оценка видна в плане), и всё, что может\nпойти не так, проверяется до записи.",
+        "description": "Снять копию в фоне; возвращает `task_id` для отслеживания прогресса.\n\nФразы подтверждения здесь нет намеренно: операция неразрушающая, её\nплатный исход — свободное место (оценка видна в плане), и всё, что может\nпойти не так, проверяется до запуска задачи.",
         "operationId": "create_backup_api_admin_backup_post",
         "requestBody": {
           "content": {
@@ -721,7 +721,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BackupResultOut"
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Backup Api Admin Backup Post"
                 }
               }
             }
@@ -6717,31 +6719,6 @@
           "db_exists"
         ],
         "title": "BackupPlanOut"
-      },
-      "BackupResultOut": {
-        "properties": {
-          "entry": {
-            "$ref": "#/components/schemas/BackupEntryOut"
-          },
-          "deleted_old": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Deleted Old"
-          },
-          "restore_hint": {
-            "type": "string",
-            "title": "Restore Hint"
-          }
-        },
-        "type": "object",
-        "required": [
-          "entry",
-          "deleted_old",
-          "restore_hint"
-        ],
-        "title": "BackupResultOut"
       },
       "Body_bulk_upload_api_admin_documents_bulk_upload_post": {
         "properties": {

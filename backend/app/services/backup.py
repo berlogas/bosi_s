@@ -27,6 +27,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -367,10 +368,20 @@ def run_backup(
     keep: int | None = None,
     settings: Settings | None = None,
     actor: Any = None,
+    on_progress: Callable[[int, str], None] | None = None,
 ) -> BackupResult:
-    """Снять копию. Возвращает созданный архив и что было удалено по ротации."""
+    """Снять копию. Возвращает созданный архив и что было удалено по ротации.
+
+    `on_progress` получает процент (0–100) и подпись этапа — так админка
+    показывает ход создания копии, а не «тихое ожидание» в течение минут.
+    """
     import json
 
+    def report(percent: int, step: str) -> None:
+        if on_progress is not None:
+            on_progress(percent, step)
+
+    report(5, "подготовка")
     settings = settings or get_settings()
     backup_dir = settings.resolved_backup_dir
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -388,10 +399,12 @@ def run_backup(
         tmp = Path(tmpdir)
 
         # 1. снимок БД
+        report(10, "снимок базы данных")
         snapshot = tmp / SNAPSHOT_NAME
         snapshot_taken = _snapshot_db(settings, snapshot)
 
         # 2. манифест
+        report(25, "сборка манифеста")
         manifest = _build_manifest(settings, snapshot_taken, len(files))
         (tmp / MANIFEST_NAME).write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -399,16 +412,20 @@ def run_backup(
         # 3. архив: сначала пишем во временный файл и только потом переносим
         #    на место — иначе прерванный бэкап остался бы «полноценным».
         try:
+            report(30, "архивирование файлов")
             with tarfile.open(partial, "w:gz", compresslevel=6) as tar:
                 tar.add(tmp / MANIFEST_NAME, arcname=MANIFEST_NAME)
                 if snapshot_taken:
                     tar.add(snapshot, arcname=SNAPSHOT_NAME)
-                for path in files:
+                for index, path in enumerate(files, 1):
                     try:
                         tar.add(path, arcname=str(path.relative_to(settings.data_dir)))
                     except (OSError, ValueError) as exc:
                         # один недоступный файл не должен срывать весь бэкап
                         log.warning("пропущен файл %s: %s", path, exc)
+                    report(30 + 50 * index // max(len(files), 1),
+                           f"архивирование файлов ({index}/{len(files)})")
+            report(82, "проверка архива")
             if snapshot_taken and not _archive_has(partial, SNAPSHOT_NAME):
                 raise RuntimeError("в архив не попал снимок БД")
             partial.replace(archive)
@@ -417,10 +434,13 @@ def run_backup(
             raise
 
     # 4. контрольная сумма
+    report(88, "контрольная сумма")
     _write_sha256(archive)
 
     # 5. ротация
+    report(94, "ротация старых копий")
     deleted = _prune(backup_dir, keep=keep, protect=archive)
+    report(100, "готово")
 
     entry = list_backups(settings)[0] if list_backups(settings) else BackupEntry(
         name=name, path=str(archive), bytes=archive.stat().st_size,

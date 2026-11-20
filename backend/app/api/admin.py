@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
@@ -23,7 +24,6 @@ from app.schemas.api import (
     AuditLogOut,
     BackupCreateRequest,
     BackupListOut,
-    BackupResultOut,
     CreateUserRequest,
     InboxFileOut,
     InboxRunOut,
@@ -273,19 +273,21 @@ def list_backups(
     }
 
 
-@router.post("/backup", response_model=BackupResultOut)
-def create_backup(
+@router.post("/backup", response_model=dict)
+async def create_backup(
     payload: BackupCreateRequest,
     request: Request,
     actor: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Снять копию.
+    """Снять копию в фоне; возвращает `task_id` для отслеживания прогресса.
 
     Фразы подтверждения здесь нет намеренно: операция неразрушающая, её
     платный исход — свободное место (оценка видна в плане), и всё, что может
-    пойти не так, проверяется до записи.
+    пойти не так, проверяется до запуска задачи.
     """
+    from app.services.tasks import Task, tasks
+
     plan = plan_backup()
     if not plan.db_exists:
         raise ConflictError(
@@ -295,23 +297,48 @@ def create_backup(
         raise ConflictError(
             f"Не хватает места: свободно {plan.free_human}, "
             f"копия займёт около {plan.estimated_human}")
-    try:
-        result = backup_service.run_backup(
-            keep=payload.keep, actor=actor)
-    except OSError as exc:
-        raise UpstreamError(f"Не удалось создать копию: {exc}") from exc
-    audit(
-        db,
-        action="admin.backup.create",
-        actor=actor,
-        target_type="backup",
-        target_id=result.entry.name,
-        **_client_meta(request),
-        bytes=result.entry.bytes,
-        deleted_old=result.deleted_old,
-        data_dir=plan.data_dir,
-    )
-    return result.as_dict()
+
+    keep = payload.keep
+    actor_id = actor.id
+    client_meta = _client_meta(request)
+
+    async def body(task: Task) -> dict[str, Any]:
+        from app.db.session import get_session_factory
+
+        bg_db = get_session_factory()()
+        try:
+            task.set_stage(5, "подготовка")
+
+            def on_progress(percent: int, step: str) -> None:
+                task.set_stage(percent, step)
+
+            try:
+                result = backup_service.run_backup(
+                    keep=keep, actor=None, on_progress=on_progress)
+            except asyncio.CancelledError:
+                raise
+            except OSError as exc:
+                raise UpstreamError(f"Не удалось создать копию: {exc}") from exc
+
+            bg_actor = bg_db.get(User, actor_id)
+            audit(
+                bg_db,
+                action="admin.backup.create",
+                actor=bg_actor,
+                target_type="backup",
+                target_id=result.entry.name,
+                **client_meta,
+                bytes=result.entry.bytes,
+                deleted_old=result.deleted_old,
+                data_dir=plan.data_dir,
+            )
+            return result.as_dict()
+        finally:
+            bg_db.close()
+
+    task = tasks.submit(body, kind="backup", title="Резервная копия",
+                        user_id=actor.id)
+    return {"task_id": task.id}
 
 
 @router.delete("/backup/{name}", status_code=status.HTTP_204_NO_CONTENT)

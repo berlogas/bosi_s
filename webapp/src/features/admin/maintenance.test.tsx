@@ -143,14 +143,15 @@ describe('раздел «Обслуживание»', () => {
       routes({
         'POST /api/admin/backup': (url: string, init: RequestInit) => {
           calls.push({ url, init })
-          return Promise.resolve(
-            json({
-              entry: BACKUP,
-              deleted_old: [],
-              restore_hint: './scripts/restore.sh',
-            }),
-          )
+          return Promise.resolve(json({ task_id: 'bk-1' }))
         },
+        'GET /api/tasks/bk-1': () => json({
+          id: 'bk-1', kind: 'backup', title: 'Резервная копия',
+          status: 'running', progress: 10, step: 'подготовка', error: null,
+          cancel_requested: false, user_id: 'u-admin', session_id: null,
+          project_id: null, created_at: null, started_at: null,
+          finished_at: null, seconds: null, stage_seconds: null, result: null,
+        }),
       }),
     )
     await openServiceTab()
@@ -175,7 +176,7 @@ describe('раздел «Обслуживание»', () => {
       routes({
         'POST /api/admin/backup': (url: string, init: RequestInit) => {
           calls.push({ url, init })
-          return Promise.resolve(json({ entry: BACKUP, deleted_old: [] }))
+          return Promise.resolve(json({ task_id: 'bk-cancel' }))
         },
       }),
     )
@@ -205,17 +206,17 @@ describe('раздел «Обслуживание»', () => {
           ),
         'POST /api/admin/backup': (url: string, init: RequestInit) => {
           calls.push({ url, init })
+          return Promise.resolve(json({ task_id: 'bk-2' }))
+        },
+        'GET /api/tasks/bk-2': () => {
           created = true
-          return Promise.resolve(
-            json({
-              entry: {
-                ...BACKUP,
-                name: 'boasi-20261008-130000.tar.gz',
-              },
-              deleted_old: ['boasi-20261007-120000.tar.gz'],
-              restore_hint: './scripts/restore.sh',
-            }),
-          )
+          return json({
+            id: 'bk-2', kind: 'backup', title: 'Резервная копия',
+            status: 'done', progress: 100, step: 'готово', error: null,
+            cancel_requested: false, user_id: 'u-admin', session_id: null,
+            project_id: null, created_at: null, started_at: null,
+            finished_at: null, seconds: 1, stage_seconds: null, result: null,
+          })
         },
       }),
     )
@@ -450,11 +451,16 @@ describe('раздел «Обслуживание»', () => {
           json({ backups: created ? [NEW, BACKUP] : [BACKUP], plan: PLAN }),
         )
       },
-      'POST /api/admin/backup': () => {
+      'POST /api/admin/backup': () => Promise.resolve(json({ task_id: 'bk-3' })),
+      'GET /api/tasks/bk-3': () => {
         created = true
-        return Promise.resolve(
-          json({ entry: NEW, deleted_old: [], restore_hint: './scripts/restore.sh' }),
-        )
+        return json({
+          id: 'bk-3', kind: 'backup', title: 'Резервная копия',
+          status: 'done', progress: 100, step: 'готово', error: null,
+          cancel_requested: false, user_id: 'u-admin', session_id: null,
+          project_id: null, created_at: null, started_at: null,
+          finished_at: null, seconds: 1, stage_seconds: null, result: null,
+        })
       },
     })
 
@@ -476,4 +482,56 @@ describe('раздел «Обслуживание»', () => {
     await waitFor(() => expect(screen.getByText(NEW.name)).toBeInTheDocument())
     expect(gets).toBeGreaterThan(1)
   })
+
+  it('показывает прогресс создания копии', async () => {
+    loginAs(TEST_ADMIN)
+    let polls = 0
+    const makeTask = (patch: Record<string, unknown> = {}) => ({
+      id: 'bk-progress',
+      kind: 'backup',
+      title: 'Резервная копия',
+      status: 'running',
+      progress: 45,
+      step: 'архивирование файлов (3/10)',
+      error: null,
+      cancel_requested: false,
+      user_id: 'u-admin',
+      session_id: null,
+      project_id: null,
+      created_at: null,
+      started_at: null,
+      finished_at: null,
+      seconds: 5,
+      stage_seconds: 1,
+      result: null,
+      ...patch,
+    })
+    mockApi(routes({
+      'POST /api/admin/backup': () => json({ task_id: 'bk-progress' }),
+      'GET /api/tasks/bk-progress': () => {
+        polls += 1
+        return json(polls < 2
+          ? makeTask()
+          : makeTask({
+              status: 'done',
+              progress: 100,
+              step: 'готово',
+              result: { entry: BACKUP, deleted_old: [] },
+            }))
+      },
+    }))
+    await openServiceTab()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Да, создать копию' }),
+    )
+
+    expect(await screen.findByText(/Создание копии…/)).toBeInTheDocument()
+    expect(await screen.findByText('архивирование файлов (3/10)')).toBeInTheDocument()
+    expect(await screen.findByText('45%')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByText(/Создание копии…/)).toBeNull())
+  })
+
 })

@@ -15,6 +15,7 @@ import {
   Paper,
   Checkbox,
   Modal,
+  Progress,
 } from '@mantine/core'
 
 import { useMaintenancePage, RESET_SCOPES } from './hooks/useMaintenancePage'
@@ -32,6 +33,8 @@ export default function MaintenancePage() {
   const {
     backups,
     create,
+    backupTask,
+    backupBusy,
     remove,
     plan,
     scope,
@@ -134,7 +137,8 @@ export default function MaintenancePage() {
       <Group>
         <Button
           onClick={() => setAskBackup(true)}
-          disabled={backups.isPending || planInfo?.db_exists === false}
+          disabled={backups.isPending || planInfo?.db_exists === false || backupBusy}
+          loading={backupBusy}
         >
           Создать копию…
         </Button>
@@ -153,6 +157,19 @@ export default function MaintenancePage() {
         </Alert>
       )}
 
+      {backupBusy && (
+        <Paper withBorder p="sm" role="status">
+          <Group justify="space-between" mb={6}>
+            <Text size="sm" fw={500}>Создание копии…</Text>
+            <Text size="sm" c="dimmed">{backupTask.data?.progress ?? 0}%</Text>
+          </Group>
+          <Progress value={backupTask.data?.progress ?? 0} animated />
+          <Text size="xs" c="dimmed" mt={6}>
+            {backupTask.data?.step ?? 'Задача запускается'}
+          </Text>
+        </Paper>
+      )}
+
       {/* Копия снимается на сервере и может идти минуты — подтверждаем,
           что это действительно нужно. */}
       <Modal
@@ -165,6 +182,7 @@ export default function MaintenancePage() {
           <Text size="sm">
             Копия снимается на сервере: база данных и файлы документов. На больших
             данных это может занять минуты. Старые копии сверх лимита будут удалены.
+            После запуска под кнопкой появится прогресс с текущим этапом.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setAskBackup(false)}>
@@ -172,7 +190,7 @@ export default function MaintenancePage() {
             </Button>
             <Button
               color="red"
-              loading={create.isPending}
+              loading={backupBusy}
               onClick={() => {
                 setAskBackup(false)
                 handleCreateBackup()

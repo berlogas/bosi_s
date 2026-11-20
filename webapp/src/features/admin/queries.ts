@@ -332,14 +332,10 @@ export function useBackups() {
   })
 }
 
-/** Снять копию. После успеха перечитываем список. */
+/** Запустить создание копии: возвращает task_id, список обновим по завершении. */
 export function useCreateBackup() {
-  const queryClient = useQueryClient()
-  return useMutation({
+  return useMutation<{ task_id: string }, Error, number | undefined, unknown>({
     mutationFn: (keep?: number) => client.adminCreateBackup(keep),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: adminKeys.backups })
-    },
   })
 }
 

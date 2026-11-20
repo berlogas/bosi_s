@@ -218,6 +218,22 @@ def test_delete_rejects_bad_names(env, name: str) -> None:
         backup_service.delete_backup(name, settings=env)
 
 
+
+async def _wait_backup_task(task_id: str, timeout: float = 10.0):
+    """Дождаться фоновой задачи создания копии."""
+    import asyncio
+
+    from app.services.tasks import tasks
+
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        task = tasks.get(task_id)
+        if task is not None and task.finished:
+            assert task.status.value == "done", task.error
+            return task
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"задача {task_id} не завершилась за {timeout} с")
+
 # -------------------------------------------------------------------- API
 async def test_backup_list_endpoint(client, admin_user, env, monkeypatch) -> None:
     import app.services.backup as svc
@@ -248,7 +264,8 @@ async def test_backup_create_needs_no_confirmation_phrase(client, admin_user,
     response = await client.post("/api/admin/backup", json={}, headers=headers)
 
     assert response.status_code == 200, response.text
-    assert response.json()["entry"]["has_manifest"] is True
+    body = (await _wait_backup_task(response.json()["task_id"])).result
+    assert body["entry"]["has_manifest"] is True
 
 
 async def test_backup_create_works(client, admin_user, env, monkeypatch) -> None:
@@ -264,7 +281,7 @@ async def test_backup_create_works(client, admin_user, env, monkeypatch) -> None
                                  json={"keep": 5}, headers=headers)
 
     assert response.status_code == 200, response.text
-    body = response.json()
+    body = (await _wait_backup_task(response.json()["task_id"])).result
     assert body["entry"]["has_manifest"] is True
     assert body["entry"]["has_sha256"] is True
     assert "restore.sh" in body["restore_hint"]
@@ -322,3 +339,39 @@ def test_two_backups_in_one_second_do_not_collide(env) -> None:
     assert first.entry.name != second.entry.name
     assert Path(first.entry.path).exists()
     assert Path(second.entry.path).exists()
+
+async def test_backup_task_reports_progress(client, admin_user, env,
+                                            monkeypatch) -> None:
+    """Админка видит этапы создания копии, а не тихое ожидание."""
+    import app.api.admin as admin_api
+    import app.services.backup as svc
+    from tests.conftest import login_headers
+
+    monkeypatch.setattr(admin_api, "plan_backup", lambda *a, **k: svc.plan_backup(env))
+    monkeypatch.setattr(svc, "get_settings", lambda: env)
+    headers = await login_headers(client, "admin", "admin-pass-123")
+
+    steps: list[tuple[int, str]] = []
+    original_run = svc.run_backup
+
+    def spy_run(*args, **kwargs):
+        inner = kwargs.pop("on_progress", None)
+
+        def report(percent: int, step: str) -> None:
+            steps.append((percent, step))
+            if inner is not None:
+                inner(percent, step)
+
+        return original_run(*args, **kwargs, on_progress=report)
+
+    monkeypatch.setattr(svc, "run_backup", spy_run)
+
+    response = await client.post("/api/admin/backup", json={}, headers=headers)
+    assert response.status_code == 200, response.text
+    task = await _wait_backup_task(response.json()["task_id"])
+
+    assert steps[0][1] == "подготовка"
+    assert steps[-1] == (100, "готово")
+    assert any("архивирование" in step for _, step in steps)
+    assert task.progress == 100
+

@@ -183,7 +183,7 @@ LLM `ollama/ministral-3:3b` на CPU, эмбеддинги `st-intfloat/multilin
       и связанный хук удалены.
 - [x] 9.5. Проверки после очистки: `tests/test_projects_api.py` — 41 passed,
       `tests/test_export.py` — 31 passed, TypeScript/lint/визуальные тесты
-      проектов чисты; полный backend-прогон: **751 passed**, 2 skipped,
+      проектов чисты; полный backend-прогон: **752 passed**, 2 skipped,
       2 deselected (0 failures).
 
 Статус предыдущих шагов (0–8) не изменился: приёмочный цикл «данные → генерация →

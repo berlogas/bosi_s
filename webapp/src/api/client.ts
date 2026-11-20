@@ -63,11 +63,10 @@ type ResetScope = components['schemas']['ResetRequest']['scope']
 type ResetPlan = components['schemas']['ResetPlanOut']
 type ResetResult = components['schemas']['ResetResultOut']
 
-/** Резервные копии: список + план следующей + результат создания. */
+/** Резервные копии: список + план следующей. */
 type BackupEntry = components['schemas']['BackupEntryOut']
 type BackupPlan = components['schemas']['BackupPlanOut']
 type BackupListing = components['schemas']['BackupListOut']
-type BackupResult = components['schemas']['BackupResultOut']
 
 /** Inbox: папка-приёмник и журнал прогонов массового добавления. */
 type InboxFile = components['schemas']['InboxFileOut']
@@ -78,7 +77,6 @@ export type {
   BackupEntry,
   BackupListing,
   BackupPlan,
-  BackupResult,
   InboxFile,
   InboxRun,
   InboxStatus,
@@ -1304,15 +1302,11 @@ class ApiClient {
     return this.request('/api/admin/backup', { timeoutMs: 60_000 })
   }
 
-  /**
-   * Снять копию. На больших данных операция долгая, поэтому таймаут
-   * увеличен до 10 минут — как и у реиндексации.
-   */
-  adminCreateBackup(keep?: number): Promise<BackupResult> {
+  /** Снять копию: возвращает task_id, прогресс виден через /api/tasks/{id}. */
+  adminCreateBackup(keep?: number): Promise<{ task_id: string }> {
     return this.request('/api/admin/backup', {
       method: 'POST',
       json: { keep },
-      timeoutMs: 600_000,
     })
   }
 

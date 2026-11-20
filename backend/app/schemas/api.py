@@ -635,12 +635,6 @@ class BackupCreateRequest(BaseModel):
     keep: int | None = Field(default=None, ge=0, le=500)
 
 
-class BackupResultOut(BaseModel):
-    entry: BackupEntryOut
-    deleted_old: list[str]
-    restore_hint: str
-
-
 # --------------------------------------------------------------------------- inbox
 class InboxFileOut(ORMModel):
     """Строка журнала: что с файлом и — если не сложилось — почему."""

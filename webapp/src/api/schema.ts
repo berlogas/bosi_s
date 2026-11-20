@@ -236,11 +236,11 @@ export interface paths {
         put?: never;
         /**
          * Create Backup
-         * @description Снять копию.
+         * @description Снять копию в фоне; возвращает `task_id` для отслеживания прогресса.
          *
          *     Фразы подтверждения здесь нет намеренно: операция неразрушающая, её
          *     платный исход — свободное место (оценка видна в плане), и всё, что может
-         *     пойти не так, проверяется до записи.
+         *     пойти не так, проверяется до запуска задачи.
          */
         post: operations["create_backup_api_admin_backup_post"];
         delete?: never;
@@ -2187,14 +2187,6 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
-        /** BackupResultOut */
-        BackupResultOut: {
-            entry: components["schemas"]["BackupEntryOut"];
-            /** Deleted Old */
-            deleted_old: string[];
-            /** Restore Hint */
-            restore_hint: string;
-        };
         /** Body_bulk_upload_api_admin_documents_bulk_upload_post */
         Body_bulk_upload_api_admin_documents_bulk_upload_post: {
             /** Files */
@@ -3936,7 +3928,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BackupResultOut"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

@@ -76,7 +76,10 @@
 - ruff (F401/F821) на изменённых файлах — без ошибок;
 - frontend: `tsc -b`, `eslint` (0 errors, 1 существующее предупреждение React
   Compiler), `vitest` проектов — 28 passed;
-- OpenAPI-контракт совпадает с кодом.
+- OpenAPI-контракт совпадает с кодом;
+- контейнеры пересобраны (`docker compose up -d --build backend webapp`):
+  backend `healthy`, webapp отвечает 200; `GET /api/health` → 200; в открытом
+  OpenAPI 100 путей, удалённых эндпоинтов нет, `/progress` на месте.
 
 ## 6. Итог
 

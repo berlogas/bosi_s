@@ -204,7 +204,7 @@ async def test_full_session_scenario(scenario, db_engine, tmp_path) -> None:
     restarted = new_service()
     assert restarted.list_documents() == []
 
-    restored, stale = await restarted.restore_state()
+    restored, _ = await restarted.restore_state()
     assert restored == 3
     assert len(restarted.list_documents()) == 3
 

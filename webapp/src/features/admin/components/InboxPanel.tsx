@@ -7,15 +7,7 @@
  */
 
 import { useState } from 'react'
-import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Paper,
-  Stack,
-  Text,
-} from '@mantine/core'
+import { Alert, Badge, Button, Group, Paper, Stack, Text } from '@mantine/core'
 import { SkeletonList } from '../../../components/SkeletonList'
 import {
   useClearJournal,

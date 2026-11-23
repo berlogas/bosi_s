@@ -498,17 +498,17 @@ async def test_upload_async_reports_failures_per_file(client, researcher,
         assert task.result["failed"] or task.result["added"]
 
 
-async def _wait_task(tasks, task_id: str, timeout: float = 30.0):
+async def _wait_task(tasks, task_id: str, wait_seconds: float = 30.0):
     """Дождаться завершения фоновой задачи."""
     import asyncio
 
-    deadline = asyncio.get_running_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + wait_seconds
     while asyncio.get_running_loop().time() < deadline:
         task = tasks.get(task_id)
         if task is not None and task.finished:
             return task
         await asyncio.sleep(0.05)
-    raise AssertionError(f"задача {task_id} не завершилась за {timeout}с")
+    raise AssertionError(f"задача {task_id} не завершилась за {wait_seconds}с")
 
 
 async def test_add_document_by_path_can_force_reindex(client, researcher,

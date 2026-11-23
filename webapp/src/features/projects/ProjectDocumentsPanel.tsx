@@ -3,7 +3,20 @@
  * и превью в Drawer.
  */
 
-import { Badge, Button, Drawer, Divider, Group, Paper, Select, Stack, Table, Text, TextInput, UnstyledButton } from '@mantine/core'
+import {
+  Badge,
+  Button,
+  Drawer,
+  Divider,
+  Group,
+  Paper,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  UnstyledButton,
+} from '@mantine/core'
 import { useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -24,11 +37,7 @@ import {
 import { MarkdownText } from '../../components/MarkdownText'
 import { docRoleLabel, docRoleOptions, DOC_ROLES } from '../../lib/projectOptions'
 import type { DocumentOut } from '../../api/types'
-import {
-  useBindDocument,
-  useProjectDocuments,
-  useUnbindDocument,
-} from './queries'
+import { useBindDocument, useProjectDocuments, useUnbindDocument } from './queries'
 import { useSessionDocuments } from '../documents/queries'
 
 interface ProjectDocumentsPanelProps {
@@ -105,7 +114,13 @@ function renderPreviewContent(doc: DocumentOut) {
     filename.match(/\.(md|txt|py|js|ts|json|yaml|yml)$/i)
   ) {
     return (
-      <div style={{ padding: 'var(--mantine-spacing-md)', maxHeight: 400, overflow: 'auto' }}>
+      <div
+        style={{
+          padding: 'var(--mantine-spacing-md)',
+          maxHeight: 400,
+          overflow: 'auto',
+        }}
+      >
         <MarkdownText
           text={
             `**${doc.title ?? doc.dockey}**\n\n` +
@@ -193,11 +208,21 @@ function FreeDocumentRow({
       {getDocumentIcon(document.mime, document.filename)}
       <Text
         size="sm"
-        style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
       >
         {document.title ?? document.docname ?? document.dockey}
       </Text>
-      {document.category && <Badge variant="light" size="xs">{document.category}</Badge>}
+      {document.category && (
+        <Badge variant="light" size="xs">
+          {document.category}
+        </Badge>
+      )}
       {isChosen ? (
         <Select
           data={docRoleOptions(DOC_ROLES)}
@@ -280,13 +305,20 @@ export function ProjectDocumentsPanel({
     // Сначала отвязываем, потом привязываем с новой ролью
     unbind.mutate(documentId, {
       onSuccess: () => {
-        bind.mutate({ documentId, role: newRole }, {
-          onError: (cause) =>
-            setDocError(cause instanceof Error ? cause.message : 'Не удалось сменить роль'),
-        })
+        bind.mutate(
+          { documentId, role: newRole },
+          {
+            onError: (cause) =>
+              setDocError(
+                cause instanceof Error ? cause.message : 'Не удалось сменить роль',
+              ),
+          },
+        )
       },
       onError: (cause) =>
-        setDocError(cause instanceof Error ? cause.message : 'Не удалось отвязать для смены роли'),
+        setDocError(
+          cause instanceof Error ? cause.message : 'Не удалось отвязать для смены роли',
+        ),
     })
     setEditingRole(null)
   }
@@ -314,7 +346,9 @@ export function ProjectDocumentsPanel({
 
       {docError && (
         <div role="alert">
-          <Text size="sm" c="error">{docError}</Text>
+          <Text size="sm" c="error">
+            {docError}
+          </Text>
         </div>
       )}
 
@@ -324,68 +358,80 @@ export function ProjectDocumentsPanel({
           <Text size="xs" c="dimmed" fw={500}>
             Привязанные к проекту
           </Text>
-          {(boundItems as Array<{ document: DocumentOut; role: string }>).map((item) => (
-            <motion.div
-              key={item.document.id}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Paper
-                withBorder
-                p="xs"
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
+          {(boundItems as Array<{ document: DocumentOut; role: string }>).map(
+            (item) => (
+              <motion.div
+                key={item.document.id}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
               >
-                {getDocumentIcon(item.document.mime, item.document.filename)}
-                <Text size="sm" style={{ flex: 1, minWidth: 0 }}>
-                  {item.document.title ?? item.document.dockey}
-                </Text>
-                {editingRole === item.document.id ? (
-                  <Select
-                    data={docRoleOptions(DOC_ROLES)}
-                    value={item.role}
-                    onChange={(value) => value && handleRoleChange(item.document.id, value)}
-                    onBlur={() => setEditingRole(null)}
-                    autoFocus
-                    disabled={readOnly}
-                    allowDeselect={false}
-                    w={180}
-                    size="sm"
-                  />
-                ) : (
-                  <Group gap="xs">
-                    <Badge
-                      variant="light"
-                      size="xs"
-                      onClick={() => setEditingRole(item.document.id)}
-                      style={{ cursor: readOnly ? 'default' : 'pointer' }}
-                    >
-                      {docRoleLabel(item.role)}
-                      {!readOnly && <IconEdit size={10} style={{ marginLeft: 4 }} />}
-                    </Badge>
-                    <Button
-                      size="compact-xs"
-                      color="error"
-                      variant="subtle"
-                      disabled={readOnly}
-                      loading={unbind.isPending && unbind.variables === item.document.id}
-                      onClick={() =>
-                        unbind.mutate(item.document.id as string, {
-                          onError: (cause) =>
-                            setDocError(
-                              cause instanceof Error ? cause.message : 'Не удалось отвязать',
-                            ),
-                        })
+                <Paper
+                  withBorder
+                  p="xs"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--mantine-spacing-sm)',
+                  }}
+                >
+                  {getDocumentIcon(item.document.mime, item.document.filename)}
+                  <Text size="sm" style={{ flex: 1, minWidth: 0 }}>
+                    {item.document.title ?? item.document.dockey}
+                  </Text>
+                  {editingRole === item.document.id ? (
+                    <Select
+                      data={docRoleOptions(DOC_ROLES)}
+                      value={item.role}
+                      onChange={(value) =>
+                        value && handleRoleChange(item.document.id, value)
                       }
-                      aria-label={`Отвязать ${item.document.title ?? item.document.dockey}`}
-                    >
-                      <IconTrash size={12} />
-                    </Button>
-                  </Group>
-                )}
-              </Paper>
-            </motion.div>
-          ))}
+                      onBlur={() => setEditingRole(null)}
+                      autoFocus
+                      disabled={readOnly}
+                      allowDeselect={false}
+                      w={180}
+                      size="sm"
+                    />
+                  ) : (
+                    <Group gap="xs">
+                      <Badge
+                        variant="light"
+                        size="xs"
+                        onClick={() => setEditingRole(item.document.id)}
+                        style={{ cursor: readOnly ? 'default' : 'pointer' }}
+                      >
+                        {docRoleLabel(item.role)}
+                        {!readOnly && <IconEdit size={10} style={{ marginLeft: 4 }} />}
+                      </Badge>
+                      <Button
+                        size="compact-xs"
+                        color="error"
+                        variant="subtle"
+                        disabled={readOnly}
+                        loading={
+                          unbind.isPending && unbind.variables === item.document.id
+                        }
+                        onClick={() =>
+                          unbind.mutate(item.document.id as string, {
+                            onError: (cause) =>
+                              setDocError(
+                                cause instanceof Error
+                                  ? cause.message
+                                  : 'Не удалось отвязать',
+                              ),
+                          })
+                        }
+                        aria-label={`Отвязать ${item.document.title ?? item.document.dockey}`}
+                      >
+                        <IconTrash size={12} />
+                      </Button>
+                    </Group>
+                  )}
+                </Paper>
+              </motion.div>
+            ),
+          )}
         </Stack>
       )}
 
@@ -427,7 +473,9 @@ export function ProjectDocumentsPanel({
             }}
           >
             {filteredFree.length > 50 ? (
-              <div style={{ height: freeVirtualizer.getTotalSize(), position: 'relative' }}>
+              <div
+                style={{ height: freeVirtualizer.getTotalSize(), position: 'relative' }}
+              >
                 {freeVirtualizer.getVirtualItems().map((virtualRow) => (
                   <motion.div
                     key={filteredFree[virtualRow.index].id}
@@ -448,11 +496,18 @@ export function ProjectDocumentsPanel({
                       onBind={(docId, r) => {
                         setChosen(docId)
                         setRole(r)
-                        bind.mutate({ documentId: docId, role: r }, {
-                          onSuccess: () => setChosen(null),
-                          onError: (cause) =>
-                            setDocError(cause instanceof Error ? cause.message : 'Не удалось привязать'),
-                        })
+                        bind.mutate(
+                          { documentId: docId, role: r },
+                          {
+                            onSuccess: () => setChosen(null),
+                            onError: (cause) =>
+                              setDocError(
+                                cause instanceof Error
+                                  ? cause.message
+                                  : 'Не удалось привязать',
+                              ),
+                          },
+                        )
                       }}
                       readOnly={readOnly}
                       bindPending={bind.isPending}
@@ -472,11 +527,18 @@ export function ProjectDocumentsPanel({
                     onBind={(docId, r) => {
                       setChosen(docId)
                       setRole(r)
-                      bind.mutate({ documentId: docId, role: r }, {
-                        onSuccess: () => setChosen(null),
-                        onError: (cause) =>
-                          setDocError(cause instanceof Error ? cause.message : 'Не удалось привязать'),
-                      })
+                      bind.mutate(
+                        { documentId: docId, role: r },
+                        {
+                          onSuccess: () => setChosen(null),
+                          onError: (cause) =>
+                            setDocError(
+                              cause instanceof Error
+                                ? cause.message
+                                : 'Не удалось привязать',
+                            ),
+                        },
+                      )
                     }}
                     readOnly={readOnly}
                     bindPending={bind.isPending}
@@ -499,7 +561,10 @@ export function ProjectDocumentsPanel({
       {boundItems.length === 0 && free.length === 0 && (
         <Paper withBorder p="md" style={{ textAlign: 'center' }}>
           <Stack align="center" gap="xs">
-            <IconFilePlus size={48} style={{ color: 'var(--mantine-color-primary-filled)' }} />
+            <IconFilePlus
+              size={48}
+              style={{ color: 'var(--mantine-color-primary-filled)' }}
+            />
             <Text fw={500}>Документов нет</Text>
             <Text size="sm" c="dimmed">
               Добавьте документы в разделе «Документы», чтобы привязать их к проекту.

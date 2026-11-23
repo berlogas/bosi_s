@@ -18,7 +18,7 @@ export function GenerateResultView({ result }: GenerateResultViewProps) {
   const refsContent = result.references?.length ? (
     <Stack gap={2}>
       {result.references!.map((line) => (
-        <MarkdownText key={line} text={"- " + line} />
+        <MarkdownText key={line} text={'- ' + line} />
       ))}
     </Stack>
   ) : null

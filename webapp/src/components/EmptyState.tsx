@@ -30,7 +30,11 @@ export function EmptyState({ title, description, action, icon }: EmptyStateProps
       <Text size="lg" fw={500}>
         {title}
       </Text>
-      {description && <Text size="sm" c="dimmed" mt="xs">{description}</Text>}
+      {description && (
+        <Text size="sm" c="dimmed" mt="xs">
+          {description}
+        </Text>
+      )}
       {action && (
         <Group mt="md" justify="center">
           {action}

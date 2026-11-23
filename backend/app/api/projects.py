@@ -60,19 +60,13 @@ from app.schemas.api import (
 from app.services import analyses
 from app.services import export as export_service
 from app.services.generation import missing_sections
-from app.services.project_sections import project_sections
 from app.services.journal_styles import style_options
 from app.services.pqa_registry import get_registry
+from app.services.project_sections import project_sections
 from app.services.projects import (
     ProjectService,
     find_project,
     linked_documents,
-)
-from app.db.models import (
-    SectionKind,
-    SectionPlan,
-    SectionStatus,
-    SectionVersion,
 )
 from app.services.section_labels import section_title
 
@@ -260,7 +254,7 @@ def update_section(session_id: str, project_id: str, name: str,
         written=bool((section.get("content_md") or "").strip()))
 
 
-# --------------------------------------------------------------------------- стиль журнала (правила оформления)
+# ------------------------------------------------------------ стиль журнала
 @router.post("/{session_id}/projects/{project_id}/style-guide")
 def set_project_style_guide(
     session_id: str,
@@ -299,7 +293,7 @@ def set_project_style_guide(
     }
 
 
-# --------------------------------------------------------------------------- SectionPlan / SectionVersion
+# ------------------------------------------------------- SectionPlan / SectionVersion
 @router.get("/{session_id}/projects/{project_id}/section-plans",
             response_model=list[SectionPlanOut])
 def list_section_plans(session_id: str, project_id: str,
@@ -586,7 +580,7 @@ def get_section_history(
     service = ProjectService()
     tree = service.get_section_history(db, plan_id)
 
-    def serialize_node(node) -> VersionNodeOut:
+    def serialize_node(node: Any) -> VersionNodeOut:
         return VersionNodeOut(
             version=SectionVersionOut.from_model(node.version),
             children=[serialize_node(child) for child in node.children],
@@ -607,7 +601,7 @@ def diff_section_versions(
     db: Session = Depends(get_db),
 ) -> dict:
     """Сравнить две версии раздела (семантический diff)."""
-    project = _owned(db, project_id, session_id, user)
+    _owned(db, project_id, session_id, user)
     service = ProjectService()
     diff = service.diff_section_versions(db, from_version, to_version)
     
@@ -1147,8 +1141,7 @@ async def merge_section_versions(
     target_version_id = payload["target_version_id"]
     source_version_id = payload["source_version_id"]
     strategy = payload.get("strategy", "llm")
-    
-    service = ProjectService()
+
     # HistoryService теперь async для LLM merge
     from app.services.history import HistoryService
     history = HistoryService(db, registry=get_registry())
@@ -1182,7 +1175,6 @@ def check_terminology_consistency(
 ) -> dict:
     """Проверить согласованность терминологии по всем разделам проекта."""
     project = _owned(db, project_id, session_id, user)
-    service = ProjectService()
     # Используем существующий метод проверки терминологии для каждого раздела
     issues = []
     for plan in project.section_plans:
@@ -1234,7 +1226,8 @@ async def check_style_compliance(
     if version_id:
         version = db.get(SectionVersion, version_id)
     else:
-        version = db.get(SectionVersion, plan.current_version_id) if plan.current_version_id else None
+        version = (db.get(SectionVersion, plan.current_version_id)
+                   if plan.current_version_id else None)
     
     if not version:
         raise NotFoundError("Версия не найдена")
@@ -1242,11 +1235,17 @@ async def check_style_compliance(
     # Читаем style guide если есть
     style_guide_text = None
     if project.style_guide_document_id:
-        from app.db.models import Document
         from pathlib import Path
+
+        import anyio
+
+        from app.db.models import Document
         document = db.get(Document, project.style_guide_document_id)
-        if document and Path(document.path).is_file():
-            style_guide_text = Path(document.path).read_text(encoding="utf-8")
+        if document:
+            path = Path(document.path)
+            if await anyio.to_thread.run_sync(path.is_file):
+                style_guide_text = await anyio.to_thread.run_sync(
+                    lambda: path.read_text(encoding="utf-8"))
     
     if not style_guide_text:
         return {
@@ -1280,7 +1279,7 @@ async def check_style_compliance(
     import json
     try:
         data = json.loads(result)
-    except:
+    except ValueError:
         data = {"compliant": True, "violations": [], "warnings": ["Ошибка парсинга LLM"]}
     
     return data
@@ -1313,8 +1312,8 @@ async def pre_generation_check(
             break
     
     # Проверяем доступность источников через RAG
-    from app.services.rag_service import RagFusionService
     from app.services.pqa_registry import get_registry
+    from app.services.rag_service import RagFusionService
     
     registry = get_registry()
     fusion = RagFusionService(registry)
@@ -1337,14 +1336,18 @@ async def pre_generation_check(
         "sources_sufficient": len(sources) >= required_sources,
         "has_style_guide": bool(project.style_guide_document_id),
         "has_glossary": len(project.glossary) > 0,
-        "language_supported": project.language in (project.language_policy.allowed_languages if project.language_policy else ["ru", "en"]),
+        "language_supported": project.language in (
+            project.language_policy.allowed_languages
+            if project.language_policy else ["ru", "en"]),
     }
     
     warnings = []
     if not checks["section_exists"]:
         warnings.append(f"Раздел '{section_name}' нет в плане проекта")
     if not checks["sources_sufficient"]:
-        warnings.append(f"Мало источников: найдено {checks['sources_found']}, нужно {required_sources}")
+        warnings.append(
+            f"Мало источников: найдено {checks['sources_found']}, "
+            f"нужно {required_sources}")
     if not checks["has_style_guide"]:
         warnings.append("Style guide не привязан — оформление может не соответствовать журналу")
     if not checks["has_glossary"]:

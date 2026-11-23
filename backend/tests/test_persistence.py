@@ -26,7 +26,7 @@ async def test_persist_restore_equivalent_scores(
 
     restored_service = _service(service_app, chunk_store, stub_llm)
     assert restored_service.list_documents() == []  # память пуста
-    restored, stale = await restored_service.restore_state()
+    restored, _ = await restored_service.restore_state()
     assert restored == 2
 
     chunks_after, _ = await restored_service.get_evidence("метод GF/F и хлорофилл-а")
@@ -42,10 +42,10 @@ async def test_restore_state_is_idempotent(
     await service.add_file(sample_text)
 
     second = _service(service_app, chunk_store, stub_llm)
-    restored, stale = await second.restore_state()
+    restored, _ = await second.restore_state()
     assert restored == 1
     assert await second.restore_state() == (0, 0)  # повторно ничего не дублируется
-    restored, stale = await second.restore_state(force=True)
+    restored, _ = await second.restore_state(force=True)
     assert restored == 1
     assert len(second.list_documents()) == 1
 
@@ -90,9 +90,9 @@ async def test_collections_persist_independently(
 
     fresh_global = _service(service_app, chunk_store, stub_llm, "global")
     fresh_session = _service(service_app, chunk_store, stub_llm, "session:s-42")
-    restored, stale = await fresh_global.restore_state()
+    restored, _ = await fresh_global.restore_state()
     assert restored == 1
-    restored, stale = await fresh_session.restore_state()
+    restored, _ = await fresh_session.restore_state()
     assert restored == 1
     assert {d.docname for d in fresh_global.list_documents()} != {
         d.docname for d in fresh_session.list_documents()}
@@ -138,7 +138,7 @@ async def test_chunks_survive_service_restart(
     document = await writer.add_file(sample_text)
 
     reader = _service(service_app, store, stub_llm)
-    restored, stale = await reader.restore_state()
+    restored, _ = await reader.restore_state()
     assert restored == 1
     assert reader.list_documents()[0].dockey == document.dockey
 
@@ -236,7 +236,7 @@ async def test_restore_after_settings_change(
                             pqa_settings=build_pqa_settings(changed), llm_model=stub_llm)
     assert other.fingerprint != service.fingerprint or not keep_embeddings
 
-    restored, stale = await other.restore_state()
+    _, stale = await other.restore_state()
     assert stale >= 1  # настройки изменились — чанки помечены устаревшими
     chunks, _ = await other.get_evidence("биомасса")
     assert not chunks  # пока не сделан reindex — результатов нет

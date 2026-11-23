@@ -1,9 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Stack, TextInput, NumberInput, Button, Group, Badge, Checkbox, Table, Modal, Select, Text } from '@mantine/core'
+import {
+  Stack,
+  TextInput,
+  NumberInput,
+  Button,
+  Group,
+  Badge,
+  Checkbox,
+  Table,
+  Modal,
+  Select,
+  Text,
+} from '@mantine/core'
 import { showNotification } from '@mantine/notifications'
-import { IconPlus, IconX, IconWand, IconGripVertical, IconRefresh } from '@tabler/icons-react'
-import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
+import {
+  IconPlus,
+  IconX,
+  IconWand,
+  IconGripVertical,
+  IconRefresh,
+} from '@tabler/icons-react'
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
   useSectionPlans,
@@ -15,7 +46,11 @@ import {
 } from '../hooks'
 import { useTask } from '../../chat/queries'
 import { client } from '../../../api/client'
-import type { BatchRegenerateResult, SectionPlan, SectionKind } from '../../../api/types'
+import type {
+  BatchRegenerateResult,
+  SectionPlan,
+  SectionKind,
+} from '../../../api/types'
 
 const KIND_LABELS: Record<string, string> = {
   standard: 'Стандартный',
@@ -47,7 +82,10 @@ const STATUS_LABELS: Record<string, string> = {
   approved: 'Утверждён',
 }
 
-const KIND_OPTIONS = Object.entries(KIND_LABELS).map(([value, label]) => ({ value, label }))
+const KIND_OPTIONS = Object.entries(KIND_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
 
 interface PlanDraft {
   id: string | null
@@ -67,7 +105,17 @@ const EMPTY_DRAFT: PlanDraft = {
   required: true,
 }
 
-export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTargetJournal }: { sessionId: string; projectId: string; readOnly?: boolean; projectTargetJournal?: string }) {
+export function SectionPlanEditor({
+  sessionId,
+  projectId,
+  readOnly,
+  projectTargetJournal,
+}: {
+  sessionId: string
+  projectId: string
+  readOnly?: boolean
+  projectTargetJournal?: string
+}) {
   const { data: plans, isLoading } = useSectionPlans(sessionId, projectId)
   const createPlan = useCreateSectionPlan(sessionId, projectId)
   const updatePlan = useUpdateSectionPlan(sessionId, projectId)
@@ -104,9 +152,10 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
     if (regenTask.isError && regenTaskId) {
       showNotification({
         title: 'Не удалось получить статус перегенерации',
-        message: regenTask.error instanceof Error
-          ? regenTask.error.message
-          : 'Задача могла быть потеряна после перезапуска backend',
+        message:
+          regenTask.error instanceof Error
+            ? regenTask.error.message
+            : 'Задача могла быть потеряна после перезапуска backend',
         color: 'red',
       })
       setRegenTaskId(null)
@@ -122,7 +171,11 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
 
   const handleSuggestFromJournal = useCallback(async () => {
     if (!projectTargetJournal) {
-      showNotification({ title: 'Ошибка', message: 'Не выбран стиль журнала', color: 'red' })
+      showNotification({
+        title: 'Ошибка',
+        message: 'Не выбран стиль журнала',
+        color: 'red',
+      })
       return
     }
 
@@ -130,31 +183,46 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
       const suggested = await client.getSuggestedSectionPlan(projectTargetJournal)
 
       if (!suggested || suggested.length === 0) {
-        showNotification({ title: 'Информация', message: 'Для этого стиля журнала нет шаблонов разделов', color: 'blue' })
+        showNotification({
+          title: 'Информация',
+          message: 'Для этого стиля журнала нет шаблонов разделов',
+          color: 'blue',
+        })
         return
       }
 
       for (const section of suggested) {
         await new Promise<void>((resolve, reject) => {
-          createPlan.mutate({
-            name: section.name,
-            kind: section.kind,
-            order: section.order,
-            word_target: section.word_target,
-            notes: section.notes,
-            required: section.required,
-            language: section.language,
-            depends_on: section.depends_on,
-          }, {
-            onSuccess: () => resolve(),
-            onError: reject,
-          })
+          createPlan.mutate(
+            {
+              name: section.name,
+              kind: section.kind,
+              order: section.order,
+              word_target: section.word_target,
+              notes: section.notes,
+              required: section.required,
+              language: section.language,
+              depends_on: section.depends_on,
+            },
+            {
+              onSuccess: () => resolve(),
+              onError: reject,
+            },
+          )
         })
       }
 
-      showNotification({ title: 'Готово', message: `Добавлено разделов: ${suggested.length}`, color: 'green' })
+      showNotification({
+        title: 'Готово',
+        message: `Добавлено разделов: ${suggested.length}`,
+        color: 'green',
+      })
     } catch (e) {
-      showNotification({ title: 'Ошибка', message: e instanceof Error ? e.message : 'Неизвестная ошибка', color: 'red' })
+      showNotification({
+        title: 'Ошибка',
+        message: e instanceof Error ? e.message : 'Неизвестная ошибка',
+        color: 'red',
+      })
     }
   }, [projectTargetJournal, createPlan])
 
@@ -177,7 +245,11 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
     if (!draft) return
     const name = draft.name.trim()
     if (!name) {
-      showNotification({ title: 'Ошибка', message: 'Название раздела не задано', color: 'red' })
+      showNotification({
+        title: 'Ошибка',
+        message: 'Название раздела не задано',
+        color: 'red',
+      })
       return
     }
     const payload = {
@@ -235,17 +307,31 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
 
   const planIds = useMemo(() => (plans ?? []).map((p) => p.id), [plans])
 
-  if (isLoading) return <Text size="sm" c="dimmed">Загрузка плана…</Text>
+  if (isLoading)
+    return (
+      <Text size="sm" c="dimmed">
+        Загрузка плана…
+      </Text>
+    )
 
   return (
     <Stack gap="md">
       <Group justify="space-between" align="center">
         <Text fw={600}>План разделов</Text>
         <Group gap="xs">
-          <Button onClick={handleSuggestFromJournal} leftSection={<IconWand size={14} />} variant="filled" disabled={!projectTargetJournal}>
+          <Button
+            onClick={handleSuggestFromJournal}
+            leftSection={<IconWand size={14} />}
+            variant="filled"
+            disabled={!projectTargetJournal}
+          >
             Предложить по стилю журнала
           </Button>
-          <Button onClick={handleCreate} leftSection={<IconPlus size={14} />} disabled={readOnly}>
+          <Button
+            onClick={handleCreate}
+            leftSection={<IconPlus size={14} />}
+            disabled={readOnly}
+          >
             Добавить раздел
           </Button>
           <Button
@@ -266,7 +352,11 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
         </Text>
       )}
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
         <SortableContext items={planIds} strategy={verticalListSortingStrategy}>
           <Table highlightOnHover stickyHeader>
             <thead>
@@ -288,9 +378,14 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
                   readOnly={readOnly}
                   onEdit={handleEdit}
                   onDelete={(id) => deletePlan.mutate(id)}
-                  onOrder={(order) => updatePlan.mutate({ planId: section.id, payload: { order } })}
+                  onOrder={(order) =>
+                    updatePlan.mutate({ planId: section.id, payload: { order } })
+                  }
                   onWordTarget={(wordTarget) =>
-                    updatePlan.mutate({ planId: section.id, payload: { word_target: wordTarget } })
+                    updatePlan.mutate({
+                      planId: section.id,
+                      payload: { word_target: wordTarget },
+                    })
                   }
                   onRequired={(required) =>
                     updatePlan.mutate({ planId: section.id, payload: { required } })
@@ -326,7 +421,9 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
               label="Тип"
               data={KIND_OPTIONS}
               value={draft.kind}
-              onChange={(value) => setDraft({ ...draft, kind: (value ?? 'standard') as SectionKind })}
+              onChange={(value) =>
+                setDraft({ ...draft, kind: (value ?? 'standard') as SectionKind })
+              }
               allowDeselect={false}
             />
             <NumberInput
@@ -339,15 +436,23 @@ export function SectionPlanEditor({ sessionId, projectId, readOnly, projectTarge
               label="Слов"
               value={draft.word_target}
               min={0}
-              onChange={(value) => setDraft({ ...draft, word_target: Number(value) || 0 })}
+              onChange={(value) =>
+                setDraft({ ...draft, word_target: Number(value) || 0 })
+              }
             />
             <Checkbox
               label="Обязательный раздел"
               checked={draft.required}
-              onChange={(e) => setDraft({ ...draft, required: e.currentTarget.checked })}
+              onChange={(e) =>
+                setDraft({ ...draft, required: e.currentTarget.checked })
+              }
             />
             <Group justify="flex-end">
-              <Button variant="default" onClick={() => setDraft(null)} leftSection={<IconX size={14} />}>
+              <Button
+                variant="default"
+                onClick={() => setDraft(null)}
+                leftSection={<IconX size={14} />}
+              >
                 Отмена
               </Button>
               <Button onClick={handleSubmit}>Сохранить</Button>
@@ -377,10 +482,11 @@ function SortablePlanRow({
   onWordTarget: (words: number) => void
   onRequired: (required: boolean) => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: plan.id,
-    disabled: readOnly,
-  })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: plan.id,
+      disabled: readOnly,
+    })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -452,7 +558,14 @@ function SortablePlanRow({
             <Button variant="subtle" size="xs" onClick={() => onEdit(plan)}>
               Править
             </Button>
-            <Button variant="subtle" color="red" size="xs" onClick={() => { if (window.confirm('Удалить?')) onDelete(plan.id) }}>
+            <Button
+              variant="subtle"
+              color="red"
+              size="xs"
+              onClick={() => {
+                if (window.confirm('Удалить?')) onDelete(plan.id)
+              }}
+            >
               Удалить
             </Button>
           </Group>

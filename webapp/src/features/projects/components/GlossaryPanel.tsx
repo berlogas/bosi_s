@@ -38,7 +38,10 @@ export function GlossaryPanel({
   const addEntry = useAddGlossaryEntry(sessionId, projectId)
   const deleteEntry = useDeleteGlossaryEntry(sessionId, projectId)
   const [checkOn, setCheckOn] = useState(false)
-  const terminology = useTerminologyCheck(checkOn ? sessionId : null, checkOn ? projectId : null)
+  const terminology = useTerminologyCheck(
+    checkOn ? sessionId : null,
+    checkOn ? projectId : null,
+  )
 
   const [term, setTerm] = useState('')
   const [definition, setDefinition] = useState('')
@@ -71,8 +74,8 @@ export function GlossaryPanel({
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Термины проекта: генератор придерживается указанных переводов и
-        определений во всех разделах.
+        Термины проекта: генератор придерживается указанных переводов и определений во
+        всех разделах.
       </Text>
 
       {addEntry.isError && (
@@ -84,7 +87,9 @@ export function GlossaryPanel({
       )}
 
       {isLoading ? (
-        <Text size="sm" c="dimmed">Загрузка глоссария…</Text>
+        <Text size="sm" c="dimmed">
+          Загрузка глоссария…
+        </Text>
       ) : (entries ?? []).length === 0 ? (
         <Text size="sm" c="dimmed">
           Терминов пока нет — добавьте те, которые должны звучать одинаково.
@@ -155,9 +160,7 @@ export function GlossaryPanel({
           color={terminology.data.consistent ? 'green' : 'yellow'}
           role="status"
           title={
-            terminology.data.consistent
-              ? 'Термины согласованы'
-              : 'Термины расходятся'
+            terminology.data.consistent ? 'Термины согласованы' : 'Термины расходятся'
           }
         >
           {terminology.data.section_terminology.length === 0 ? (
@@ -178,7 +181,8 @@ export function GlossaryPanel({
         <Stack gap="xs">
           <Text size="sm" fw={500}>
             Добавить термин
-          </Text>          <Group align="flex-end" gap="xs">
+          </Text>{' '}
+          <Group align="flex-end" gap="xs">
             <TextInput
               label="Термин"
               value={term}

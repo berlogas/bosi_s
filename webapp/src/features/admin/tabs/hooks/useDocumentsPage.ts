@@ -159,8 +159,12 @@ export function useDocumentsPage() {
   )
 
   const handleUpload = useCallback(
-    (files: File[], tags: string, onProgress?: (percent: number) => void,
-     replace = false) => {
+    (
+      files: File[],
+      tags: string,
+      onProgress?: (percent: number) => void,
+      replace = false,
+    ) => {
       upload.mutate({ files, tags, onProgress, replace })
     },
     [upload],

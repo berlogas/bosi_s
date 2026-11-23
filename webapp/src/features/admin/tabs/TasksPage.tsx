@@ -50,11 +50,15 @@ function TaskProgressPanel({ task }: { task: Task }) {
   return (
     <Paper withBorder p="xs">
       <Group justify="space-between" gap="xs" wrap="nowrap">
-        <Text size="sm" fw={500}>{task.title}</Text>
+        <Text size="sm" fw={500}>
+          {task.title}
+        </Text>
         <Text size="sm" c="dimmed">{`${progress}%`}</Text>
       </Group>
       {task.step && (
-        <Text size="xs" c="dimmed">{task.step}</Text>
+        <Text size="xs" c="dimmed">
+          {task.step}
+        </Text>
       )}
       <Progress value={progress} size="sm" mt={4} />
       {task.error && (
@@ -136,69 +140,80 @@ export default function TasksPage() {
   // Незавершённые задачи: показываем прогресс и ошибку отдельной панелью.
   // Панель уважает фильтры — иначе отфильтрованная задача осталась бы на экране.
   const liveTasks = React.useMemo(
-    () => (data as Task[]).filter(
-      (task) => task.status === 'queued' || task.status === 'running' || task.status === 'error',
-    ),
+    () =>
+      (data as Task[]).filter(
+        (task) =>
+          task.status === 'queued' ||
+          task.status === 'running' ||
+          task.status === 'error',
+      ),
     [data],
   )
 
-  const columns = React.useMemo(() => [
-    { id: 'id', accessorKey: 'id', header: 'ID' },
-    {
-      id: 'title',
-      accessorKey: 'title',
-      header: 'Название',
-      cell: (row: { title: string }) => row.title,
-    },
-    {
-      id: 'status',
-      accessorKey: 'status',
-      header: 'Статус',
-      cell: (row: { status: string }) => row.status,
-    },
-    {
-      id: 'user_id',
-      accessorKey: 'user_id',
-      header: 'Автор',
-      cell: (row: { user_id: string | null }) =>
-        names.get(row.user_id ?? '') ?? row.user_id ?? '—',
-    },
-    {
-      id: 'created_at',
-      accessorKey: 'created_at',
-      header: 'Создано',
-      cell: (row: { created_at: string | null }) =>
-        shortWhen(row.created_at ?? ''),
-    },
-    {
-      id: 'actions',
-      header: 'Действия',
-      cell: (row: { id: string; status: string; title: string; session_id?: string | null; project_id?: string | null; result?: unknown }) => {
-        const active = row.status === 'queued' || row.status === 'running'
-        return (
-          <Group gap="xs" wrap="nowrap">
-            <Button
-              size="xs"
-              variant="subtle"
-              color="error"
-              disabled={!active || cancel.isPending}
-              loading={cancel.isPending}
-              onClick={() => handleCancel(row.id)}
-            >
-              Отменить
-            </Button>
-            <TaskLinks task={row as Task} />
-          </Group>
-        )
+  const columns = React.useMemo(
+    () => [
+      { id: 'id', accessorKey: 'id', header: 'ID' },
+      {
+        id: 'title',
+        accessorKey: 'title',
+        header: 'Название',
+        cell: (row: { title: string }) => row.title,
       },
-    },
-  ], [names, handleCancel, cancel.isPending])
+      {
+        id: 'status',
+        accessorKey: 'status',
+        header: 'Статус',
+        cell: (row: { status: string }) => row.status,
+      },
+      {
+        id: 'user_id',
+        accessorKey: 'user_id',
+        header: 'Автор',
+        cell: (row: { user_id: string | null }) =>
+          names.get(row.user_id ?? '') ?? row.user_id ?? '—',
+      },
+      {
+        id: 'created_at',
+        accessorKey: 'created_at',
+        header: 'Создано',
+        cell: (row: { created_at: string | null }) => shortWhen(row.created_at ?? ''),
+      },
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: (row: {
+          id: string
+          status: string
+          title: string
+          session_id?: string | null
+          project_id?: string | null
+          result?: unknown
+        }) => {
+          const active = row.status === 'queued' || row.status === 'running'
+          return (
+            <Group gap="xs" wrap="nowrap">
+              <Button
+                size="xs"
+                variant="subtle"
+                color="error"
+                disabled={!active || cancel.isPending}
+                loading={cancel.isPending}
+                onClick={() => handleCancel(row.id)}
+              >
+                Отменить
+              </Button>
+              <TaskLinks task={row as Task} />
+            </Group>
+          )
+        },
+      },
+    ],
+    [names, handleCancel, cancel.isPending],
+  )
 
   const userOptions = React.useMemo(() => {
     const seen = new Set<string>()
-    const opts: { value: string; label: string }[] = [
-      { value: 'all', label: 'Все' },
-    ]
+    const opts: { value: string; label: string }[] = [{ value: 'all', label: 'Все' }]
     for (const task of all) {
       const uid = task.user_id
       if (!uid || seen.has(uid)) continue
@@ -269,7 +284,9 @@ export default function TasksPage() {
       )}
 
       {data.length === 0 && !isLoading && (
-        <Text c="dimmed" role="status">Задач нет.</Text>
+        <Text c="dimmed" role="status">
+          Задач нет.
+        </Text>
       )}
 
       {/* Панель незавершённых задач: прогресс и ошибка — их в таблице нет. */}

@@ -219,20 +219,20 @@ def test_delete_rejects_bad_names(env, name: str) -> None:
 
 
 
-async def _wait_backup_task(task_id: str, timeout: float = 10.0):
+async def _wait_backup_task(task_id: str, wait_seconds: float = 10.0):
     """Дождаться фоновой задачи создания копии."""
     import asyncio
 
     from app.services.tasks import tasks
 
-    deadline = asyncio.get_running_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + wait_seconds
     while asyncio.get_running_loop().time() < deadline:
         task = tasks.get(task_id)
         if task is not None and task.finished:
             assert task.status.value == "done", task.error
             return task
         await asyncio.sleep(0.01)
-    raise AssertionError(f"задача {task_id} не завершилась за {timeout} с")
+    raise AssertionError(f"задача {task_id} не завершилась за {wait_seconds} с")
 
 # -------------------------------------------------------------------- API
 async def test_backup_list_endpoint(client, admin_user, env, monkeypatch) -> None:

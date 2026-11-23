@@ -369,11 +369,14 @@ async def test_agent_ask_requires_mocked_agent(
 ) -> None:
     """Без мока agent_query движок падает на реальный LLM (не реализуем в тестах)."""
     await service.add_file(sample_text, citation="Test citation")
-    with patch(
-        "app.services.paperqa_service.agent_query", new=AsyncMock(side_effect=AssertionError("agent_query not mocked"))
+    with (
+        patch(
+            "app.services.paperqa_service.agent_query",
+            new=AsyncMock(side_effect=AssertionError("agent_query not mocked")),
+        ),
+        pytest.raises(AssertionError),
     ):
-        with pytest.raises(AssertionError):
-            await service.agent_ask("What is the temperature of the Barents Sea?")
+        await service.agent_ask("What is the temperature of the Barents Sea?")
 
 
 async def test_agent_ask_from_ask_with_evidence_helpers(service: PaperQA2Service, sample_text: Path) -> None:

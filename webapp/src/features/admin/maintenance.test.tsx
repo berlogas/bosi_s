@@ -145,13 +145,26 @@ describe('раздел «Обслуживание»', () => {
           calls.push({ url, init })
           return Promise.resolve(json({ task_id: 'bk-1' }))
         },
-        'GET /api/tasks/bk-1': () => json({
-          id: 'bk-1', kind: 'backup', title: 'Резервная копия',
-          status: 'running', progress: 10, step: 'подготовка', error: null,
-          cancel_requested: false, user_id: 'u-admin', session_id: null,
-          project_id: null, created_at: null, started_at: null,
-          finished_at: null, seconds: null, stage_seconds: null, result: null,
-        }),
+        'GET /api/tasks/bk-1': () =>
+          json({
+            id: 'bk-1',
+            kind: 'backup',
+            title: 'Резервная копия',
+            status: 'running',
+            progress: 10,
+            step: 'подготовка',
+            error: null,
+            cancel_requested: false,
+            user_id: 'u-admin',
+            session_id: null,
+            project_id: null,
+            created_at: null,
+            started_at: null,
+            finished_at: null,
+            seconds: null,
+            stage_seconds: null,
+            result: null,
+          }),
       }),
     )
     await openServiceTab()
@@ -196,21 +209,32 @@ describe('раздел «Обслуживание»', () => {
     mockApi(
       routes({
         // сервер может ответить старым списком — кэш всё равно покажет копию
-        'GET /api/admin/backup': () => Promise.resolve(
-          json({ backups: [BACKUP], plan: PLAN }),
-        ),
+        'GET /api/admin/backup': () =>
+          Promise.resolve(json({ backups: [BACKUP], plan: PLAN })),
         'POST /api/admin/backup': (url: string, init: RequestInit) => {
           calls.push({ url, init })
           return Promise.resolve(json({ task_id: 'bk-2' }))
         },
-        'GET /api/tasks/bk-2': () => json({
-          id: 'bk-2', kind: 'backup', title: 'Резервная копия',
-          status: 'done', progress: 100, step: 'готово', error: null,
-          cancel_requested: false, user_id: 'u-admin', session_id: null,
-          project_id: null, created_at: null, started_at: null,
-          finished_at: null, seconds: 1, stage_seconds: null,
-          result: { entry: NEW, deleted_old: [] },
-        }),
+        'GET /api/tasks/bk-2': () =>
+          json({
+            id: 'bk-2',
+            kind: 'backup',
+            title: 'Резервная копия',
+            status: 'done',
+            progress: 100,
+            step: 'готово',
+            error: null,
+            cancel_requested: false,
+            user_id: 'u-admin',
+            session_id: null,
+            project_id: null,
+            created_at: null,
+            started_at: null,
+            finished_at: null,
+            seconds: 1,
+            stage_seconds: null,
+            result: { entry: NEW, deleted_old: [] },
+          }),
       }),
     )
     await openServiceTab()
@@ -448,11 +472,23 @@ describe('раздел «Обслуживание»', () => {
       'GET /api/tasks/bk-3': () => {
         created = true
         return json({
-          id: 'bk-3', kind: 'backup', title: 'Резервная копия',
-          status: 'done', progress: 100, step: 'готово', error: null,
-          cancel_requested: false, user_id: 'u-admin', session_id: null,
-          project_id: null, created_at: null, started_at: null,
-          finished_at: null, seconds: 1, stage_seconds: null, result: null,
+          id: 'bk-3',
+          kind: 'backup',
+          title: 'Резервная копия',
+          status: 'done',
+          progress: 100,
+          step: 'готово',
+          error: null,
+          cancel_requested: false,
+          user_id: 'u-admin',
+          session_id: null,
+          project_id: null,
+          created_at: null,
+          started_at: null,
+          finished_at: null,
+          seconds: 1,
+          stage_seconds: null,
+          result: null,
         })
       },
     })
@@ -499,20 +535,24 @@ describe('раздел «Обслуживание»', () => {
       result: null,
       ...patch,
     })
-    mockApi(routes({
-      'POST /api/admin/backup': () => json({ task_id: 'bk-progress' }),
-      'GET /api/tasks/bk-progress': () => {
-        polls += 1
-        return json(polls < 2
-          ? makeTask()
-          : makeTask({
-              status: 'done',
-              progress: 100,
-              step: 'готово',
-              result: { entry: BACKUP, deleted_old: [] },
-            }))
-      },
-    }))
+    mockApi(
+      routes({
+        'POST /api/admin/backup': () => json({ task_id: 'bk-progress' }),
+        'GET /api/tasks/bk-progress': () => {
+          polls += 1
+          return json(
+            polls < 2
+              ? makeTask()
+              : makeTask({
+                  status: 'done',
+                  progress: 100,
+                  step: 'готово',
+                  result: { entry: BACKUP, deleted_old: [] },
+                }),
+          )
+        },
+      }),
+    )
     await openServiceTab()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Создать копию…' }))
@@ -523,8 +563,6 @@ describe('раздел «Обслуживание»', () => {
     expect(await screen.findByText(/Создание копии…/)).toBeInTheDocument()
     expect(await screen.findByText('архивирование файлов (3/10)')).toBeInTheDocument()
     expect(await screen.findByText('45%')).toBeInTheDocument()
-    await waitFor(() =>
-      expect(screen.queryByText(/Создание копии…/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/Создание копии…/)).toBeNull())
   })
-
 })

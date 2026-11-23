@@ -1,5 +1,12 @@
 import { Paper, Group, Stack, Text, Select, Button } from '@mantine/core'
-import { IconGripVertical, IconClock, IconPencil, IconEye, IconCheck, IconTrash } from '@tabler/icons-react'
+import {
+  IconGripVertical,
+  IconClock,
+  IconPencil,
+  IconEye,
+  IconCheck,
+  IconTrash,
+} from '@tabler/icons-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import React from 'react'
@@ -23,14 +30,8 @@ export function SortableProjectItem({
   onDelete,
   readOnly = false,
 }: SortableProjectItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: project.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: project.id })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -73,11 +74,20 @@ export function SortableProjectItem({
           клики по кнопкам внутри карточки. */}
       <IconGripVertical
         size={16}
-        style={{ cursor: 'grabbing', marginRight: 8, color: 'var(--mantine-color-dimmed)' }}
+        style={{
+          cursor: 'grabbing',
+          marginRight: 8,
+          color: 'var(--mantine-color-dimmed)',
+        }}
         {...attributes}
         {...listeners}
       />
-      <Group justify="space-between" align="center" wrap="nowrap" style={{ width: '100%', minWidth: 0 }}>
+      <Group
+        justify="space-between"
+        align="center"
+        wrap="nowrap"
+        style={{ width: '100%', minWidth: 0 }}
+      >
         <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
           <Text
             size="sm"

@@ -261,10 +261,9 @@ describe('админка', () => {
 
     renderApp('/admin/base')
 
-    expect(await screen.findByRole('link', { name: 'Глобальная база' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    expect(
+      await screen.findByRole('link', { name: 'Глобальная база' }),
+    ).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByLabelText('Путь к файлу')).toBeVisible()
   })
 
@@ -286,7 +285,9 @@ describe('админка', () => {
 
     renderApp()
 
-    expect(await screen.findByRole('link', { name: 'Пользователи' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: 'Пользователи' }),
+    ).toBeInTheDocument()
     expect(await screen.findByLabelText('Логин: ivanov')).toBeInTheDocument()
     expect(screen.getByLabelText('ФИО: ivanov')).toHaveValue('Иванов И.И.')
     // в поле видно русскую подпись, а уходит в API техническое 'admin'
@@ -496,10 +497,7 @@ describe('админка', () => {
     ).toBeInTheDocument()
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false)
 
-    await userEvent.type(
-      screen.getByLabelText(/Введите "ivanov"/),
-      'ivanov',
-    )
+    await userEvent.type(screen.getByLabelText(/Введите "ivanov"/), 'ivanov')
     await userEvent.click(screen.getByRole('button', { name: 'Подтвердить' }))
 
     await waitFor(() => {
@@ -547,7 +545,9 @@ describe('админка', () => {
     const adminRow = screen.getByLabelText('Логин: admin').closest('tr') as HTMLElement
     expect(within(adminRow).getByRole('button', { name: 'Удалить' })).toBeDisabled()
     // чужие — доступны
-    const ivanovRow = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
+    const ivanovRow = screen
+      .getByLabelText('Логин: ivanov')
+      .closest('tr') as HTMLElement
     expect(within(ivanovRow).getByRole('button', { name: 'Удалить' })).toBeEnabled()
   })
 
@@ -567,13 +567,8 @@ describe('админка', () => {
 
     const row = screen.getByLabelText('Логин: ivanov').closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: 'Удалить' }))
-    await userEvent.type(
-      screen.getByLabelText(/Введите "ivanov"/),
-      'ivanov',
-    )
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Подтвердить' }),
-    )
+    await userEvent.type(screen.getByLabelText(/Введите "ivanov"/), 'ivanov')
+    await userEvent.click(await screen.findByRole('button', { name: 'Подтвердить' }))
 
     expect(await screen.findByText('Нельзя удалить самого себя')).toBeInTheDocument()
   })
@@ -595,7 +590,10 @@ describe('админка', () => {
 
     const fileInput = await screen.findByTestId('admin-doc-file-input')
     fileInput.removeAttribute('hidden')
-    await userEvent.upload(fileInput, new File(['x'], 'a.pdf', { type: 'application/pdf' }))
+    await userEvent.upload(
+      fileInput,
+      new File(['x'], 'a.pdf', { type: 'application/pdf' }),
+    )
     fileInput.setAttribute('hidden', '')
 
     await screen.findByText('Выбрано файлов: 1')
@@ -638,7 +636,9 @@ describe('админка', () => {
     // Спрашиваем подтверждение — молча перезаписывать нельзя.
     expect(await screen.findByText('Заменить прежние версии?')).toBeInTheDocument()
     expect(
-      calls.some((c) => c.url.includes('/documents/upload') && c.init.method === 'POST'),
+      calls.some(
+        (c) => c.url.includes('/documents/upload') && c.init.method === 'POST',
+      ),
     ).toBe(false)
 
     await userEvent.click(screen.getByRole('button', { name: 'Заменить и загрузить' }))
@@ -981,7 +981,9 @@ describe('админка', () => {
     renderApp('/admin/tasks')
 
     // Автор показан в колонке «Автор» — именем, а не идентификатором.
-    expect(await screen.findByRole('columnheader', { name: 'Автор' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('columnheader', { name: 'Автор' }),
+    ).toBeInTheDocument()
     expect((await screen.findAllByText('ivanov')).length).toBeGreaterThan(0)
   })
 
@@ -1108,7 +1110,9 @@ describe('админка', () => {
     expect(within(table).getByText('07.10.2026, 15:34')).toBeInTheDocument()
 
     // фильтр по пользователю оставляет только его сессии
-    const filter = await screen.findByRole('combobox', { name: /Фильтр: пользователь сессии/ })
+    const filter = await screen.findByRole('combobox', {
+      name: /Фильтр: пользователь сессии/,
+    })
     await userEvent.click(filter)
     await userEvent.click(selectOption(filter, 'petrov'))
 

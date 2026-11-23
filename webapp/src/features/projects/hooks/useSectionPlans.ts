@@ -7,24 +7,39 @@ import { client } from '../../../api/client'
 import type { SectionKind, SectionPlanStatus } from '../../../api/types'
 
 export const sectionPlanKeys = {
-  list: (sessionId: string, projectId: string) => ['section-plans', sessionId, projectId] as const,
-  history: (sessionId: string, projectId: string, planId: string) => ['section-plan-history', sessionId, projectId, planId] as const,
-  diff: (sessionId: string, projectId: string, from: string, to: string) => ['section-diff', sessionId, projectId, from, to] as const,
-  languagePolicy: (sessionId: string, projectId: string) => ['language-policy', sessionId, projectId] as const,
-  glossary: (sessionId: string, projectId: string) => ['glossary', sessionId, projectId] as const,
-  terminologyCheck: (sessionId: string, projectId: string) => ['terminology-check', sessionId, projectId] as const,
-  manuscript: (sessionId: string, projectId: string, language?: string) => ['manuscript', sessionId, projectId, language] as const,
+  list: (sessionId: string, projectId: string) =>
+    ['section-plans', sessionId, projectId] as const,
+  history: (sessionId: string, projectId: string, planId: string) =>
+    ['section-plan-history', sessionId, projectId, planId] as const,
+  diff: (sessionId: string, projectId: string, from: string, to: string) =>
+    ['section-diff', sessionId, projectId, from, to] as const,
+  languagePolicy: (sessionId: string, projectId: string) =>
+    ['language-policy', sessionId, projectId] as const,
+  glossary: (sessionId: string, projectId: string) =>
+    ['glossary', sessionId, projectId] as const,
+  terminologyCheck: (sessionId: string, projectId: string) =>
+    ['terminology-check', sessionId, projectId] as const,
+  manuscript: (sessionId: string, projectId: string, language?: string) =>
+    ['manuscript', sessionId, projectId, language] as const,
 }
 
 export function useInvalidateSectionPlans(sessionId: string, projectId: string) {
   const queryClient = useQueryClient()
   return (): void => {
-    queryClient.invalidateQueries({ queryKey: sectionPlanKeys.list(sessionId, projectId) })
-    queryClient.invalidateQueries({ queryKey: ['project-sections', sessionId, projectId] })
+    queryClient.invalidateQueries({
+      queryKey: sectionPlanKeys.list(sessionId, projectId),
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['project-sections', sessionId, projectId],
+    })
     // История версий живёт под префиксным ключом с planId последним сегментом;
     // инвалидируем по сессии+проекту, чтобы подхватить все планы проекта.
-    queryClient.invalidateQueries({ queryKey: ['section-plan-history', sessionId, projectId] })
-    queryClient.invalidateQueries({ queryKey: ['project-section-versions', sessionId, projectId] })
+    queryClient.invalidateQueries({
+      queryKey: ['section-plan-history', sessionId, projectId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['project-section-versions', sessionId, projectId],
+    })
     queryClient.invalidateQueries({ queryKey: ['manuscript', sessionId, projectId] })
   }
 }
@@ -83,7 +98,8 @@ export function useUpdateSectionPlan(sessionId: string, projectId: string) {
 export function useDeleteSectionPlan(sessionId: string, projectId: string) {
   const invalidate = useInvalidateSectionPlans(sessionId, projectId)
   return useMutation({
-    mutationFn: (planId: string) => client.deleteSectionPlan(sessionId, projectId, planId),
+    mutationFn: (planId: string) =>
+      client.deleteSectionPlan(sessionId, projectId, planId),
     onSuccess: () => invalidate(),
   })
 }
@@ -118,7 +134,14 @@ export function useTranslateSectionV2(sessionId: string, projectId: string) {
       planId: string
       targetLanguage: string
       versionId?: string
-    }) => client.translateSectionV2(sessionId, projectId, planId, targetLanguage, versionId),
+    }) =>
+      client.translateSectionV2(
+        sessionId,
+        projectId,
+        planId,
+        targetLanguage,
+        versionId,
+      ),
     onSuccess: () => invalidate(),
   })
 }
@@ -139,7 +162,9 @@ export function useSaveSectionContent(sessionId: string, projectId: string) {
       client.saveSectionContent(sessionId, projectId, planId, contentMd),
     onSuccess: () => {
       invalidate()
-      void queryClient.invalidateQueries({ queryKey: ['project-progress', sessionId, projectId] })
+      void queryClient.invalidateQueries({
+        queryKey: ['project-progress', sessionId, projectId],
+      })
       void queryClient.invalidateQueries({ queryKey: ['projects', sessionId] })
     },
   })
@@ -147,10 +172,15 @@ export function useSaveSectionContent(sessionId: string, projectId: string) {
 
 // ============================================================ История & Diff
 
-export function useSectionHistory(sessionId: string | null, projectId: string | null, planId: string | null) {
+export function useSectionHistory(
+  sessionId: string | null,
+  projectId: string | null,
+  planId: string | null,
+) {
   return useQuery({
     queryKey: sectionPlanKeys.history(sessionId ?? '', projectId ?? '', planId ?? ''),
-    queryFn: () => client.sectionHistory(sessionId as string, projectId as string, planId as string),
+    queryFn: () =>
+      client.sectionHistory(sessionId as string, projectId as string, planId as string),
     enabled: sessionId !== null && projectId !== null && planId !== null,
   })
 }
@@ -162,7 +192,8 @@ export function useProjectSectionVersions(
 ) {
   return useQuery({
     queryKey: ['project-section-versions', sessionId, projectId],
-    queryFn: () => client.projectSectionVersions(sessionId as string, projectId as string),
+    queryFn: () =>
+      client.projectSectionVersions(sessionId as string, projectId as string),
     enabled: sessionId !== null && projectId !== null,
   })
 }
@@ -174,9 +205,24 @@ export function useDiffSectionVersions(
   toVersion: string | null,
 ) {
   return useQuery({
-    queryKey: sectionPlanKeys.diff(sessionId ?? '', projectId ?? '', fromVersion ?? '', toVersion ?? ''),
-    queryFn: () => client.diffSectionVersions(sessionId as string, projectId as string, fromVersion as string, toVersion as string),
-    enabled: sessionId !== null && projectId !== null && fromVersion !== null && toVersion !== null,
+    queryKey: sectionPlanKeys.diff(
+      sessionId ?? '',
+      projectId ?? '',
+      fromVersion ?? '',
+      toVersion ?? '',
+    ),
+    queryFn: () =>
+      client.diffSectionVersions(
+        sessionId as string,
+        projectId as string,
+        fromVersion as string,
+        toVersion as string,
+      ),
+    enabled:
+      sessionId !== null &&
+      projectId !== null &&
+      fromVersion !== null &&
+      toVersion !== null,
   })
 }
 
@@ -185,13 +231,8 @@ export function useDiffSectionVersions(
 export function useRollbackSection(sessionId: string, projectId: string) {
   const invalidate = useInvalidateSectionPlans(sessionId, projectId)
   return useMutation({
-    mutationFn: ({
-      planId,
-      versionId,
-    }: {
-      planId: string
-      versionId: string
-    }) => client.rollbackSection(sessionId, projectId, planId, versionId),
+    mutationFn: ({ planId, versionId }: { planId: string; versionId: string }) =>
+      client.rollbackSection(sessionId, projectId, planId, versionId),
     onSuccess: () => invalidate(),
   })
 }
@@ -199,13 +240,8 @@ export function useRollbackSection(sessionId: string, projectId: string) {
 export function useApproveSection(sessionId: string, projectId: string) {
   const invalidate = useInvalidateSectionPlans(sessionId, projectId)
   return useMutation({
-    mutationFn: ({
-      planId,
-      versionId,
-    }: {
-      planId: string
-      versionId: string
-    }) => client.approveSection(sessionId, projectId, planId, versionId),
+    mutationFn: ({ planId, versionId }: { planId: string; versionId: string }) =>
+      client.approveSection(sessionId, projectId, planId, versionId),
     onSuccess: () => invalidate(),
   })
 }
@@ -225,10 +261,15 @@ export function useGlossary(sessionId: string | null, projectId: string | null) 
 export function useAddGlossaryEntry(sessionId: string, projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { term: string; translations?: Record<string, string>; definition?: string }) =>
-      client.addGlossaryEntry(sessionId, projectId, payload),
+    mutationFn: (payload: {
+      term: string
+      translations?: Record<string, string>
+      definition?: string
+    }) => client.addGlossaryEntry(sessionId, projectId, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: sectionPlanKeys.glossary(sessionId, projectId) })
+      queryClient.invalidateQueries({
+        queryKey: sectionPlanKeys.glossary(sessionId, projectId),
+      })
     },
   })
 }
@@ -236,9 +277,12 @@ export function useAddGlossaryEntry(sessionId: string, projectId: string) {
 export function useDeleteGlossaryEntry(sessionId: string, projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (entryId: string) => client.deleteGlossaryEntry(sessionId, projectId, entryId),
+    mutationFn: (entryId: string) =>
+      client.deleteGlossaryEntry(sessionId, projectId, entryId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: sectionPlanKeys.glossary(sessionId, projectId) })
+      queryClient.invalidateQueries({
+        queryKey: sectionPlanKeys.glossary(sessionId, projectId),
+      })
     },
   })
 }
@@ -247,7 +291,8 @@ export function useDeleteGlossaryEntry(sessionId: string, projectId: string) {
 
 export function useBatchRegenerateSections(sessionId: string, projectId: string) {
   return useMutation<{ task_id: string }, Error, boolean, unknown>({
-    mutationFn: (force = false) => client.batchRegenerateSections(sessionId, projectId, force),
+    mutationFn: (force = false) =>
+      client.batchRegenerateSections(sessionId, projectId, force),
   })
 }
 
@@ -263,17 +308,27 @@ export function useCompileManuscript(
       ...sectionPlanKeys.manuscript(sessionId ?? '', projectId ?? '', language ?? ''),
       includeUnapproved,
     ],
-    queryFn: () => client.compileManuscript(sessionId as string, projectId as string, language, includeUnapproved),
+    queryFn: () =>
+      client.compileManuscript(
+        sessionId as string,
+        projectId as string,
+        language,
+        includeUnapproved,
+      ),
     enabled: enabled && sessionId !== null && projectId !== null,
   })
 }
 
 // ============================================================ Quality Checks
 
-export function useTerminologyCheck(sessionId: string | null, projectId: string | null) {
+export function useTerminologyCheck(
+  sessionId: string | null,
+  projectId: string | null,
+) {
   return useQuery({
     queryKey: sectionPlanKeys.terminologyCheck(sessionId ?? '', projectId ?? ''),
-    queryFn: () => client.checkTerminologyConsistency(sessionId as string, projectId as string),
+    queryFn: () =>
+      client.checkTerminologyConsistency(sessionId as string, projectId as string),
     enabled: sessionId !== null && projectId !== null,
   })
 }
@@ -285,7 +340,13 @@ export function useStyleCompliance(
   versionId: string | null,
 ) {
   return useQuery({
-    queryKey: ['style-compliance', sessionId, projectId, sectionPlanId, versionId] as const,
+    queryKey: [
+      'style-compliance',
+      sessionId,
+      projectId,
+      sectionPlanId,
+      versionId,
+    ] as const,
     queryFn: () =>
       client.checkStyleCompliance(
         sessionId as string,
@@ -306,7 +367,14 @@ export function usePreGenerationCheck(
   enabled = true,
 ) {
   return useQuery({
-    queryKey: ['pre-generation-check', sessionId, projectId, sectionName, question, requiredSources] as const,
+    queryKey: [
+      'pre-generation-check',
+      sessionId,
+      projectId,
+      sectionName,
+      question,
+      requiredSources,
+    ] as const,
     queryFn: () =>
       client.preGenerationCheck(
         sessionId as string,
@@ -327,4 +395,3 @@ export function usePreGenerationCheck(
 }
 
 // ============================================================ Suggested plan from journal style
-

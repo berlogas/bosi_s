@@ -30,7 +30,6 @@ import {
   useJournalStyles,
 } from './queries'
 
-
 // Import extracted components
 
 import { ProjectEditor } from './components/ProjectEditor'
@@ -80,7 +79,9 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   const [journal, setJournal] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
   const [deleteConfirmOpened, setDeleteConfirmOpened] = useState(false)
-  const [deletePendingProjectId, setDeletePendingProjectId] = useState<string | null>(null)
+  const [deletePendingProjectId, setDeletePendingProjectId] = useState<string | null>(
+    null,
+  )
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -93,11 +94,15 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
     return list.filter(
       (project) =>
         project.title.toLowerCase().includes(query) ||
-        ((project.sections as Array<{ name: string }> | undefined)?.some?.((s) => s.name.toLowerCase().includes(query)) ?? false),
+        ((project.sections as Array<{ name: string }> | undefined)?.some?.((s) =>
+          s.name.toLowerCase().includes(query),
+        ) ??
+          false),
     )
   }, [list, searchQuery])
 
-  const selected = projectsQuery.data?.find((project) => project.id === selectedId) ?? null
+  const selected =
+    projectsQuery.data?.find((project) => project.id === selectedId) ?? null
 
   // Effects
   // Persist the user's project choice so the next visit re-opens the same project.
@@ -118,7 +123,8 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
       } else {
         const byUpdated = [...data].sort(
           (a, b) =>
-            new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime(),
+            new Date(b.updated_at ?? 0).getTime() -
+            new Date(a.updated_at ?? 0).getTime(),
         )
         setSelectedId(byUpdated[0].id ?? null)
       }
@@ -160,11 +166,13 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         { projectId, fields: { status } },
         {
           onError: (cause) =>
-            setActionError(cause instanceof Error ? cause.message : 'Не удалось обновить статус'),
+            setActionError(
+              cause instanceof Error ? cause.message : 'Не удалось обновить статус',
+            ),
         },
       )
     },
-    [patch]
+    [patch],
   )
 
   const handleDelete = useCallback((projectId: string) => {
@@ -190,7 +198,7 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
         }
       })
     },
-    [filteredList, reorder]
+    [filteredList, reorder],
   )
 
   const handleFocusNewProject = useCallback(() => {
@@ -201,19 +209,29 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
   // Hotkeys
   useHotkeys([
     ['ctrl+n', handleFocusNewProject],
-    ['ctrl+s', () => {
-      const saveBtn = document.querySelector('button:has-text("Сохранить")') as HTMLButtonElement
-      if (saveBtn && !saveBtn.disabled) saveBtn.click()
-    }],
-    ['escape', () => {
-      const closeBtn = document.querySelector('[aria-label="Close"]') as HTMLButtonElement
-      closeBtn?.click()
-    }],
+    [
+      'ctrl+s',
+      () => {
+        const saveBtn = document.querySelector(
+          'button:has-text("Сохранить")',
+        ) as HTMLButtonElement
+        if (saveBtn && !saveBtn.disabled) saveBtn.click()
+      },
+    ],
+    [
+      'escape',
+      () => {
+        const closeBtn = document.querySelector(
+          '[aria-label="Close"]',
+        ) as HTMLButtonElement
+        closeBtn?.click()
+      },
+    ],
   ])
 
   const journalChoices = useMemo(
     () => (styles.data ?? []).map((item) => ({ value: item.key, label: item.title })),
-    [styles.data]
+    [styles.data],
   )
 
   const chosenStyle = (styles.data ?? []).find((item) => item.key === journal)
@@ -229,7 +247,10 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
           leftSection={<IconSearch size={14} />}
           rightSection={
             searchQuery && (
-              <UnstyledButton onClick={() => setSearchQuery('')} aria-label="Очистить поиск">
+              <UnstyledButton
+                onClick={() => setSearchQuery('')}
+                aria-label="Очистить поиск"
+              >
                 <IconX size={14} />
               </UnstyledButton>
             )
@@ -275,15 +296,29 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
 
       {chosenStyle && (
         <Alert color="info" variant="light" p="xs">
-          <Text size="sm">Стиль «{chosenStyle.title}»: {chosenStyle.summary}</Text>
-          <Text size="xs" c="dimmed" mt="xs">Журналы: {chosenStyle.journals.join(', ')}</Text>
+          <Text size="sm">
+            Стиль «{chosenStyle.title}»: {chosenStyle.summary}
+          </Text>
+          <Text size="xs" c="dimmed" mt="xs">
+            Журналы: {chosenStyle.journals.join(', ')}
+          </Text>
         </Alert>
       )}
-      {createError && <Alert color="error" role="alert">{createError}</Alert>}
-      {actionError && <Alert color="error" role="alert">{actionError}</Alert>}
+      {createError && (
+        <Alert color="error" role="alert">
+          {createError}
+        </Alert>
+      )}
+      {actionError && (
+        <Alert color="error" role="alert">
+          {actionError}
+        </Alert>
+      )}
       {projectsQuery.isError && (
         <Alert color="error" role="alert">
-          {projectsQuery.error instanceof Error ? projectsQuery.error.message : 'Не удалось загрузить проекты'}
+          {projectsQuery.error instanceof Error
+            ? projectsQuery.error.message
+            : 'Не удалось загрузить проекты'}
         </Alert>
       )}
 
@@ -303,11 +338,7 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
       />
 
       {selected ? (
-        <ProjectEditor
-          sessionId={sessionId}
-          project={selected}
-          readOnly={readOnly}
-        />
+        <ProjectEditor sessionId={sessionId} project={selected} readOnly={readOnly} />
       ) : null}
 
       {/* Подтверждение удаления проекта */}
@@ -333,7 +364,9 @@ export function ProjectsTab({ sessionId, readOnly }: ProjectsTabProps) {
               setDeleteError(null)
             },
             onError: (cause) =>
-              setDeleteError(cause instanceof Error ? cause.message : 'Не удалось удалить'),
+              setDeleteError(
+                cause instanceof Error ? cause.message : 'Не удалось удалить',
+              ),
           })
         }}
       />

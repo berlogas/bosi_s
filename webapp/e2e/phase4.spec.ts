@@ -328,7 +328,7 @@ test('глобальная база: путь, папка-приёмник и п
 
   await login(page, { username: 'admin', password: 'password1' })
   await page.goto('/admin')
-  await page.getByRole('tab', { name: 'Глобальная база' }).click()
+  await page.getByRole('link', { name: 'Глобальная база' }).click()
 
   await expect(page.getByText(/Глобальный документ/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Добавить' })).toBeDisabled()
@@ -396,6 +396,13 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
         },
       ],
     },
+    'GET /api/admin/audit/stats': {
+      body: {
+        total: 1,
+        oldest_at: '2026-10-07T10:00:00+00:00',
+        newest_at: '2026-10-07T10:00:00+00:00',
+      },
+    },
     'GET /api/admin/audit': {
       body: [
         {
@@ -419,27 +426,18 @@ test('вкладки Задачи, Сессии и Аудит', async ({ page })
   await page.goto('/admin')
 
   // Задачи: панель прогресса
-  await page.getByRole('tab', { name: 'Задачи' }).click()
+  await page.getByRole('link', { name: 'Задачи' }).click()
   await expect(page.getByText(/45%/)).toBeVisible()
 
-  // Сессии: сгруппированы по пользователям (ivanov — из списка users)
-  await page.getByRole('tab', { name: 'Сессии' }).click()
-  // Имя региона-аккордеона — логин целиком, а панель внутри него называется
-  // «ivanov, 1 сессия»: без exact локатор находит оба и падает strict mode.
-  await expect(page.getByRole('region', { name: 'ivanov', exact: true })).toBeVisible()
-  await expect(page.getByText('1 сессия')).toBeVisible()
-  // Панель может быть раскрыта по умолчанию: без проверки клик по кнопке её
-  // закрывает, и следующая проверка падает на отсутствии таблицы.
-  const sessionsToggle = page.getByRole('button', { name: /ivanov/ })
-  if ((await sessionsToggle.getAttribute('aria-expanded')) === 'false') {
-    await sessionsToggle.click()
-  }
+  // Сессии: у администратора это обычная таблица всех сессий
+  await page.getByRole('link', { name: 'Сессии' }).click()
+  await expect(page.getByRole('heading', { name: 'Сессии' })).toBeVisible()
   const table = page.getByRole('table')
   await expect(table.getByText('abcdefgh')).toBeVisible()
   await expect(table.getByText('07.10.2026, 15:34')).toBeVisible()
 
   // Аудит: строка и признак ok
-  await page.getByRole('tab', { name: 'Аудит' }).click()
+  await page.getByRole('link', { name: 'Аудит' }).click()
   await expect(page.getByText('session.create')).toBeVisible()
   await expect(page.getByText('✓')).toBeVisible()
   // Время события — в локальной зоне браузера, а не в UTC: 10:00 UTC = 13:00 MSK.

@@ -33,32 +33,33 @@ export function ProjectList({
   const items = useMemo(() => filteredProjects.map((p) => p.id), [filteredProjects])
 
   return (
-    <Stack gap="xs" style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 320px)', minHeight: 0 }}>
-      {projects.length === 0 && (
-        <EmptyProjectsState onCreate={onCreate} />
-      )}
+    <Stack
+      gap="xs"
+      style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 320px)', minHeight: 0 }}
+    >
+      {projects.length === 0 && <EmptyProjectsState onCreate={onCreate} />}
       {/* DndContext обязателен: без него SortableContext не даёт перетаскивания. */}
       <DndContext collisionDetection={closestCenter} onDragEnd={onReorder}>
         <SortableContext items={items} strategy={verticalListSortingStrategy}>
           <AnimatePresence mode="popLayout">
-          {filteredProjects.map((project) => (
-            <motion.div
-              key={project.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <SortableProjectItem
-                project={project}
-                isActive={project.id === selectedId}
-                onSelect={() => onSelect(project.id)}
-                onStatusChange={(status) => onStatusChange(project.id, status)}
-                onDelete={() => onDelete(project.id)}
-                readOnly={readOnly}
-              />
-            </motion.div>
-          ))}
+            {filteredProjects.map((project) => (
+              <motion.div
+                key={project.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <SortableProjectItem
+                  project={project}
+                  isActive={project.id === selectedId}
+                  onSelect={() => onSelect(project.id)}
+                  onStatusChange={(status) => onStatusChange(project.id, status)}
+                  onDelete={() => onDelete(project.id)}
+                  readOnly={readOnly}
+                />
+              </motion.div>
+            ))}
           </AnimatePresence>
         </SortableContext>
       </DndContext>

@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import tomllib
 from dataclasses import dataclass, field
-
 from pathlib import Path
 from typing import Any
 
@@ -107,7 +106,7 @@ def _load_styles_from_toml() -> tuple[JournalStyle, ...]:
 
     try:
         meta = tomllib.loads(STYLES_TOML.read_text(encoding="utf-8"))
-    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError) as e:
+    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
         # Битый TOML не должен ронять сервис
         return ()
 
@@ -297,9 +296,9 @@ __all__ = [
     "JournalStyle",
     "StyleTemplate",
     "find_style",
+    "get_suggested_section_plan",
     "reload_styles",
     "style_options",
     "style_prompt",
     "styles",
-    "get_suggested_section_plan",
 ]

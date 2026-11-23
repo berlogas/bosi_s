@@ -110,7 +110,11 @@ function DesktopHeader({ bootPending }: { bootPending: boolean }) {
         <Group gap="sm">
           <Title
             order={4}
-            style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-sm)' }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--mantine-spacing-sm)',
+            }}
           >
             <IconBook size={16} stroke={1.5} />
             <span>boasi_s</span>
@@ -147,7 +151,11 @@ function DesktopHeader({ bootPending }: { bootPending: boolean }) {
             onClick={toggleTheme}
             title={`Тема: ${colorScheme}. Клик — сменить.`}
           >
-            {isDark ? <IconSun size={16} stroke={1.5} /> : <IconMoonStars size={16} stroke={1.5} />}
+            {isDark ? (
+              <IconSun size={16} stroke={1.5} />
+            ) : (
+              <IconMoonStars size={16} stroke={1.5} />
+            )}
           </ActionIcon>
         </Group>
       </Group>
@@ -209,7 +217,11 @@ export function AppLayout() {
                 size="xs"
                 c="dimmed"
                 mb={4}
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--mantine-spacing-xs)',
+                }}
               >
                 <IconUser size={16} stroke={1.5} />
                 <span>

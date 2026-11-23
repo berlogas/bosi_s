@@ -11,7 +11,11 @@ configure({ asyncUtilTimeout: 15000 })
 // Десктопное приложение: всегда возвращаем matches=true для десктопных брейкпоинтов
 if (!window.matchMedia) {
   window.matchMedia = (query: string): MediaQueryList => {
-    const isDesktop = query.includes('min-width: 36em') || query.includes('min-width: 48em') || query.includes('min-width: 62em') || query.includes('min-width: 75em')
+    const isDesktop =
+      query.includes('min-width: 36em') ||
+      query.includes('min-width: 48em') ||
+      query.includes('min-width: 62em') ||
+      query.includes('min-width: 75em')
     return {
       matches: isDesktop,
       media: query,
@@ -76,7 +80,7 @@ if (!globalThis.EventSource) {
 // остаётся со стилем exiting (opacity: 0) между тестами.
 if (!window.requestAnimationFrame) {
   window.requestAnimationFrame = (cb: FrameRequestCallback) =>
-    setTimeout(cb, 0) as unknown as number;
+    setTimeout(cb, 0) as unknown as number
 }
 
 // react-router-dom useSearchParams в jsdom работает, но параметры фильтра

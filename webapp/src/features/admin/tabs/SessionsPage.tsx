@@ -4,16 +4,7 @@
  */
 
 import React from 'react'
-import {
-  Stack,
-  Title,
-  Text,
-  Group,
-  Select,
-  Alert,
-  Button,
-  Modal,
-} from '@mantine/core'
+import { Stack, Title, Text, Group, Select, Alert, Button, Modal } from '@mantine/core'
 
 import { useSessionsPage } from './hooks/useSessionsPage'
 import { useClearMessages } from '../../chat/queries'
@@ -114,42 +105,45 @@ export default function SessionsPage() {
     return opts
   }, [names])
 
-  const columns = React.useMemo(() => [
-    { id: 'id', accessorKey: 'id', header: 'ID' },
-    {
-      id: 'title',
-      accessorKey: 'title',
-      header: 'Название',
-      cell: (row: { title: string }) => row.title || '—',
-    },
-    {
-      id: 'status',
-      accessorKey: 'status',
-      header: 'Статус',
-      cell: (row: { status: string }) => row.status || '—',
-    },
-    {
-      id: 'user_id',
-      accessorKey: 'user_id',
-      header: 'Пользователь',
-      cell: (row: { user_id: string | null }) =>
-        names.get(row.user_id ?? '') ?? row.user_id ?? '—',
-    },
-    {
-      id: 'last_activity_at',
-      accessorKey: 'last_activity_at',
-      header: 'Активность',
-      cell: (row: { last_activity_at: string | null }) => {
-        const v = row.last_activity_at ?? ''
-        return v ? <span title={fullWhen(v)}>{shortWhen(v)}</span> : '—'
+  const columns = React.useMemo(
+    () => [
+      { id: 'id', accessorKey: 'id', header: 'ID' },
+      {
+        id: 'title',
+        accessorKey: 'title',
+        header: 'Название',
+        cell: (row: { title: string }) => row.title || '—',
       },
-    },
-    {
-      id: 'actions',
-      header: 'Действия',
-      cell: (row: { id: string }) => <ClearChatCell sessionId={row.id} />,
-    },
-  ], [names])
+      {
+        id: 'status',
+        accessorKey: 'status',
+        header: 'Статус',
+        cell: (row: { status: string }) => row.status || '—',
+      },
+      {
+        id: 'user_id',
+        accessorKey: 'user_id',
+        header: 'Пользователь',
+        cell: (row: { user_id: string | null }) =>
+          names.get(row.user_id ?? '') ?? row.user_id ?? '—',
+      },
+      {
+        id: 'last_activity_at',
+        accessorKey: 'last_activity_at',
+        header: 'Активность',
+        cell: (row: { last_activity_at: string | null }) => {
+          const v = row.last_activity_at ?? ''
+          return v ? <span title={fullWhen(v)}>{shortWhen(v)}</span> : '—'
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: (row: { id: string }) => <ClearChatCell sessionId={row.id} />,
+      },
+    ],
+    [names],
+  )
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (isError) return <Alert color="red">{errorText(error, 'Ошибка загрузки')}</Alert>
@@ -171,7 +165,7 @@ export default function SessionsPage() {
         <Text size="xs" c="dimmed">
           {`Показано ${data.length} сессий из ${grouped.reduce(
             (acc, g) => acc + g.rows.length,
-            0
+            0,
           )} всего`}
         </Text>
       </Group>

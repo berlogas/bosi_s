@@ -139,7 +139,9 @@ async def chat_stream(
                 yield 'data: [DONE]\n\n'
                 return
             if not chunks:
-                yield f'data: {json.dumps({"token": "Не найдено подходящих источников в базе знаний."})}\n\n'
+                message = json.dumps(
+                    {"token": "Не найдено подходящих источников в базе знаний."})
+                yield f"data: {message}\n\n"
                 yield 'data: [DONE]\n\n'
                 return
 

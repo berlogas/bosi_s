@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -101,7 +102,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_request: Request, exc: RequestValidationError) -> JSONResponse:
-        def make_serializable(obj):
+        def make_serializable(obj: Any) -> Any:
             if isinstance(obj, bytes):
                 return obj.decode("utf-8", "replace")
             if isinstance(obj, dict):

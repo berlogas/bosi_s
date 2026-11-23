@@ -67,8 +67,15 @@ function useInvalidateProject(sessionId: string) {
 export function useCreateProject(sessionId: string) {
   const invalidate = useInvalidateProject(sessionId)
   return useMutation({
-    mutationFn: ({ title, journal, language }: { title: string; journal: string; language: string }) =>
-      client.createProject(sessionId, title, journal, language),
+    mutationFn: ({
+      title,
+      journal,
+      language,
+    }: {
+      title: string
+      journal: string
+      language: string
+    }) => client.createProject(sessionId, title, journal, language),
     onSuccess: (project) => invalidate(project.id),
   })
 }
@@ -81,7 +88,12 @@ export function usePatchProject(sessionId: string) {
       fields,
     }: {
       projectId: string
-      fields: { status?: string; title?: string; target_journal?: string; language?: string }
+      fields: {
+        status?: string
+        title?: string
+        target_journal?: string
+        language?: string
+      }
     }) => client.patchProject(sessionId, projectId, fields),
     onSuccess: (project) => invalidate(project.id),
   })
@@ -153,7 +165,6 @@ export function useExportProject(sessionId: string) {
   })
 }
 
-
 export function useSetProjectStyleGuide(sessionId: string) {
   const invalidate = useInvalidateProject(sessionId)
   return useMutation({
@@ -163,8 +174,7 @@ export function useSetProjectStyleGuide(sessionId: string) {
     }: {
       projectId: string
       documentId: string | null
-    }) =>
-      client.setProjectStyleGuide(sessionId, projectId, documentId),
+    }) => client.setProjectStyleGuide(sessionId, projectId, documentId),
     onSuccess: () => invalidate(),
   })
 }
@@ -174,13 +184,8 @@ export function useSetProjectStyleGuide(sessionId: string) {
 export function useReorderProjects(sessionId: string) {
   const invalidate = useInvalidateProject(sessionId)
   return useMutation({
-    mutationFn: ({
-      projectId,
-      order,
-    }: {
-      projectId: string
-      order: number
-    }) => client.patchProject(sessionId, projectId, { order }),
+    mutationFn: ({ projectId, order }: { projectId: string; order: number }) =>
+      client.patchProject(sessionId, projectId, { order }),
     onSuccess: () => invalidate(),
   })
 }

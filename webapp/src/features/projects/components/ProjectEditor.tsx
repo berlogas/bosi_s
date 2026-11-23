@@ -1,5 +1,19 @@
-import { Stack, Accordion, Group, Text, Progress, TextInput, Select } from '@mantine/core'
-import { IconSettings, IconFileText, IconDownload, IconFiles, IconHistory } from '@tabler/icons-react'
+import {
+  Stack,
+  Accordion,
+  Group,
+  Text,
+  Progress,
+  TextInput,
+  Select,
+} from '@mantine/core'
+import {
+  IconSettings,
+  IconFileText,
+  IconDownload,
+  IconFiles,
+  IconHistory,
+} from '@tabler/icons-react'
 import React from 'react'
 import { useProjectProgress, useJournalStyles, usePatchProject } from '../queries'
 import { useSectionPlans } from '../hooks'
@@ -21,7 +35,11 @@ interface ProjectEditorProps {
   readOnly?: boolean
 }
 
-export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectEditorProps) {
+export function ProjectEditor({
+  sessionId,
+  project,
+  readOnly = false,
+}: ProjectEditorProps) {
   const progress = useProjectProgress(sessionId, project.id)
   const patch = usePatchProject(sessionId)
   const styles = useJournalStyles()
@@ -72,7 +90,8 @@ export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectE
         <div>
           <Group justify="space-between">
             <Text size="sm">
-              {progress.data.written}/{progress.data.sections} разделов · {progress.data.words} слов
+              {progress.data.written}/{progress.data.sections} разделов ·{' '}
+              {progress.data.words} слов
             </Text>
             <Text size="sm" c="dimmed">
               {progress.data.percent}%
@@ -171,7 +190,11 @@ export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectE
             </Group>
           </Accordion.Control>
           <Accordion.Panel>
-            <ProjectDocumentsPanel sessionId={sessionId} projectId={project.id} readOnly={readOnly} />
+            <ProjectDocumentsPanel
+              sessionId={sessionId}
+              projectId={project.id}
+              readOnly={readOnly}
+            />
           </Accordion.Panel>
         </Accordion.Item>
 
@@ -185,10 +208,14 @@ export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectE
           <Accordion.Panel>
             <Stack gap="sm" mt="xs">
               <Text size="sm" c="dimmed">
-                Привяжите документ с ролью "Правила оформления журнала" в панели документов ниже.
-                Он будет использоваться при генерации и экспорте.
+                Привяжите документ с ролью "Правила оформления журнала" в панели
+                документов ниже. Он будет использоваться при генерации и экспорте.
               </Text>
-              <StyleGuideSelector sessionId={sessionId} project={project} readOnly={readOnly} />
+              <StyleGuideSelector
+                sessionId={sessionId}
+                project={project}
+                readOnly={readOnly}
+              />
             </Stack>
           </Accordion.Panel>
         </Accordion.Item>
@@ -215,7 +242,12 @@ export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectE
             </Group>
           </Accordion.Control>
           <Accordion.Panel>
-            <SectionPlanEditor sessionId={sessionId} projectId={project.id} readOnly={readOnly} projectTargetJournal={project.target_journal} />
+            <SectionPlanEditor
+              sessionId={sessionId}
+              projectId={project.id}
+              readOnly={readOnly}
+              projectTargetJournal={project.target_journal}
+            />
           </Accordion.Panel>
         </Accordion.Item>
 
@@ -229,7 +261,9 @@ export function ProjectEditor({ sessionId, project, readOnly = false }: ProjectE
           <Accordion.Panel>
             {(sectionPlans ?? []).map((plan) => (
               <div key={plan.id} style={{ marginBottom: 16 }}>
-                <Text fw={500} style={{ marginBottom: 8 }}>{plan.name}</Text>
+                <Text fw={500} style={{ marginBottom: 8 }}>
+                  {plan.name}
+                </Text>
                 <SectionHistoryView
                   sessionId={sessionId}
                   projectId={project.id}

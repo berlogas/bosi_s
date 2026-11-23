@@ -21,7 +21,11 @@ export interface SimpleTableProps<T> {
   columns: SimpleColumn<T>[]
   data: T[]
   pagination: { pageIndex: number; pageSize: number; pageCount: number }
-  onPaginationChange: (next: { pageIndex: number; pageSize: number; pageCount: number }) => void
+  onPaginationChange: (next: {
+    pageIndex: number
+    pageSize: number
+    pageCount: number
+  }) => void
   sorting: { id: string; desc: boolean }[]
   onSortingChange: (next: { id: string; desc: boolean }[]) => void
   filters: { id: string; value: unknown }[]
@@ -77,7 +81,13 @@ export function SimpleTable<T extends { id: string | number }>({
 
   if (isLoading) {
     return (
-      <div style={{ padding: 'var(--mantine-spacing-md)', textAlign: 'center', color: 'var(--mantine-color-dimmed)' }}>
+      <div
+        style={{
+          padding: 'var(--mantine-spacing-md)',
+          textAlign: 'center',
+          color: 'var(--mantine-color-dimmed)',
+        }}
+      >
         Загрузка…
       </div>
     )
@@ -118,20 +128,18 @@ export function SimpleTable<T extends { id: string | number }>({
                             {
                               id: col.accessorKey!,
                               desc:
-                                sorting[0]?.id === col.accessorKey &&
-                                !sorting[0]?.desc,
+                                sorting[0]?.id === col.accessorKey && !sorting[0]?.desc,
                             },
                           ])
                       : undefined
                   }
                 >
                   {col.header}
-                  {canSort &&
-                    sorting[0]?.id === col.accessorKey && (
-                      <span style={{ marginLeft: 'var(--mantine-spacing-xs)' }}>
-                        {sorting[0]?.desc ? '▼' : '▲'}
-                      </span>
-                    )}
+                  {canSort && sorting[0]?.id === col.accessorKey && (
+                    <span style={{ marginLeft: 'var(--mantine-spacing-xs)' }}>
+                      {sorting[0]?.desc ? '▼' : '▲'}
+                    </span>
+                  )}
                 </th>
               )
             })}
@@ -196,8 +204,14 @@ export function SimpleTable<T extends { id: string | number }>({
           {data.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length + (rowActionsHeaders?.length ?? (rowActions ? 1 : 0))}
-                style={{ textAlign: 'center', padding: 'var(--mantine-spacing-xl)', color: 'var(--mantine-color-dimmed)' }}
+                colSpan={
+                  columns.length + (rowActionsHeaders?.length ?? (rowActions ? 1 : 0))
+                }
+                style={{
+                  textAlign: 'center',
+                  padding: 'var(--mantine-spacing-xl)',
+                  color: 'var(--mantine-color-dimmed)',
+                }}
               >
                 {emptyMessage}
               </td>
@@ -222,17 +236,11 @@ export function SimpleTable<T extends { id: string | number }>({
                     {col.cell
                       ? col.cell(row)
                       : String(
-                          (row as Record<string, unknown>)[
-                            col.accessorKey ?? ''
-                          ] ?? '',
+                          (row as Record<string, unknown>)[col.accessorKey ?? ''] ?? '',
                         )}
                   </td>
                 ))}
-                {rowActions && (
-                  <>
-                    {rowActions({ original: row })}
-                  </>
-                )}
+                {rowActions && <>{rowActions({ original: row })}</>}
               </tr>
             ))
           )}
@@ -249,7 +257,13 @@ export function SimpleTable<T extends { id: string | number }>({
           gap: 'var(--mantine-spacing-xs)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--mantine-spacing-xs)',
+          }}
+        >
           <button
             style={{
               padding: '2px 4px',
@@ -275,8 +289,7 @@ export function SimpleTable<T extends { id: string | number }>({
               display: 'inline-block',
             }}
           >
-            {pagination.pageIndex + 1} /{' '}
-            {Math.max(1, pagination.pageCount || 1)}
+            {pagination.pageIndex + 1} / {Math.max(1, pagination.pageCount || 1)}
           </span>
           <button
             style={{
@@ -287,8 +300,7 @@ export function SimpleTable<T extends { id: string | number }>({
               cursor: 'pointer',
             }}
             disabled={
-              pagination.pageIndex >=
-              Math.max(1, pagination.pageCount || 1) - 1
+              pagination.pageIndex >= Math.max(1, pagination.pageCount || 1) - 1
             }
             onClick={() =>
               onPaginationChange({

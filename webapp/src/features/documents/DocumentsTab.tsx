@@ -55,7 +55,7 @@ export const CATEGORIES = [
 const CATEGORY_OPTIONS = CATEGORIES.map((value) => ({
   value,
   label: categoryLabel(value),
-}));
+}))
 
 /**
  * Итог фоновой индексации — то, что сервер кладёт в `result` задачи.
@@ -167,7 +167,11 @@ function DocumentsTable({
                 key={h.key}
                 onClick={
                   h.key !== 'actions'
-                    ? () => onSortChange({ id: h.key, desc: sortId === h.key ? !sortDesc : false })
+                    ? () =>
+                        onSortChange({
+                          id: h.key,
+                          desc: sortId === h.key ? !sortDesc : false,
+                        })
                     : undefined
                 }
                 style={{
@@ -206,19 +210,44 @@ function DocumentsTable({
           ) : (
             pageData.map((document) => (
               <tr key={document.id ?? document.dockey}>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   {document.title || document.docname}
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   {categoryLabel(document.category)}
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   <Badge size="xs">{document.status ?? '—'}</Badge>
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   {document.chunk_count ?? 0}
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   {(() => {
                     const bytes = document.size_bytes ?? 0
                     if (bytes < 1024) return `${bytes} Б`
@@ -226,13 +255,29 @@ function DocumentsTable({
                     return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
                   })()}
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   {document.tags?.join(', ') || '—'}
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
                   {document.dockey?.slice(0, 8) || '—'}
                 </td>
-                <td style={{ padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)', borderBottom: '1px solid var(--mantine-color-default-border)', textAlign: 'right' }}>
+                <td
+                  style={{
+                    padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                    textAlign: 'right',
+                  }}
+                >
                   <Group gap="xs">
                     <Button
                       size="compact-xs"
@@ -270,7 +315,13 @@ function DocumentsTable({
           gap: 'var(--mantine-spacing-xs)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--mantine-spacing-xs)',
+          }}
+        >
           <button
             style={{
               padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
@@ -341,23 +392,33 @@ function DocumentDetailDrawer({
     >
       <Stack gap="sm">
         <Group>
-          <Text size="sm" fw={500}>Название:</Text>
+          <Text size="sm" fw={500}>
+            Название:
+          </Text>
           <Text size="sm">{document.title || document.docname}</Text>
         </Group>
         <Group>
-          <Text size="sm" fw={500}>Категория:</Text>
+          <Text size="sm" fw={500}>
+            Категория:
+          </Text>
           <Badge size="xs">{categoryLabel(document.category ?? '—')}</Badge>
         </Group>
         <Group>
-          <Text size="sm" fw={500}>Статус:</Text>
+          <Text size="sm" fw={500}>
+            Статус:
+          </Text>
           <Badge size="xs">{document.status ?? '—'}</Badge>
         </Group>
         <Group>
-          <Text size="sm" fw={500}>Чанков:</Text>
+          <Text size="sm" fw={500}>
+            Чанков:
+          </Text>
           <Text size="sm">{document.chunk_count ?? 0}</Text>
         </Group>
         <Group>
-          <Text size="sm" fw={500}>Объём:</Text>
+          <Text size="sm" fw={500}>
+            Объём:
+          </Text>
           <Text size="sm">
             {(() => {
               const bytes = document.size_bytes ?? 0
@@ -369,7 +430,9 @@ function DocumentDetailDrawer({
         </Group>
         {document.dockey && (
           <Group>
-            <Text size="sm" fw={500}>Dockey:</Text>
+            <Text size="sm" fw={500}>
+              Dockey:
+            </Text>
             <Text size="xs" c="dimmed" ff="monospace">
               {document.dockey}
             </Text>
@@ -377,14 +440,20 @@ function DocumentDetailDrawer({
         )}
         {document.tags && document.tags.length > 0 && (
           <Group>
-            <Text size="sm" fw={500}>Теги:</Text>
+            <Text size="sm" fw={500}>
+              Теги:
+            </Text>
             <Text size="sm">{document.tags.join(', ')}</Text>
           </Group>
         )}
         {document.citation && (
           <Group>
-            <Text size="sm" fw={500}>Цитата:</Text>
-            <Text size="xs" c="dimmed">{document.citation}</Text>
+            <Text size="sm" fw={500}>
+              Цитата:
+            </Text>
+            <Text size="xs" c="dimmed">
+              {document.citation}
+            </Text>
           </Group>
         )}
       </Stack>
@@ -449,9 +518,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           setTags([])
         },
         onError: (cause) =>
-          setFormError(
-            cause instanceof Error ? cause.message : 'Не удалось добавить',
-          ),
+          setFormError(cause instanceof Error ? cause.message : 'Не удалось добавить'),
       },
     )
   }
@@ -485,9 +552,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           setReplaceOpen(false)
         },
         onError: (cause) =>
-          setFormError(
-            cause instanceof Error ? cause.message : 'Загрузка не удалась',
-          ),
+          setFormError(cause instanceof Error ? cause.message : 'Загрузка не удалась'),
         onSettled: () => setUploadPercent(null),
       },
     )
@@ -593,9 +658,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
 
   /** Фильтруем документы по выбранной категории, исключая удалённые (в ожидании undo). */
   const filteredDocs = useMemo(() => {
-    const docs = (documents.data ?? []).filter(
-      (d) => deletedDocument?.id !== d.id,
-    )
+    const docs = (documents.data ?? []).filter((d) => deletedDocument?.id !== d.id)
     if (category === 'all') return docs
     return docs.filter((d) => d.category === category)
   }, [documents.data, category, deletedDocument])
@@ -687,8 +750,8 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       >
         <Stack>
           <Text size="sm">
-            В сессии уже есть файлы с теми же именами. Загрузка заменит их:
-            прежние версии исчезнут из индекса, новые займут их место.
+            В сессии уже есть файлы с теми же именами. Загрузка заменит их: прежние
+            версии исчезнут из индекса, новые займут их место.
           </Text>
           <Stack gap={2}>
             {conflictingNames.map((name) => (
@@ -701,9 +764,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             <Button variant="default" onClick={() => setReplaceOpen(false)}>
               Отмена
             </Button>
-            <Button onClick={() => startUpload(true)}>
-              Заменить и загрузить
-            </Button>
+            <Button onClick={() => startUpload(true)}>Заменить и загрузить</Button>
           </Group>
         </Stack>
       </Modal>
@@ -728,10 +789,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       <Group align="flex-end" gap="sm">
         <Select
           label="Категория"
-          data={[
-            { value: 'all', label: 'Все категории' },
-            ...CATEGORY_OPTIONS,
-          ]}
+          data={[{ value: 'all', label: 'Все категории' }, ...CATEGORY_OPTIONS]}
           value={category}
           onChange={(value) => {
             const next = value ?? 'all'
@@ -819,7 +877,9 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
           }}
           onClick={() => {
             if (!readOnly) {
-              const input = document.querySelector('[data-testid="doc-file-input"]') as HTMLInputElement | null
+              const input = document.querySelector(
+                '[data-testid="doc-file-input"]',
+              ) as HTMLInputElement | null
               input?.click()
             }
           }}
@@ -849,7 +909,8 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
                     })
                   }
                 }
-                if (newFiles.length > 0) setFiles((current) => [...current, ...newFiles])
+                if (newFiles.length > 0)
+                  setFiles((current) => [...current, ...newFiles])
               }
             }}
           />
@@ -859,9 +920,7 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
       {files.length > 0 && (
         <Group justify="space-between" wrap="wrap">
           <Stack gap="xs">
-            <Text size="sm">
-              Выбрано файлов: {files.length}
-            </Text>
+            <Text size="sm">Выбрано файлов: {files.length}</Text>
             <Text component="span" c="dimmed" size="xs">
               ({files.map((file) => file.name).join(', ')})
             </Text>
@@ -950,9 +1009,10 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
             multiple={false}
           >
             {grouped.map(([group, items]) => {
-              const filteredItems = category === 'all'
-                ? items
-                : items.filter((d) => d.category === category)
+              const filteredItems =
+                category === 'all'
+                  ? items
+                  : items.filter((d) => d.category === category)
               if (filteredItems.length === 0) return null
               return (
                 <Accordion.Item key={group} value={group}>
@@ -1058,7 +1118,6 @@ export function DocumentsTab({ sessionId, readOnly }: DocumentsTabProps) {
         document={selectedDoc!}
         onClose={() => setSelectedDoc(null)}
       />
-
     </Stack>
   )
 }

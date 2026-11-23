@@ -36,11 +36,7 @@ export function EmptyState({
   )
 }
 
-export function EmptyProjectsState({
-  onCreate,
-}: {
-  onCreate: () => void
-}) {
+export function EmptyProjectsState({ onCreate }: { onCreate: () => void }) {
   return (
     <EmptyState
       icon={<IconFilePlus size={48} />}
@@ -52,11 +48,7 @@ export function EmptyProjectsState({
   )
 }
 
-export function EmptySectionsState({
-  onGenerate,
-}: {
-  onGenerate?: () => void
-}) {
+export function EmptySectionsState({ onGenerate }: { onGenerate?: () => void }) {
   return (
     <EmptyState
       icon={<IconFilePencil size={48} />}

@@ -50,41 +50,44 @@ export default function MaintenancePage() {
   const reindex = useAdminReindex()
 
   // Все useMemo до early return
-  const backupColumns = React.useMemo(() => [
-    { id: 'name', accessorKey: 'name', header: 'Копия' },
-    {
-      id: 'human_size',
-      accessorKey: 'human_size',
-      header: 'Размер',
-      cell: (row: { human_size: string }) => row.human_size,
-    },
-    {
-      id: 'created_at',
-      accessorKey: 'created_at',
-      header: 'Создана',
-      cell: (row: { created_at: string }) => {
-        const v = row.created_at
-        return v ? <span title={fullWhen(v)}>{shortWhen(v)}</span> : '—'
+  const backupColumns = React.useMemo(
+    () => [
+      { id: 'name', accessorKey: 'name', header: 'Копия' },
+      {
+        id: 'human_size',
+        accessorKey: 'human_size',
+        header: 'Размер',
+        cell: (row: { human_size: string }) => row.human_size,
       },
-    },
-    {
-      id: 'actions',
-      header: '',
-      cell: (row: { name: string }) => (
-        <Group gap="xs" wrap="nowrap">
-          <DangerZone
-            confirmText={row.name}
-            onConfirm={() => handleDeleteBackup(row.name)}
-            warning="Резервную копию восстановить нельзя."
-          >
-            <Button size="xs" variant="subtle" color="red">
-              Удалить
-            </Button>
-          </DangerZone>
-        </Group>
-      ),
-    },
-  ], [handleDeleteBackup])
+      {
+        id: 'created_at',
+        accessorKey: 'created_at',
+        header: 'Создана',
+        cell: (row: { created_at: string }) => {
+          const v = row.created_at
+          return v ? <span title={fullWhen(v)}>{shortWhen(v)}</span> : '—'
+        },
+      },
+      {
+        id: 'actions',
+        header: '',
+        cell: (row: { name: string }) => (
+          <Group gap="xs" wrap="nowrap">
+            <DangerZone
+              confirmText={row.name}
+              onConfirm={() => handleDeleteBackup(row.name)}
+              warning="Резервную копию восстановить нельзя."
+            >
+              <Button size="xs" variant="subtle" color="red">
+                Удалить
+              </Button>
+            </DangerZone>
+          </Group>
+        ),
+      },
+    ],
+    [handleDeleteBackup],
+  )
 
   if (backups.isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (backups.isError) {
@@ -160,8 +163,12 @@ export default function MaintenancePage() {
       {backupBusy && (
         <Paper withBorder p="sm" role="status">
           <Group justify="space-between" mb={6}>
-            <Text size="sm" fw={500}>Создание копии…</Text>
-            <Text size="sm" c="dimmed">{backupTask.data?.progress ?? 0}%</Text>
+            <Text size="sm" fw={500}>
+              Создание копии…
+            </Text>
+            <Text size="sm" c="dimmed">
+              {backupTask.data?.progress ?? 0}%
+            </Text>
           </Group>
           <Progress value={backupTask.data?.progress ?? 0} animated />
           <Text size="xs" c="dimmed" mt={6}>
@@ -218,7 +225,9 @@ export default function MaintenancePage() {
         />
       )}
       {items.length === 0 && backups.isSuccess && (
-        <Text size="sm" c="dimmed" role="status">Копий пока нет.</Text>
+        <Text size="sm" c="dimmed" role="status">
+          Копий пока нет.
+        </Text>
       )}
       {remove.isError && (
         <Alert color="error" role="alert">
@@ -232,8 +241,8 @@ export default function MaintenancePage() {
       <Alert color="info" title="Когда нужно">
         Переиндексация повторно считает эмбеддинги всех документов. Требуется после
         смены модели эмбеддингов (`EMBEDDING_MODEL`), размера чанка
-        (`CHUNK_CHARS`/`CHUNK_OVERLAP`) или если настройки PaperQA изменились.
-        Все старые чанки с предыдущим отпечатком настроек будут пересозданы.
+        (`CHUNK_CHARS`/`CHUNK_OVERLAP`) или если настройки PaperQA изменились. Все
+        старые чанки с предыдущим отпечатком настроек будут пересозданы.
       </Alert>
 
       <Group>
@@ -268,7 +277,8 @@ export default function MaintenancePage() {
 
       <Alert color="warning" title="Сброс необратим">
         Удалённые сессии, документы и переписка восстановить нельзя — только из бэкапа (
-        <code>scripts/backup.sh</code> или кнопка «Создать копию» выше). Сначала посмотрите план.
+        <code>scripts/backup.sh</code> или кнопка «Создать копию» выше). Сначала
+        посмотрите план.
       </Alert>
 
       <Select
@@ -280,7 +290,9 @@ export default function MaintenancePage() {
         w={520}
       />
       {current && (
-        <Text size="sm" c="dimmed">{current.hint}</Text>
+        <Text size="sm" c="dimmed">
+          {current.hint}
+        </Text>
       )}
 
       <Checkbox
@@ -307,15 +319,27 @@ export default function MaintenancePage() {
           <Stack gap="xs">
             <Text fw={600}>Будет удалено</Text>
             <SimpleTable
-              columns={[
-                { id: 'table', header: 'Таблица', cell: (row: { table: string }) => row.table },
-                { id: 'rows', header: 'Строк', cell: (row: { rows: number }) => row.rows },
-              ] as never}
-              data={Object.entries(plan.data.tables).map(([table, rows]) => ({
-                id: table,
-                table,
-                rows,
-              })) as never}
+              columns={
+                [
+                  {
+                    id: 'table',
+                    header: 'Таблица',
+                    cell: (row: { table: string }) => row.table,
+                  },
+                  {
+                    id: 'rows',
+                    header: 'Строк',
+                    cell: (row: { rows: number }) => row.rows,
+                  },
+                ] as never
+              }
+              data={
+                Object.entries(plan.data.tables).map(([table, rows]) => ({
+                  id: table,
+                  table,
+                  rows,
+                })) as never
+              }
               pagination={{ pageIndex: 0, pageSize: 100, pageCount: 1 }}
               onPaginationChange={() => {}}
               sorting={[]}
@@ -327,8 +351,7 @@ export default function MaintenancePage() {
             />
             {plan.data.paths.map((item) => (
               <Text key={item.path} size="sm">
-                <code>{item.path}</code> — {item.files} файлов,{' '}
-                {humanBytes(item.bytes)}
+                <code>{item.path}</code> — {item.files} файлов, {humanBytes(item.bytes)}
               </Text>
             ))}
             <Text size="sm" fw={600}>

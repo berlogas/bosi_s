@@ -19,4 +19,4 @@ async def close_db_connection() -> None:
 
 get_session = get_db
 
-__all__ = ["create_db_and_tables", "close_db_connection", "get_session"]
+__all__ = ["close_db_connection", "create_db_and_tables", "get_session"]

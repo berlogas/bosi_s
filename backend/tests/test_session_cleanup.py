@@ -51,7 +51,6 @@ def paper(stub_registry):
 @pytest.fixture
 def user(db):
     from app.core.security import hash_password
-
     from app.db.repositories.users import create_user
 
     return create_user(db, username="ivanov", password="password-1234",

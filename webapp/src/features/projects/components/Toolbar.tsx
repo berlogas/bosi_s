@@ -1,5 +1,16 @@
 import { Group, UnstyledButton } from '@mantine/core'
-import { IconBold, IconCode, IconEraser, IconHeading, IconItalic, IconLink, IconList, IconQuote, IconStrikethrough, IconTable } from '@tabler/icons-react'
+import {
+  IconBold,
+  IconCode,
+  IconEraser,
+  IconHeading,
+  IconItalic,
+  IconLink,
+  IconList,
+  IconQuote,
+  IconStrikethrough,
+  IconTable,
+} from '@tabler/icons-react'
 import React, { useMemo } from 'react'
 import { type EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
@@ -67,28 +78,82 @@ interface ToolbarProps {
   onToggleWrap?: () => void
 }
 
-export function Toolbar({ readOnly, editorView, wrapLines = true, onToggleWrap }: ToolbarProps) {
+export function Toolbar({
+  readOnly,
+  editorView,
+  wrapLines = true,
+  onToggleWrap,
+}: ToolbarProps) {
   const actions = useMemo<ToolbarAction[]>(
     () => [
-      { icon: <IconHeading size={14} />, title: 'Заголовок 2 (H2)', before: '## ', after: '', hotkey: 'Ctrl+2' },
-      { icon: <IconHeading size={14} />, title: 'Заголовок 3 (H3)', before: '### ', after: '', hotkey: 'Ctrl+3' },
-      { icon: <IconBold size={14} />, title: 'Жирный (Ctrl+B)', before: '**', after: '**' },
-      { icon: <IconItalic size={14} />, title: 'Курсив (Ctrl+I)', before: '*', after: '*' },
-      { icon: <IconStrikethrough size={14} />, title: 'Зачёркнутый', before: '~~', after: '~~' },
-      { icon: <IconList size={14} />, title: 'Маркированный список', before: '- ', after: '' },
-      { icon: <IconList size={14} />, title: 'Нумерованный список', before: '1. ', after: '' },
+      {
+        icon: <IconHeading size={14} />,
+        title: 'Заголовок 2 (H2)',
+        before: '## ',
+        after: '',
+        hotkey: 'Ctrl+2',
+      },
+      {
+        icon: <IconHeading size={14} />,
+        title: 'Заголовок 3 (H3)',
+        before: '### ',
+        after: '',
+        hotkey: 'Ctrl+3',
+      },
+      {
+        icon: <IconBold size={14} />,
+        title: 'Жирный (Ctrl+B)',
+        before: '**',
+        after: '**',
+      },
+      {
+        icon: <IconItalic size={14} />,
+        title: 'Курсив (Ctrl+I)',
+        before: '*',
+        after: '*',
+      },
+      {
+        icon: <IconStrikethrough size={14} />,
+        title: 'Зачёркнутый',
+        before: '~~',
+        after: '~~',
+      },
+      {
+        icon: <IconList size={14} />,
+        title: 'Маркированный список',
+        before: '- ',
+        after: '',
+      },
+      {
+        icon: <IconList size={14} />,
+        title: 'Нумерованный список',
+        before: '1. ',
+        after: '',
+      },
       { icon: <IconQuote size={14} />, title: 'Цитата', before: '> ', after: '' },
       { icon: <IconCode size={14} />, title: 'Код (inline)', before: '`', after: '`' },
-      { icon: <IconLink size={14} />, title: 'Ссылка (Ctrl+K)', before: '[', after: '](url)' },
+      {
+        icon: <IconLink size={14} />,
+        title: 'Ссылка (Ctrl+K)',
+        before: '[',
+        after: '](url)',
+      },
       {
         icon: <IconTable size={14} />,
         title: 'Таблица',
         before: '| Header 1 | Header 2 |\n|---|---|\n| Cell 1 | Cell 2 |',
         after: '',
       },
-      { icon: <IconEraser size={14} />, title: 'Очистить форматирование', before: '', after: '', hotkey: 'Ctrl+\\', action: 'clear' },
+      {
+        icon: <IconEraser size={14} />,
+        title: 'Очистить форматирование',
+        before: '',
+        after: '',
+        hotkey: 'Ctrl+\\',
+        action: 'clear',
+      },
     ],
-    []
+    [],
   )
 
   const getView = () => editorView
@@ -115,11 +180,24 @@ export function Toolbar({ readOnly, editorView, wrapLines = true, onToggleWrap }
           width: 32,
           height: 32,
           borderRadius: 'var(--mantine-radius-sm)',
-          color: wrapLines ? 'var(--mantine-color-primary-filled)' : 'var(--mantine-color-text)',
-          backgroundColor: wrapLines ? 'var(--mantine-color-primary-light)' : 'transparent',
+          color: wrapLines
+            ? 'var(--mantine-color-primary-filled)'
+            : 'var(--mantine-color-text)',
+          backgroundColor: wrapLines
+            ? 'var(--mantine-color-primary-light)'
+            : 'transparent',
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M21 10H3" />
           <path d="M15 14H3" />
           <path d="M17 18H3" />
@@ -127,7 +205,12 @@ export function Toolbar({ readOnly, editorView, wrapLines = true, onToggleWrap }
         </svg>
       </UnstyledButton>
       <UnstyledButton
-        style={{ width: '1px', height: '24px', backgroundColor: 'var(--mantine-color-default-border)', margin: '0 4px' }}
+        style={{
+          width: '1px',
+          height: '24px',
+          backgroundColor: 'var(--mantine-color-default-border)',
+          margin: '0 4px',
+        }}
         disabled
       />
       {actions.map((action, idx) => (

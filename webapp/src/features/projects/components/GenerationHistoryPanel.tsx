@@ -30,7 +30,10 @@ const STATUS_LABELS: Record<string, string> = {
  * Раньше здесь были моковые данные («демо-данные»), из-за чего панель
  * показывала несуществующие генерации.
  */
-export function GenerationHistoryPanel({ sessionId, projectId }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({
+  sessionId,
+  projectId,
+}: GenerationHistoryPanelProps) {
   const { data: versions, isLoading } = useProjectSectionVersions(sessionId, projectId)
   const { data: plans } = useSectionPlans(sessionId, projectId)
   const [openVersionId, setOpenVersionId] = useState<string | null>(null)
@@ -69,7 +72,9 @@ export function GenerationHistoryPanel({ sessionId, projectId }: GenerationHisto
                   <td style={{ fontSize: 'xs', color: 'dimmed' }}>
                     {new Date(version.created_at).toLocaleString('ru-RU')}
                   </td>
-                  <td style={{ fontSize: 'xs' }}>{planName(version.section_plan_id)}</td>
+                  <td style={{ fontSize: 'xs' }}>
+                    {planName(version.section_plan_id)}
+                  </td>
                   <td style={{ fontSize: 'xs' }}>
                     <Badge
                       variant="light"
@@ -92,7 +97,9 @@ export function GenerationHistoryPanel({ sessionId, projectId }: GenerationHisto
                         variant="subtle"
                         size="xs"
                         onClick={() =>
-                          setOpenVersionId(openVersionId === version.id ? null : version.id)
+                          setOpenVersionId(
+                            openVersionId === version.id ? null : version.id,
+                          )
                         }
                       >
                         {openVersionId === version.id ? 'Скрыть' : 'Результат'}
@@ -113,7 +120,8 @@ export function GenerationHistoryPanel({ sessionId, projectId }: GenerationHisto
       {open && (
         <Paper withBorder p="sm">
           <Text size="sm" fw={500} mb={4}>
-            {planName(open.section_plan_id)} · {new Date(open.created_at).toLocaleString('ru-RU')}
+            {planName(open.section_plan_id)} ·{' '}
+            {new Date(open.created_at).toLocaleString('ru-RU')}
           </Text>
           <MarkdownText text={open.content_md ?? ''} />
         </Paper>

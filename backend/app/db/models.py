@@ -118,7 +118,8 @@ class DocumentCategory(str, enum.Enum):
     temp_literature = "temp_literature"
     notes = "notes"
     supplementary = "supplementary"
-    style_guide = "style_guide"  # документ «Правила оформления» журнала (только для стиля, не для текста)
+    # документ «Правила оформления» (только для стиля, не для текста)
+    style_guide = "style_guide"
     global_knowledge = "global_knowledge"  # документ глобальной базы знаний
 
 
@@ -425,7 +426,7 @@ class ProjectVersion(Base):
     )
 
 
-# --------------------------------------------------------------------------- section planning & versioning
+# ------------------------------------------------- section planning & versioning
 class SectionPlan(Base):
     """План раздела статьи — замена JSON в Project.sections.
 
@@ -488,12 +489,14 @@ class SectionVersion(Base):
     # Контент
     content_md: Mapped[str] = mapped_column(Text, default="")
     language: Mapped[str] = mapped_column(String(10), default="ru")
-    source_language: Mapped[str | None] = mapped_column(String(10), nullable=True)  # если переведено
+    source_language: Mapped[str | None] = mapped_column(
+        String(10), nullable=True)  # если переведено
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     # Цитирование
     citation_map: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     # Генерация
-    generation_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # полный снапшот параметров
+    # полный снапшот параметров
+    generation_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Стоимость
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)

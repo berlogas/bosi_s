@@ -7,11 +7,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { BreadcrumbContext, type BreadcrumbContextValue } from './BreadcrumbContext'
 
-export function BreadcrumbProvider({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export function BreadcrumbProvider({ children }: { children: React.ReactNode }) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [activeProjectTitle, setActiveProjectTitle] = useState<string | null>(null)
   const [activeSectionName, setActiveSectionName] = useState<string | null>(null)
@@ -34,18 +30,26 @@ export function BreadcrumbProvider({
     setActiveSectionName(null)
   }, [])
 
-  const value = useMemo<BreadcrumbContextValue>(() => ({
-    activeProjectId,
-    activeProjectTitle,
-    activeSectionName,
-    setActiveProject,
-    setActiveSection,
-    reset,
-  }), [activeProjectId, activeProjectTitle, activeSectionName, setActiveProject, setActiveSection, reset])
+  const value = useMemo<BreadcrumbContextValue>(
+    () => ({
+      activeProjectId,
+      activeProjectTitle,
+      activeSectionName,
+      setActiveProject,
+      setActiveSection,
+      reset,
+    }),
+    [
+      activeProjectId,
+      activeProjectTitle,
+      activeSectionName,
+      setActiveProject,
+      setActiveSection,
+      reset,
+    ],
+  )
 
   return (
-    <BreadcrumbContext.Provider value={value}>
-      {children}
-    </BreadcrumbContext.Provider>
+    <BreadcrumbContext.Provider value={value}>{children}</BreadcrumbContext.Provider>
   )
 }

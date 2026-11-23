@@ -23,7 +23,7 @@ export interface MenuItem {
   icon?: React.ReactNode
   enabled?: boolean | ((user: User | null) => boolean)
   roles?: string[]
-  children?: MenuItem[]  // для вложенных пунктов
+  children?: MenuItem[] // для вложенных пунктов
   // Остальные NavLink-пропсы при необходимости:
   disabled?: NavLinkProps['disabled']
   variant?: NavLinkProps['variant']
@@ -58,7 +58,10 @@ export function getCurrentSessionPath(user: User | null): string | null {
  * иначе пункт «Текущая сессия» не обновится, когда сессия открылась или сменилась.
  * Если путь не передан — берём из хранилища (как раньше).
  */
-export function getMenuSections(user: User | null, sessionPath?: string | null): MenuSection[] {
+export function getMenuSections(
+  user: User | null,
+  sessionPath?: string | null,
+): MenuSection[] {
   const path = sessionPath !== undefined ? sessionPath : getCurrentSessionPath(user)
 
   return [
@@ -66,8 +69,18 @@ export function getMenuSections(user: User | null, sessionPath?: string | null):
       id: 'main',
       header: 'Навигация',
       items: [
-        { to: '/', label: 'Информационная панель', icon: <IconHome size={16} />, enabled: true },
-        { to: '/knowledge', label: 'База знаний', icon: <IconDatabase size={16} />, enabled: true },
+        {
+          to: '/',
+          label: 'Информационная панель',
+          icon: <IconHome size={16} />,
+          enabled: true,
+        },
+        {
+          to: '/knowledge',
+          label: 'База знаний',
+          icon: <IconDatabase size={16} />,
+          enabled: true,
+        },
         {
           to: path || '',
           label: 'Текущая сессия',
@@ -83,12 +96,42 @@ export function getMenuSections(user: User | null, sessionPath?: string | null):
       collapsible: true,
       defaultOpen: true,
       items: [
-        { to: '/admin/users', label: 'Пользователи', icon: <IconUsers size={16} />, roles: ['admin'] },
-        { to: '/admin/documents', label: 'Глобальная база', icon: <IconDatabase size={16} />, roles: ['admin'] },
-        { to: '/admin/tasks', label: 'Задачи', icon: <IconListCheck size={16} />, roles: ['admin'] },
-        { to: '/admin/sessions', label: 'Сессии', icon: <IconLayoutDashboard size={16} />, roles: ['admin'] },
-        { to: '/admin/audit', label: 'Аудит', icon: <IconFileAnalytics size={16} />, roles: ['admin'] },
-        { to: '/admin/maintenance', label: 'Обслуживание', icon: <IconAdjustments size={16} />, roles: ['admin'] },
+        {
+          to: '/admin/users',
+          label: 'Пользователи',
+          icon: <IconUsers size={16} />,
+          roles: ['admin'],
+        },
+        {
+          to: '/admin/documents',
+          label: 'Глобальная база',
+          icon: <IconDatabase size={16} />,
+          roles: ['admin'],
+        },
+        {
+          to: '/admin/tasks',
+          label: 'Задачи',
+          icon: <IconListCheck size={16} />,
+          roles: ['admin'],
+        },
+        {
+          to: '/admin/sessions',
+          label: 'Сессии',
+          icon: <IconLayoutDashboard size={16} />,
+          roles: ['admin'],
+        },
+        {
+          to: '/admin/audit',
+          label: 'Аудит',
+          icon: <IconFileAnalytics size={16} />,
+          roles: ['admin'],
+        },
+        {
+          to: '/admin/maintenance',
+          label: 'Обслуживание',
+          icon: <IconAdjustments size={16} />,
+          roles: ['admin'],
+        },
       ],
     },
   ]

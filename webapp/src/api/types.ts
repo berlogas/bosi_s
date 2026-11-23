@@ -167,7 +167,8 @@ export interface AnswerChecks {
 
 // ============================================================ SectionPlan / SectionVersion
 /** Тип раздела из SectionKind enum. */
-export type SectionKind = 'standard' | 'literature_review' | 'data' | 'discussion' | 'custom'
+export type SectionKind =
+  'standard' | 'literature_review' | 'data' | 'discussion' | 'custom'
 
 export type SectionStatus = 'pending' | 'in_progress' | 'review' | 'approved'
 export type SectionPlanStatus = SectionStatus
@@ -259,7 +260,11 @@ export interface SemanticDiff {
   to_version_id: string
   added_claims: Array<{ index: number; text: string; citations: number[] }>
   removed_claims: Array<{ index: number; text: string; citations: number[] }>
-  modified_claims: Array<{ from: { index: number; text: string; citations: number[] }; to: { index: number; text: string; citations: number[] }; type: string }>
+  modified_claims: Array<{
+    from: { index: number; text: string; citations: number[] }
+    to: { index: number; text: string; citations: number[] }
+    type: string
+  }>
   citation_changes: { added: number[]; removed: number[] }
   terminology_changes: Record<string, string>
   word_count_delta: number
@@ -301,8 +306,18 @@ export interface BatchRegenerateResult {
 export interface CompiledManuscript {
   full_text: string
   sections: Array<{ name: string; kind: string; content: string; word_count: number }>
-  bibliography: Array<{ index: number; title: string | null; citation: string | null; dockey: string | null }>
-  stats: { total_words: number; sections_count: number; sources_count: number; language: string }
+  bibliography: Array<{
+    index: number
+    title: string | null
+    citation: string | null
+    dockey: string | null
+  }>
+  stats: {
+    total_words: number
+    sections_count: number
+    sources_count: number
+    language: string
+  }
   warnings: string[]
 }
 
@@ -319,7 +334,12 @@ export interface MergeResult {
 export interface TerminologyCheckResult {
   project_id: string
   glossary_terms: Record<string, Record<string, string>>
-  section_terminology: Array<{ section: string; term: string; expected: string; type: string }>
+  section_terminology: Array<{
+    section: string
+    term: string
+    expected: string
+    type: string
+  }>
   consistent: boolean
 }
 

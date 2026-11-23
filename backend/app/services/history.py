@@ -17,8 +17,7 @@ from app.db.models import (
     VersionStatus,
     new_id,
 )
-from app.services.generation import validate_citations
-from app.services.pqa_registry import get_registry
+from app.services.pqa_registry import ServiceRegistry, get_registry
 
 log = logging.getLogger("boasi.services.history")
 
@@ -29,9 +28,9 @@ class VersionNode:
     """Узел дерева версий."""
 
     version: SectionVersion
-    children: list["VersionNode"] = None  # type: ignore
+    children: list[VersionNode] = None  # type: ignore
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.children is None:
             self.children = []
 
@@ -65,7 +64,7 @@ class VersionTree:
 class HistoryService:
     """Управление историей версий разделов."""
 
-    def __init__(self, db: Session, registry=None) -> None:
+    def __init__(self, db: Session, registry: ServiceRegistry | None = None) -> None:
         self.db = db
         self.registry = registry or get_registry()
 
@@ -149,7 +148,8 @@ class HistoryService:
 
         word_count_delta = to_ver.word_count - from_ver.word_count
 
-        summary = self._generate_diff_summary(added, removed, modified, citation_changes, word_count_delta)
+        summary = self._generate_diff_summary(
+            added, removed, modified, citation_changes, word_count_delta)
 
         return SemanticDiff(
             from_version_id=from_id,
@@ -204,7 +204,8 @@ class HistoryService:
         modified = []
         for fc in from_claims:
             for tc in to_claims:
-                if self._similar_text(fc["text"], tc["text"]) and fc["citations"] != tc["citations"]:
+                if (self._similar_text(fc["text"], tc["text"])
+                        and fc["citations"] != tc["citations"]):
                     modified.append({
                         "from": fc,
                         "to": tc,

@@ -164,7 +164,13 @@ export function useUploadDocumentsAsync(sessionId: string) {
       onProgress?: (percent: number) => void
       /** Заменить прежние версии документов с теми же именами. */
       replace?: boolean
-    }) => client.uploadDocumentsAsync(sessionId, files, { category, tags, onProgress, replace }),
+    }) =>
+      client.uploadDocumentsAsync(sessionId, files, {
+        category,
+        tags,
+        onProgress,
+        replace,
+      }),
     onSuccess: invalidate,
   })
 }

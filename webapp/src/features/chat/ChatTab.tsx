@@ -105,10 +105,7 @@ export function ChatTab({
   // Сохранять выбранный режим в sessionStorage для восстановления после F5
   useEffect(() => {
     try {
-      sessionStorage.setItem(
-        `boasi.chat.mode.${sessionId}`,
-        mode,
-      )
+      sessionStorage.setItem(`boasi.chat.mode.${sessionId}`, mode)
     } catch {
       // sessionStorage недоступен — приватный режим или ошибка
     }
@@ -299,34 +296,34 @@ export function ChatTab({
   const deleteMessage = useDeleteMessage(sessionId, {
     onMutate: async (messageId: string) => {
       await queryClient.cancelQueries({ queryKey: chatKeys.messages(sessionId) })
-      const previous = queryClient.getQueryData(
-        chatKeys.messages(sessionId),
-      )
+      const previous = queryClient.getQueryData(chatKeys.messages(sessionId))
       undoRef.current = { previous, messageId }
       queryClient.setQueryData(chatKeys.messages(sessionId), (old: unknown) => {
-          if (!old || typeof old !== 'object' || old === null) return old
-          const data = old as { messages: MessageOut[]; total: number }
-          if (!data.messages) return old
-          const idx = data.messages.findIndex((m: MessageOut) => m.id === messageId)
-          if (idx === -1) return old
-          const toRemove = new Set([idx])
-          const msg = data.messages[idx]!
-          if (msg.role === 'user') {
-            const adjacent = data.messages[idx + 1]
-            if (adjacent?.role === 'assistant') {
-              toRemove.add(idx + 1)
-            }
-          } else if (msg.role === 'assistant') {
-            if (idx - 1 >= 0 && data.messages[idx - 1]?.role === 'user') {
-              toRemove.add(idx - 1)
-            }
+        if (!old || typeof old !== 'object' || old === null) return old
+        const data = old as { messages: MessageOut[]; total: number }
+        if (!data.messages) return old
+        const idx = data.messages.findIndex((m: MessageOut) => m.id === messageId)
+        if (idx === -1) return old
+        const toRemove = new Set([idx])
+        const msg = data.messages[idx]!
+        if (msg.role === 'user') {
+          const adjacent = data.messages[idx + 1]
+          if (adjacent?.role === 'assistant') {
+            toRemove.add(idx + 1)
           }
-          return {
-            ...data,
-            messages: data.messages.filter((_unknown: unknown, i: number) => !toRemove.has(i)),
-            total: Math.max(0, data.total - toRemove.size),
+        } else if (msg.role === 'assistant') {
+          if (idx - 1 >= 0 && data.messages[idx - 1]?.role === 'user') {
+            toRemove.add(idx - 1)
           }
-        })
+        }
+        return {
+          ...data,
+          messages: data.messages.filter(
+            (_unknown: unknown, i: number) => !toRemove.has(i),
+          ),
+          total: Math.max(0, data.total - toRemove.size),
+        }
+      })
 
       /** Сохранить точку возврата (дебаунс 5 мин делает клиент). */
       void saveState.mutate({ snapshot: { tab: 'chat' }, force: true })
@@ -334,7 +331,11 @@ export function ChatTab({
       // Контекст отката: без него onError не восстановит список сообщений.
       return { previous }
     },
-    onError: (_err: unknown, _messageId: string, context: { previous?: unknown } | undefined) => {
+    onError: (
+      _err: unknown,
+      _messageId: string,
+      context: { previous?: unknown } | undefined,
+    ) => {
       queryClient.setQueryData(chatKeys.messages(sessionId), context?.previous)
       undoRef.current = null
       notifications.show({
@@ -386,10 +387,24 @@ export function ChatTab({
 
   // ---------------------------------------------------------------- рендер
   return (
-    <Box style={{ height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      style={{
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {/* История — скроллится, имеет отступ снизу под фиксированный composer */}
       <Box
-        style={{ flex: 1, overflowY: 'auto', position: 'relative', minHeight: 0, paddingBottom: '140px' }}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          position: 'relative',
+          minHeight: 0,
+          paddingBottom: '140px',
+        }}
         ref={scrollRef}
       >
         <Stack gap="sm" px="md" pt="md" pb="2xl">
@@ -409,7 +424,11 @@ export function ChatTab({
           </Group>
 
           {task.data && taskId && (
-            <TaskPanel task={task.data} onCancel={handleCancelTask} cancelPending={false} />
+            <TaskPanel
+              task={task.data}
+              onCancel={handleCancelTask}
+              cancelPending={false}
+            />
           )}
 
           {historyError && <Alert color="error">{historyError}</Alert>}
@@ -536,7 +555,9 @@ export function ChatTab({
           )}
           {pending && !asked(items, pending) && (
             <ChatBubble role="assistant">
-              <Text size="sm" c="dimmed">Вопрос обрабатывается…</Text>
+              <Text size="sm" c="dimmed">
+                Вопрос обрабатывается…
+              </Text>
             </ChatBubble>
           )}
           {failed && !asked(items, failed.q) && (
@@ -563,7 +584,9 @@ export function ChatTab({
               </ChatBubble>
               <ChatBubble role="assistant">
                 {failed.kind === 'cancelled' ? (
-                  <Text size="sm" c="dimmed">{failed.text}</Text>
+                  <Text size="sm" c="dimmed">
+                    {failed.text}
+                  </Text>
                 ) : (
                   <Alert color="error" role="alert">
                     Не получилось ответить: {failed.text}
@@ -608,7 +631,9 @@ export function ChatTab({
                 Удалить всю переписку этой сессии? Отменить будет нельзя.
               </Text>
               {clearError && (
-                <Alert color="error" role="alert">{clearError}</Alert>
+                <Alert color="error" role="alert">
+                  {clearError}
+                </Alert>
               )}
               <Group justify="flex-end">
                 <Button variant="default" onClick={() => setClearAsk(false)}>

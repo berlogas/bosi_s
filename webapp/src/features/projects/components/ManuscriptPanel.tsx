@@ -7,15 +7,7 @@
  */
 
 import { useState } from 'react'
-import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Paper,
-  Stack,
-  Text,
-} from '@mantine/core'
+import { Alert, Badge, Button, Group, Paper, Stack, Text } from '@mantine/core'
 import { IconRefresh } from '@tabler/icons-react'
 
 import { useCompileManuscript } from '../hooks'
@@ -117,8 +109,8 @@ export function ManuscriptPanel({
           )}
 
           <Text size="xs" c="dimmed">
-            Собраны одобренные версии разделов. Неодобренные можно включить
-            кнопкой обновления — она пересобирает с include_unapproved.
+            Собраны одобренные версии разделов. Неодобренные можно включить кнопкой
+            обновления — она пересобирает с include_unapproved.
           </Text>
           <Button
             size="compact-xs"

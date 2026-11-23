@@ -377,7 +377,7 @@ class ProjectService:
             user=user,
         )
 
-    def get_section_history(self, db: Session, section_plan_id: str):
+    def get_section_history(self, db: Session, section_plan_id: str) -> Any:
         """Получить историю версий раздела (дерево)."""
         history = HistoryService(db)
         return history.get_version_tree(section_plan_id)
@@ -387,7 +387,7 @@ class ProjectService:
         db: Session,
         from_version_id: str,
         to_version_id: str,
-    ):
+    ) -> Any:
         """Сравнить две версии раздела."""
         history = HistoryService(db)
         return history.diff_versions(from_version_id, to_version_id)
@@ -543,7 +543,9 @@ class ProjectService:
                         content = v.content_md
                         break
                 else:
-                    warnings.append(f"Раздел '{plan.name}': нет перевода на {target_lang}, используется {version.language}")
+                    warnings.append(
+                        f"Раздел '{plan.name}': нет перевода на {target_lang}, "
+                        f"используется {version.language}")
 
             sections_output.append({
                 "name": plan.name,

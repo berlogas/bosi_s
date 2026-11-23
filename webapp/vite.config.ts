@@ -8,12 +8,13 @@ export default defineConfig({
     react(),
     // Bundle budget визуализатор (Волна 6, п.3): запускать через
     // `vite build --mode analyze` для отчёта размера чанков
-    process.env.ANALYZE === 'true' && visualizer({
-      open: false,
-      filename: 'stats.html',
-      gzipSize: true,
-      brotliSize: true,
-    }),
+    process.env.ANALYZE === 'true' &&
+      visualizer({
+        open: false,
+        filename: 'stats.html',
+        gzipSize: true,
+        brotliSize: true,
+      }),
   ],
   build: {
     // Предупреждение, если чанк больше 500 КБ — нужно делать код-сплиттинг

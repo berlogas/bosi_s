@@ -799,7 +799,7 @@ class PaperQA2Service:
                 except StopAsyncIteration:
                     complete = True
                     break
-                except (_asyncio.TimeoutError, TimeoutError):
+                except TimeoutError:
                     # затих по idle: у этого провайдера конец потока не
                     # приходит — считаем соединение потерянным
                     break

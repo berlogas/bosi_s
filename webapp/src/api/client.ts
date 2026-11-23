@@ -45,8 +45,6 @@ import type {
   SectionPlanStatus,
 } from './types'
 
-
-
 type UserOut = components['schemas']['UserOut']
 type LoginResponse = components['schemas']['LoginResponse']
 type TokenPair = components['schemas']['TokenPair']
@@ -742,7 +740,9 @@ class ApiClient {
 
   /** Получить предложенный план разделов для стиля журнала */
   getSuggestedSectionPlan(styleKey: string): Promise<SectionPlan[]> {
-    return this.request(`/api/journal-styles/${encodeURIComponent(styleKey)}/suggested-plan`)
+    return this.request(
+      `/api/journal-styles/${encodeURIComponent(styleKey)}/suggested-plan`,
+    )
   }
 
   createProject(
@@ -753,7 +753,11 @@ class ApiClient {
   ): Promise<ProjectOut> {
     return this.request(`/api/sessions/${sessionId}/projects`, {
       method: 'POST',
-      json: { title, target_journal: targetJournal || null, language: language || 'ru' },
+      json: {
+        title,
+        target_journal: targetJournal || null,
+        language: language || 'ru',
+      },
     })
   }
 
@@ -779,10 +783,13 @@ class ApiClient {
     projectId: string,
     documentId: string | null,
   ): Promise<{ project_id: string; style_guide_document_id: string | null }> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/style-guide`, {
-      method: 'POST',
-      json: { document_id: documentId },
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/style-guide`,
+      {
+        method: 'POST',
+        json: { document_id: documentId },
+      },
+    )
   }
 
   deleteProject(sessionId: string, projectId: string): Promise<void> {
@@ -852,19 +859,33 @@ class ApiClient {
   // ------------------------------------------------------------ SectionPlan / SectionVersion
   /** Список планов разделов */
   sectionPlans(sessionId: string, projectId: string): Promise<SectionPlan[]> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans`)
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans`,
+    )
   }
 
   /** Создать план раздела */
   createSectionPlan(
     sessionId: string,
     projectId: string,
-    payload: { name: string; kind?: SectionKind; order?: number; word_target?: number; notes?: string; language?: string; required?: boolean; depends_on?: string[] },
+    payload: {
+      name: string
+      kind?: SectionKind
+      order?: number
+      word_target?: number
+      notes?: string
+      language?: string
+      required?: boolean
+      depends_on?: string[]
+    },
   ): Promise<{ id: string; name: string }> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans`, {
-      method: 'POST',
-      json: payload,
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans`,
+      {
+        method: 'POST',
+        json: payload,
+      },
+    )
   }
 
   /** Обновить план раздела */
@@ -872,19 +893,39 @@ class ApiClient {
     sessionId: string,
     projectId: string,
     planId: string,
-    payload: Partial<{ name: string; kind: SectionKind; order: number; word_target: number; notes: string; language: string; required: boolean; depends_on: string[]; status: SectionPlanStatus }>,
+    payload: Partial<{
+      name: string
+      kind: SectionKind
+      order: number
+      word_target: number
+      notes: string
+      language: string
+      required: boolean
+      depends_on: string[]
+      status: SectionPlanStatus
+    }>,
   ): Promise<{ id: string; status: string }> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}`, {
-      method: 'PATCH',
-      json: payload,
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}`,
+      {
+        method: 'PATCH',
+        json: payload,
+      },
+    )
   }
 
   /** Удалить план раздела */
-  deleteSectionPlan(sessionId: string, projectId: string, planId: string): Promise<void> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}`, {
-      method: 'DELETE',
-    })
+  deleteSectionPlan(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+  ): Promise<void> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}`,
+      {
+        method: 'DELETE',
+      },
+    )
   }
 
   /** Генерация раздела v2 (через SectionAgent) */
@@ -900,11 +941,14 @@ class ApiClient {
       kind?: string
     },
   ): Promise<SectionVersion> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/generate-v2`, {
-      method: 'POST',
-      json: payload,
-      timeoutMs: 600_000,
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/generate-v2`,
+      {
+        method: 'POST',
+        json: payload,
+        timeoutMs: 600_000,
+      },
+    )
   }
 
   /** Перевести раздел на целевой язык через LLM */
@@ -915,16 +959,25 @@ class ApiClient {
     targetLanguage: string,
     versionId?: string,
   ): Promise<SectionVersion> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/translate`, {
-      method: 'POST',
-      json: { target_language: targetLanguage, version_id: versionId },
-      timeoutMs: 300_000,
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/translate`,
+      {
+        method: 'POST',
+        json: { target_language: targetLanguage, version_id: versionId },
+        timeoutMs: 300_000,
+      },
+    )
   }
 
   /** История версий раздела (дерево) */
-  sectionHistory(sessionId: string, projectId: string, planId: string): Promise<VersionTree> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/history`)
+  sectionHistory(
+    sessionId: string,
+    projectId: string,
+    planId: string,
+  ): Promise<VersionTree> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/history`,
+    )
   }
 
   /** Все версии разделов проекта — реальная история генераций. */
@@ -932,7 +985,9 @@ class ApiClient {
     sessionId: string,
     projectId: string,
   ): Promise<SectionVersion[]> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-versions`)
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-versions`,
+    )
   }
 
   /** Сохранить текст раздела, набранный в редакторе. */
@@ -955,9 +1010,12 @@ class ApiClient {
     fromVersion: string,
     toVersion: string,
   ): Promise<SemanticDiff> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-versions/diff`, {
-      query: { from_version: fromVersion, to_version: toVersion },
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-versions/diff`,
+      {
+        query: { from_version: fromVersion, to_version: toVersion },
+      },
+    )
   }
 
   /** Откатить раздел к версии */
@@ -967,10 +1025,13 @@ class ApiClient {
     planId: string,
     versionId: string,
   ): Promise<SectionVersion> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/rollback`, {
-      method: 'POST',
-      json: { version_id: versionId },
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/rollback`,
+      {
+        method: 'POST',
+        json: { version_id: versionId },
+      },
+    )
   }
 
   /** Одобрить версию раздела */
@@ -980,14 +1041,20 @@ class ApiClient {
     planId: string,
     versionId: string,
   ): Promise<SectionVersion> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/approve`, {
-      method: 'POST',
-      json: { version_id: versionId },
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/section-plans/${planId}/approve`,
+      {
+        method: 'POST',
+        json: { version_id: versionId },
+      },
+    )
   }
 
   /** Глоссарий терминов */
-  getGlossary(sessionId: string, projectId: string): Promise<TerminologyGlossaryEntry[]> {
+  getGlossary(
+    sessionId: string,
+    projectId: string,
+  ): Promise<TerminologyGlossaryEntry[]> {
     return this.request(`/api/sessions/${sessionId}/projects/${projectId}/glossary`)
   }
 
@@ -995,7 +1062,11 @@ class ApiClient {
   addGlossaryEntry(
     sessionId: string,
     projectId: string,
-    payload: { term: string; translations?: Record<string, string>; definition?: string },
+    payload: {
+      term: string
+      translations?: Record<string, string>
+      definition?: string
+    },
   ): Promise<{ id: string; term: string }> {
     return this.request(`/api/sessions/${sessionId}/projects/${projectId}/glossary`, {
       method: 'POST',
@@ -1004,10 +1075,17 @@ class ApiClient {
   }
 
   /** Удалить термин из глоссария */
-  deleteGlossaryEntry(sessionId: string, projectId: string, entryId: string): Promise<void> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/glossary/${entryId}`, {
-      method: 'DELETE',
-    })
+  deleteGlossaryEntry(
+    sessionId: string,
+    projectId: string,
+    entryId: string,
+  ): Promise<void> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/glossary/${entryId}`,
+      {
+        method: 'DELETE',
+      },
+    )
   }
 
   /** Пакетная перегенерация устаревших разделов: возвращает task_id. */
@@ -1016,10 +1094,13 @@ class ApiClient {
     projectId: string,
     force = false,
   ): Promise<{ task_id: string }> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/batch-regenerate`, {
-      method: 'POST',
-      json: { force },
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/batch-regenerate`,
+      {
+        method: 'POST',
+        json: { force },
+      },
+    )
   }
 
   /** Сборка полного манускрипта */
@@ -1035,8 +1116,13 @@ class ApiClient {
   }
 
   /** Проверка согласованности терминологии */
-  checkTerminologyConsistency(sessionId: string, projectId: string): Promise<TerminologyCheckResult> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/terminology-check`)
+  checkTerminologyConsistency(
+    sessionId: string,
+    projectId: string,
+  ): Promise<TerminologyCheckResult> {
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/terminology-check`,
+    )
   }
 
   /** Проверка соответствия стилю журнала */
@@ -1046,11 +1132,14 @@ class ApiClient {
     sectionPlanId: string,
     versionId?: string,
   ): Promise<StyleComplianceResult> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/style-compliance`, {
-      method: 'POST',
-      json: { section_plan_id: sectionPlanId, version_id: versionId },
-      timeoutMs: 120_000,
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/style-compliance`,
+      {
+        method: 'POST',
+        json: { section_plan_id: sectionPlanId, version_id: versionId },
+        timeoutMs: 120_000,
+      },
+    )
   }
 
   /** Предварительная проверка перед генерацией */
@@ -1061,11 +1150,18 @@ class ApiClient {
     question: string,
     requiredSources = 3,
   ): Promise<PreGenerationCheckResult> {
-    return this.request(`/api/sessions/${sessionId}/projects/${projectId}/pre-generation-check`, {
-      method: 'POST',
-      json: { section_name: sectionName, question, required_sources: requiredSources },
-      timeoutMs: 60_000,
-    })
+    return this.request(
+      `/api/sessions/${sessionId}/projects/${projectId}/pre-generation-check`,
+      {
+        method: 'POST',
+        json: {
+          section_name: sectionName,
+          question,
+          required_sources: requiredSources,
+        },
+        timeoutMs: 60_000,
+      },
+    )
   }
 
   // ------------------------------------------------------------ админка
@@ -1156,7 +1252,10 @@ class ApiClient {
     return this.request('/api/documents/stats')
   }
 
-  adminAddPath(path: string, options: { forceReindex?: boolean } = {}): Promise<DocumentOut> {
+  adminAddPath(
+    path: string,
+    options: { forceReindex?: boolean } = {},
+  ): Promise<DocumentOut> {
     return this.request('/api/admin/documents/path', {
       method: 'POST',
       json: { path, force_reindex: options.forceReindex ?? false },
@@ -1164,17 +1263,21 @@ class ApiClient {
     })
   }
 
-  adminUpload(files: File[], tags = '', options: {
-    /** % отправленных байтов (0–100); включает XHR-транспорт. */
-    onProgress?: (percent: number) => void
-    /**
-     * Заменить прежние версии документов с теми же именами.
-     *
-     * Дедуп PaperQA идёт по содержимому, поэтому обновлённый файл иначе
-     * лёг бы вторым документом, а старый остался бы в индексе.
-     */
-    replace?: boolean
-  } = {}): Promise<DocumentBatchResult> {
+  adminUpload(
+    files: File[],
+    tags = '',
+    options: {
+      /** % отправленных байтов (0–100); включает XHR-транспорт. */
+      onProgress?: (percent: number) => void
+      /**
+       * Заменить прежние версии документов с теми же именами.
+       *
+       * Дедуп PaperQA идёт по содержимому, поэтому обновлённый файл иначе
+       * лёг бы вторым документом, а старый остался бы в индексе.
+       */
+      replace?: boolean
+    } = {},
+  ): Promise<DocumentBatchResult> {
     const form = new FormData()
     for (const file of files) form.append('files', file, file.name)
     form.append('tags', tags)

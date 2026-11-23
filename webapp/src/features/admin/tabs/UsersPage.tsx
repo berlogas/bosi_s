@@ -4,7 +4,17 @@
  */
 
 import React, { useState } from 'react'
-import { Stack, Title, Text, Group, TextInput, Select, Button, Alert, Modal } from '@mantine/core'
+import {
+  Stack,
+  Title,
+  Text,
+  Group,
+  TextInput,
+  Select,
+  Button,
+  Alert,
+  Modal,
+} from '@mantine/core'
 import { useForm } from '@mantine/form'
 import type { FormErrors, UseFormReturnType } from '@mantine/form'
 import { z } from 'zod'
@@ -48,8 +58,16 @@ type CreateUserForm = UseFormReturnType<
   (values: CreateUserFormValues) => FormErrors
 >
 
-function CreateUserForm({ handleCreate, createState }: {
-  handleCreate: (fields: { username: string; password: string; role: string; full_name?: string }) => Promise<unknown>
+function CreateUserForm({
+  handleCreate,
+  createState,
+}: {
+  handleCreate: (fields: {
+    username: string
+    password: string
+    role: string
+    full_name?: string
+  }) => Promise<unknown>
   createState: CreateUserState
 }) {
   const [createOpen, setCreateOpen] = useState(false)
@@ -93,14 +111,16 @@ function CreateUserForm({ handleCreate, createState }: {
 
   return (
     <Stack gap="sm">
-      <Button
-        onClick={handleOpen}
-        variant="outline"
-      >
+      <Button onClick={handleOpen} variant="outline">
         Создать пользователя
       </Button>
       {createOpen && (
-        <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Создать пользователя" size="sm">
+        <Modal
+          opened={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Создать пользователя"
+          size="sm"
+        >
           <ModalForm
             form={form}
             handleSubmit={handleSubmit}
@@ -112,7 +132,11 @@ function CreateUserForm({ handleCreate, createState }: {
   )
 }
 
-function ModalForm({ form, handleSubmit, createState }: {
+function ModalForm({
+  form,
+  handleSubmit,
+  createState,
+}: {
   form: CreateUserForm
   handleSubmit: (values: CreateUserFormValues) => void | Promise<void>
   createState: CreateUserState
@@ -141,11 +165,7 @@ function ModalForm({ form, handleSubmit, createState }: {
             required
             autoComplete="new-password"
           />
-          <TextInput
-            label="ФИО"
-            aria-label="ФИО"
-            {...form.getInputProps('fullName')}
-          />
+          <TextInput label="ФИО" aria-label="ФИО" {...form.getInputProps('fullName')} />
           <Select
             label="Роль"
             aria-label="Роль"
@@ -156,7 +176,9 @@ function ModalForm({ form, handleSubmit, createState }: {
           />
           {/* form.isValid в Mantine v9 — функция: без скобок кнопка
               никогда не блокировалась. */}
-          <Button type="submit" disabled={!form.isValid() || createState.isPending}>Создать</Button>
+          <Button type="submit" disabled={!form.isValid() || createState.isPending}>
+            Создать
+          </Button>
         </Group>
       </Stack>
     </form>
@@ -181,7 +203,12 @@ interface UserFields {
 }
 
 // --- UserRow с редактированием и удалением (вынесен наружу) ---
-function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
+function UserRow({
+  user,
+  handleUpdate,
+  handleDelete,
+  currentUserId,
+}: {
   user: UserRowData
   handleUpdate: (id: string, fields: UserFields) => void
   handleDelete: (id: string) => Promise<unknown>
@@ -215,7 +242,11 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
     if (editPassword) fields.password = editPassword
     if (editIsActive !== user.is_active) fields.is_active = editIsActive
     handleUpdate(user.id, fields)
-    notifications.show({ title: `Сохранено: ${user.username}`, message: '', color: 'blue' })
+    notifications.show({
+      title: `Сохранено: ${user.username}`,
+      message: '',
+      color: 'blue',
+    })
     setDirty(false)
     setEditPassword('')
   }
@@ -238,7 +269,10 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
       <TextInput
         size="xs"
         value={editUsername}
-        onChange={(e) => { setEditUsername(e.target.value); handleChange() }}
+        onChange={(e) => {
+          setEditUsername(e.target.value)
+          handleChange()
+        }}
         style={{ width: 150 }}
         aria-label={`Логин: ${user.username}`}
       />
@@ -255,7 +289,10 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
       <TextInput
         size="xs"
         value={editFullName}
-        onChange={(e) => { setEditFullName(e.target.value); handleChange() }}
+        onChange={(e) => {
+          setEditFullName(e.target.value)
+          handleChange()
+        }}
         style={{ width: 190 }}
         aria-label={`ФИО: ${user.username}`}
       />
@@ -296,7 +333,10 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
         type="password"
         placeholder="Новый пароль"
         value={editPassword}
-        onChange={(e) => { setEditPassword(e.target.value); handleChange() }}
+        onChange={(e) => {
+          setEditPassword(e.target.value)
+          handleChange()
+        }}
         style={{ width: 140 }}
         aria-label={`Новый пароль: ${user.username}`}
       />
@@ -333,8 +373,19 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
       }}
     >
       <Group gap="xs" wrap="nowrap">
-        <Button size="xs" variant="default" disabled={!dirty || !!usernameError} onClick={handleSave}>Сохранить</Button>
-        {usernameError && <Text size="xs" c="red">{usernameError}</Text>}
+        <Button
+          size="xs"
+          variant="default"
+          disabled={!dirty || !!usernameError}
+          onClick={handleSave}
+        >
+          Сохранить
+        </Button>
+        {usernameError && (
+          <Text size="xs" c="red">
+            {usernameError}
+          </Text>
+        )}
         <DangerZone
           confirmText={user.username}
           label="Удалить"
@@ -349,9 +400,9 @@ function UserRow({ user, handleUpdate, handleDelete, currentUserId }: {
             }
           }}
           warning={
-            'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, '
-            + 'сообщения, документы и проекты. Восстановление возможно только из резервной копии. '
-            + 'Если достаточно закрыть доступ — снимите галочку активности вместо удаления.'
+            'Удаление необратимо. Вместе с учётной записью каскадно удалятся её сессии, ' +
+            'сообщения, документы и проекты. Восстановление возможно только из резервной копии. ' +
+            'Если достаточно закрыть доступ — снимите галочку активности вместо удаления.'
           }
           disabled={user.id === currentUserId}
         />
@@ -382,7 +433,7 @@ export default function UsersPage() {
 
   // Направление сортировки по ФИО (только клиентское состояние)
   const [fullNameSortDir, setFullNameSortDir] = React.useState<'asc' | 'desc' | null>(
-    null
+    null,
   )
 
   const handleSortByFullName = React.useCallback(() => {
@@ -405,19 +456,22 @@ export default function UsersPage() {
   // Все хуки и useMemo ДО early return
   const customColumns = React.useMemo<SimpleColumn<UserRowData>[]>(() => [], [])
 
-  const actionsHeaders = React.useMemo(() => [
-    { label: 'Логин', width: 160 },
-    {
-      label: 'ФИО',
-      width: 200,
-      onSort: handleSortByFullName,
-      sortDir: fullNameSortDir,
-    },
-    { label: 'Роль', width: 150 },
-    { label: 'Пароль', width: 150 },
-    { label: 'Активен', width: 40 },
-    { label: 'Действия', width: 220 },
-  ], [fullNameSortDir, handleSortByFullName])
+  const actionsHeaders = React.useMemo(
+    () => [
+      { label: 'Логин', width: 160 },
+      {
+        label: 'ФИО',
+        width: 200,
+        onSort: handleSortByFullName,
+        sortDir: fullNameSortDir,
+      },
+      { label: 'Роль', width: 150 },
+      { label: 'Пароль', width: 150 },
+      { label: 'Активен', width: 40 },
+      { label: 'Действия', width: 220 },
+    ],
+    [fullNameSortDir, handleSortByFullName],
+  )
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (isError) return <Alert color="red">{errorText(error, 'Ошибка загрузки')}</Alert>
@@ -446,7 +500,14 @@ export default function UsersPage() {
           onSortingChange={setSorting}
           filters={filters}
           onFiltersChange={() => {}}
-          rowActions={({ original: row }) => <UserRow user={row} handleUpdate={handleUpdate} handleDelete={handleDelete} currentUserId={currentUserId} />}
+          rowActions={({ original: row }) => (
+            <UserRow
+              user={row}
+              handleUpdate={handleUpdate}
+              handleDelete={handleDelete}
+              currentUserId={currentUserId}
+            />
+          )}
           rowActionsHeaders={actionsHeaders}
           isLoading={isLoading}
           emptyMessage="Пользователей нет."

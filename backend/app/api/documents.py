@@ -411,7 +411,8 @@ async def clear_all(request: Request, admin: User = Depends(require_admin),
         if document.path:
             target = Path(document.path)
             if is_within(target, global_import_roots()):
-                await anyio.to_thread.run_sync(lambda: target.unlink(missing_ok=True))
+                await anyio.to_thread.run_sync(
+                    lambda target=target: target.unlink(missing_ok=True))
         removed += 1
     await _service().clear_documents()
     audit(db, action="admin.documents.clear", actor=admin, target_type="collection",

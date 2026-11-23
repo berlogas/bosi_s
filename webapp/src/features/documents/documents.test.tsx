@@ -197,7 +197,9 @@ describe('вкладка Документы', () => {
     await screen.findByText('Временная литература (1)')
 
     // Проверяем, что кнопка загрузки появляется только при наличии файлов
-    expect(screen.queryByRole('button', { name: 'Загрузить файлы' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Загрузить файлы' }),
+    ).not.toBeInTheDocument()
   })
 
   it('загрузка идёт в фон: сервер отдаёт task_id, прогресс виден в панели задач', async () => {
@@ -233,9 +235,12 @@ describe('вкладка Документы', () => {
     await screen.findByText('Временная литература (1)')
 
     const input = screen.getByTestId('doc-file-input')
-    await userEvent.upload(input, new File(['# Отчёт\n\nХлорофилл 1.85.\n'], 'report.md', {
-      type: 'text/markdown',
-    }))
+    await userEvent.upload(
+      input,
+      new File(['# Отчёт\n\nХлорофилл 1.85.\n'], 'report.md', {
+        type: 'text/markdown',
+      }),
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Загрузить файлы' }))
 
@@ -246,14 +251,14 @@ describe('вкладка Документы', () => {
       expect(call?.init.method).toBe('POST')
     })
     expect(
-      calls.some((c) => c.url.includes('/documents/upload') && !c.url.includes('upload-async')),
+      calls.some(
+        (c) => c.url.includes('/documents/upload') && !c.url.includes('upload-async'),
+      ),
     ).toBe(false)
 
     // Панель задачи с прогрессом индексации: у живой задачи видно этап.
     expect(await screen.findByText(/файл 1\/1: report.md/)).toBeInTheDocument()
-    expect(
-      await screen.findByLabelText(/Индексация 1 файлов: 40%/),
-    ).toBeInTheDocument()
+    expect(await screen.findByLabelText(/Индексация 1 файлов: 40%/)).toBeInTheDocument()
   })
 
   it('файл с тем же именем спрашивает замену прежней версии', async () => {
@@ -277,9 +282,7 @@ describe('вкладка Документы', () => {
 
     // Спрашиваем подтверждение — молча перезаписывать нельзя.
     expect(await screen.findByText('Заменить прежние версии?')).toBeInTheDocument()
-    expect(
-      calls.some((c) => c.url.includes('/documents/upload-async')),
-    ).toBe(false)
+    expect(calls.some((c) => c.url.includes('/documents/upload-async'))).toBe(false)
 
     await userEvent.click(screen.getByRole('button', { name: 'Заменить и загрузить' }))
 
@@ -332,7 +335,9 @@ describe('вкладка Документы', () => {
     expect(
       await screen.findByText(/Проиндексировано: 1.*дубликатов: 1.*с ошибкой: 1/),
     ).toBeInTheDocument()
-    expect(await screen.findByText(/broken.pdf: Не удалось прочитать PDF/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/broken.pdf: Не удалось прочитать PDF/),
+    ).toBeInTheDocument()
   })
 
   it('удаление документа — оптимистично с undo-тостом, затем DELETE', async () => {

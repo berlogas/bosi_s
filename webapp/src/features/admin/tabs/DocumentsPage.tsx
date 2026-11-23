@@ -62,71 +62,74 @@ export default function DocumentsPage() {
   const fileInput = useRef<HTMLInputElement>(null)
 
   // --- Колонки с рендерингом ячеек ---
-  const customColumns = React.useMemo(() => [
-    { id: 'title', accessorKey: 'title', header: 'Название' },
-    { id: 'filename', accessorKey: 'filename', header: 'Файл' },
-    {
-      id: 'category',
-      accessorKey: 'category',
-      header: 'Категория',
-      cell: (row: Record<string, unknown>) => String(row.category ?? '—'),
-    },
-    {
-      id: 'status',
-      accessorKey: 'status',
-      header: 'Статус',
-      cell: (row: Record<string, unknown>) => String(row.status ?? '—'),
-    },
-    {
-      id: 'size_bytes',
-      accessorKey: 'size_bytes',
-      header: 'Размер (КБ)',
-      cell: (row: Record<string, unknown>) =>
-        Math.round((Number(row.size_bytes) || 0) / 1024),
-    },
-    {
-      id: 'chunk_count',
-      accessorKey: 'chunk_count',
-      header: 'Чанков',
-      cell: (row: Record<string, unknown>) => Number(row.chunk_count) || 0,
-    },
-    {
-      id: 'tags',
-      accessorKey: 'tags',
-      header: 'Теги',
-      cell: (row: Record<string, unknown>) => {
-        const tags = row.tags as string[] | undefined
-        return tags?.length ? tags.join(', ') : '—'
+  const customColumns = React.useMemo(
+    () => [
+      { id: 'title', accessorKey: 'title', header: 'Название' },
+      { id: 'filename', accessorKey: 'filename', header: 'Файл' },
+      {
+        id: 'category',
+        accessorKey: 'category',
+        header: 'Категория',
+        cell: (row: Record<string, unknown>) => String(row.category ?? '—'),
       },
-    },
-    {
-      id: 'actions',
-      header: '',
-      cell: (row: { id: string | number; path?: string | null }) => (
-        <Group gap="xs" wrap="nowrap">
-          {row.path && (
-            <Button
-              size="xs"
-              variant="subtle"
-              onClick={() => handleReindexDocument(String(row.path))}
-              title="Переиндексировать документ (после смены настроек индексации)"
+      {
+        id: 'status',
+        accessorKey: 'status',
+        header: 'Статус',
+        cell: (row: Record<string, unknown>) => String(row.status ?? '—'),
+      },
+      {
+        id: 'size_bytes',
+        accessorKey: 'size_bytes',
+        header: 'Размер (КБ)',
+        cell: (row: Record<string, unknown>) =>
+          Math.round((Number(row.size_bytes) || 0) / 1024),
+      },
+      {
+        id: 'chunk_count',
+        accessorKey: 'chunk_count',
+        header: 'Чанков',
+        cell: (row: Record<string, unknown>) => Number(row.chunk_count) || 0,
+      },
+      {
+        id: 'tags',
+        accessorKey: 'tags',
+        header: 'Теги',
+        cell: (row: Record<string, unknown>) => {
+          const tags = row.tags as string[] | undefined
+          return tags?.length ? tags.join(', ') : '—'
+        },
+      },
+      {
+        id: 'actions',
+        header: '',
+        cell: (row: { id: string | number; path?: string | null }) => (
+          <Group gap="xs" wrap="nowrap">
+            {row.path && (
+              <Button
+                size="xs"
+                variant="subtle"
+                onClick={() => handleReindexDocument(String(row.path))}
+                title="Переиндексировать документ (после смены настроек индексации)"
+              >
+                Переиндексировать
+              </Button>
+            )}
+            <DangerZone
+              confirmText="УДАЛИТЬ"
+              onConfirm={() => handleDelete(String(row.id))}
+              warning="Документ будет удалён безвозвратно."
             >
-              Переиндексировать
-            </Button>
-          )}
-          <DangerZone
-            confirmText="УДАЛИТЬ"
-            onConfirm={() => handleDelete(String(row.id))}
-            warning="Документ будет удалён безвозвратно."
-          >
-            <Button size="xs" variant="subtle" color="red">
-              Удалить
-            </Button>
-          </DangerZone>
-        </Group>
-      ),
-    },
-  ], [handleDelete, handleReindexDocument])
+              <Button size="xs" variant="subtle" color="red">
+                Удалить
+              </Button>
+            </DangerZone>
+          </Group>
+        ),
+      },
+    ],
+    [handleDelete, handleReindexDocument],
+  )
 
   // Об успешном добавлении сообщаем сами: мутация молча уходила в сервер,
   // и админ не видел, что документ добавился. Эффект — до ранних возвратов,
@@ -136,7 +139,8 @@ export default function DocumentsPage() {
   }, [addPath.isSuccess, addPath.data])
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
-  if (isError) return <Alert color="red">{errorTextLocal(error, 'Ошибка загрузки')}</Alert>
+  if (isError)
+    return <Alert color="red">{errorTextLocal(error, 'Ошибка загрузки')}</Alert>
 
   // --- Обработчики загрузки ---
   const handleAddPathSubmit = () => {
@@ -190,7 +194,9 @@ export default function DocumentsPage() {
   return (
     <Stack gap="sm">
       {message && (
-        <Alert color="success" role="status">{message}</Alert>
+        <Alert color="success" role="status">
+          {message}
+        </Alert>
       )}
 
       {/* Итог загрузки: сколько добавили, сколько дубликатов и что не разобрали. */}
@@ -228,8 +234,8 @@ export default function DocumentsPage() {
       >
         <Stack>
           <Text size="sm">
-            В базе уже есть файлы с теми же именами. Загрузка заменит их:
-            прежние версии исчезнут из индекса, новые займут их место.
+            В базе уже есть файлы с теми же именами. Загрузка заменит их: прежние версии
+            исчезнут из индекса, новые займут их место.
           </Text>
           <Stack gap={2}>
             {conflictingNames.map((name) => (
@@ -242,9 +248,7 @@ export default function DocumentsPage() {
             <Button variant="default" onClick={() => setReplaceOpen(false)}>
               Отмена
             </Button>
-            <Button onClick={() => startUpload(true)}>
-              Заменить и загрузить
-            </Button>
+            <Button onClick={() => startUpload(true)}>Заменить и загрузить</Button>
           </Group>
         </Stack>
       </Modal>
@@ -388,7 +392,9 @@ export default function DocumentsPage() {
         </Button>
       </Group>
       {reindexDone && (
-        <Alert color="success" role="status">Готово.</Alert>
+        <Alert color="success" role="status">
+          Готово.
+        </Alert>
       )}
       {data.length === 0 && !isLoading && (
         <EmptyState

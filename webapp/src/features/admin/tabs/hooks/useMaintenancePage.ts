@@ -60,24 +60,20 @@ export function useMaintenancePage() {
     if (!backupTaskId || !task) return
     if (task.status === 'done') {
       const result = task.result as
-        | { entry?: BackupEntry; deleted_old?: string[] }
-        | undefined
+        { entry?: BackupEntry; deleted_old?: string[] } | undefined
       // Сначала кладём готовую копию в кэш: даже если перезапрос не дойдёт,
       // пользователь сразу видит результат. Затем синхронизируем с сервером.
-      queryClient.setQueryData<{ backups: BackupEntry[] }>(
-        adminKeys.backups,
-        (old) => {
-          if (!old) return old
-          const removed = new Set(result?.deleted_old ?? [])
-          const kept = old.backups.filter(
-            (item) => !removed.has(item.name)
-                  && item.name !== result?.entry?.name)
-          return {
-            ...old,
-            backups: result?.entry ? [result.entry, ...kept] : kept,
-          }
-        },
-      )
+      queryClient.setQueryData<{ backups: BackupEntry[] }>(adminKeys.backups, (old) => {
+        if (!old) return old
+        const removed = new Set(result?.deleted_old ?? [])
+        const kept = old.backups.filter(
+          (item) => !removed.has(item.name) && item.name !== result?.entry?.name,
+        )
+        return {
+          ...old,
+          backups: result?.entry ? [result.entry, ...kept] : kept,
+        }
+      })
       void refetchBackups()
       notifications.show({
         title: 'Копия создана',
@@ -99,9 +95,10 @@ export function useMaintenancePage() {
     if (backupTask.isError && backupTaskId) {
       notifications.show({
         title: 'Не удалось получить статус копии',
-        message: backupTask.error instanceof Error
-          ? backupTask.error.message
-          : 'Задача могла быть потеряна после перезапуска backend',
+        message:
+          backupTask.error instanceof Error
+            ? backupTask.error.message
+            : 'Задача могла быть потеряна после перезапуска backend',
         color: 'red',
       })
       setBackupTaskId(null)

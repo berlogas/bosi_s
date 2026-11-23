@@ -103,7 +103,7 @@ describe('EmptyState a11y', () => {
 
   it('empty state without action is accessible', async () => {
     const { container } = renderWithProviders(
-      <EmptyState title="Нет данных" description="Описание." />
+      <EmptyState title="Нет данных" description="Описание." />,
     )
     const result = await axe(container)
     expect(result.violations).toHaveLength(0)
@@ -118,7 +118,7 @@ describe('DangerZone a11y', () => {
         confirmText="ivanov"
         onConfirm={() => {}}
         warning="Предупреждение"
-      />
+      />,
     )
     const result = await axe(container)
     expect(result.violations).toHaveLength(0)

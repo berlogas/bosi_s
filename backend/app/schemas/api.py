@@ -396,7 +396,7 @@ class SectionVersionOut(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, version: Any) -> "SectionVersionOut":
+    def from_model(cls, version: Any) -> SectionVersionOut:
         """Собрать DTO из ORM-объекта SectionVersion."""
         return cls(
             id=version.id,
@@ -447,7 +447,7 @@ class VersionNodeOut(BaseModel):
     """Узел дерева версий: сама версия и её потомки."""
 
     version: SectionVersionOut
-    children: list["VersionNodeOut"] = Field(default_factory=list)
+    children: list[VersionNodeOut] = Field(default_factory=list)
 
 
 class VersionTreeOut(BaseModel):

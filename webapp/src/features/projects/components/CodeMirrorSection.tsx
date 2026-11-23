@@ -58,7 +58,11 @@ export function CodeMirrorSection({
             borderLeftColor: 'transparent',
           },
         },
-        { dark: typeof document !== 'undefined' && document.documentElement?.classList.contains('mantine-dark') }
+        {
+          dark:
+            typeof document !== 'undefined' &&
+            document.documentElement?.classList.contains('mantine-dark'),
+        },
       ),
       keymap.of([
         indentWithTab,
@@ -69,13 +73,31 @@ export function CodeMirrorSection({
           },
         },
         // Горячие клавиши для форматирования
-        { key: 'Mod-b', run: (view) => { insertAtCursor(view, '**', '**'); return true } },
-        { key: 'Mod-i', run: (view) => { insertAtCursor(view, '*', '*'); return true } },
-        { key: 'Mod-Shift-l', run: (view) => { insertAtCursor(view, '- '); return true } },
+        {
+          key: 'Mod-b',
+          run: (view) => {
+            insertAtCursor(view, '**', '**')
+            return true
+          },
+        },
+        {
+          key: 'Mod-i',
+          run: (view) => {
+            insertAtCursor(view, '*', '*')
+            return true
+          },
+        },
+        {
+          key: 'Mod-Shift-l',
+          run: (view) => {
+            insertAtCursor(view, '- ')
+            return true
+          },
+        },
       ]),
       wrapLines ? EditorView.lineWrapping : [],
     ],
-    [wrapLines]
+    [wrapLines],
   )
 
   // Синхронизируем внутреннее значение с пропсом value (извне)
@@ -122,7 +144,14 @@ export function CodeMirrorSection({
     return () => clearTimeout(timer)
   }, [internalValue])
 
-  const toolbar = <Toolbar readOnly={readOnly} editorView={editorView} wrapLines={wrapLines} onToggleWrap={() => setWrapLines((v) => !v)} />
+  const toolbar = (
+    <Toolbar
+      readOnly={readOnly}
+      editorView={editorView}
+      wrapLines={wrapLines}
+      onToggleWrap={() => setWrapLines((v) => !v)}
+    />
+  )
 
   if (isTestEnv) {
     return (
@@ -138,9 +167,11 @@ export function CodeMirrorSection({
           font: 'inherit',
           padding: 'var(--mantine-spacing-sm)',
           borderRadius: 'var(--mantine-radius-sm)',
-          border: `1px solid ${isDirty
-            ? 'var(--mantine-color-yellow-filled)'
-            : 'var(--mantine-color-default-border)'}`,
+          border: `1px solid ${
+            isDirty
+              ? 'var(--mantine-color-yellow-filled)'
+              : 'var(--mantine-color-default-border)'
+          }`,
           background: 'var(--mantine-color-body)',
           color: 'var(--mantine-color-text)',
         }}
@@ -151,9 +182,11 @@ export function CodeMirrorSection({
   return (
     <div
       style={{
-        border: `1px solid ${isDirty
-          ? 'var(--mantine-color-yellow-filled)'
-          : 'var(--mantine-color-default-border)'}`,
+        border: `1px solid ${
+          isDirty
+            ? 'var(--mantine-color-yellow-filled)'
+            : 'var(--mantine-color-default-border)'
+        }`,
         borderRadius: 'var(--mantine-radius-sm)',
         minHeight: 220,
         background: 'var(--mantine-color-body)',

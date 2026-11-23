@@ -6,7 +6,12 @@ import { useState } from 'react'
 import { NavLink, Divider, Stack, Box } from '@mantine/core'
 import { Link, useLocation } from 'react-router-dom'
 import { IconChevronDown } from '@tabler/icons-react'
-import { isItemActive, isSectionActive, type MenuSection, type MenuItem } from './menuConfig'
+import {
+  isItemActive,
+  isSectionActive,
+  type MenuSection,
+  type MenuItem,
+} from './menuConfig'
 import type { User } from '../auth/authStore'
 
 interface NavSectionProps {
@@ -29,7 +34,9 @@ function NavItem({ item, currentPath, level = 0, user }: NavItemProps) {
   const to = item.to
   const active = isItemActive(currentPath, to)
   // disabled: enabled === false ИЛИ функция вернула false
-  const disabled = item.enabled === false || (typeof item.enabled === 'function' && !item.enabled(user))
+  const disabled =
+    item.enabled === false ||
+    (typeof item.enabled === 'function' && !item.enabled(user))
   const hasChildren = item.children && item.children.length > 0
 
   // Отступ для вложенных пунктов
@@ -50,8 +57,12 @@ function NavItem({ item, currentPath, level = 0, user }: NavItemProps) {
             padding: 'var(--mantine-spacing-xs) var(--mantine-spacing-sm)',
             borderRadius: 'var(--mantine-radius-sm)',
             cursor: 'pointer',
-            color: sectionActive ? 'var(--mantine-color-primary-filled)' : 'var(--mantine-color-text)',
-            backgroundColor: sectionActive ? 'var(--mantine-color-primary-light)' : 'transparent',
+            color: sectionActive
+              ? 'var(--mantine-color-primary-filled)'
+              : 'var(--mantine-color-text)',
+            backgroundColor: sectionActive
+              ? 'var(--mantine-color-primary-light)'
+              : 'transparent',
             fontWeight: sectionActive ? 500 : 400,
             fontSize: 'var(--mantine-font-size-sm)',
             userSelect: 'none',
@@ -60,14 +71,26 @@ function NavItem({ item, currentPath, level = 0, user }: NavItemProps) {
           tabIndex={0}
           aria-expanded={open}
         >
-          <IconChevronDown size={14} style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 150ms' }} />
+          <IconChevronDown
+            size={14}
+            style={{
+              transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: 'transform 150ms',
+            }}
+          />
           {item.icon}
           <span>{item.label}</span>
         </div>
         {open && (
           <Stack gap={1} style={{ marginTop: 'var(--mantine-spacing-xs)' }}>
             {item.children!.map((child) => (
-              <NavItem key={child.to} item={child} currentPath={currentPath} level={level + 1} user={user} />
+              <NavItem
+                key={child.to}
+                item={child}
+                currentPath={currentPath}
+                level={level + 1}
+                user={user}
+              />
             ))}
           </Stack>
         )}
@@ -142,7 +165,13 @@ export function NavSection({ section, user }: NavSectionProps) {
               tabIndex={0}
               aria-expanded={open}
             >
-              <IconChevronDown size={12} style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 150ms' }} />
+              <IconChevronDown
+                size={12}
+                style={{
+                  transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+                  transition: 'transform 150ms',
+                }}
+              />
               {section.header}
             </div>
           )}
@@ -151,7 +180,12 @@ export function NavSection({ section, user }: NavSectionProps) {
       {open && (
         <Stack gap={2}>
           {visibleItems.map((item) => (
-            <NavItem key={item.to || item.label} item={item} currentPath={currentPath} user={user} />
+            <NavItem
+              key={item.to || item.label}
+              item={item}
+              currentPath={currentPath}
+              user={user}
+            />
           ))}
         </Stack>
       )}

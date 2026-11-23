@@ -53,9 +53,7 @@ describe('AsyncBoundary a11y', () => {
         isLoading={false}
         error={null}
         emptyTitle="Нет данных"
-        emptyAction={
-          <button>Сбросить</button>
-        }
+        emptyAction={<button>Сбросить</button>}
       >
         <div>Содержимое</div>
       </AsyncBoundary>,
@@ -66,11 +64,7 @@ describe('AsyncBoundary a11y', () => {
 
   it('success state is accessible', async () => {
     const { container } = renderWithProviders(
-      <AsyncBoundary<string[]>
-        data={['один', 'два']}
-        isLoading={false}
-        error={null}
-      >
+      <AsyncBoundary<string[]> data={['один', 'два']} isLoading={false} error={null}>
         <ul>
           <li>один</li>
           <li>два</li>

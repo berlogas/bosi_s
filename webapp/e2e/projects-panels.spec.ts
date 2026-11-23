@@ -82,7 +82,13 @@ const VERSION = {
   source_language: null,
   word_count: 7,
   citation_map: [
-    { index: 1, marker: '[1]', source_scope: 'session', dockey: 'abc123', docname: 'Smith 2019' },
+    {
+      index: 1,
+      marker: '[1]',
+      source_scope: 'session',
+      dockey: 'abc123',
+      docname: 'Smith 2019',
+    },
   ],
   generation_params: {},
   seconds: null,
@@ -153,9 +159,7 @@ const GLOSSARY = [
 const DIFF = {
   from_version_id: 'v-1',
   to_version_id: 'v-2',
-  added_claims: [
-    { index: 1, text: 'Обновлённый абзац про биомассу', citations: [2] },
-  ],
+  added_claims: [{ index: 1, text: 'Обновлённый абзац про биомассу', citations: [2] }],
   removed_claims: [],
   modified_claims: [],
   citation_changes: { added: [2], removed: [] },
@@ -195,7 +199,9 @@ async function mockApi(page: Page, overrides: Record<string, Route> = {}) {
     'GET /api/chat/messages': { body: { messages: [], total: 0, offset: 0 } },
     'GET /api/chat/quick-history': { body: [] },
     'GET /api/documents': { body: [] },
-    'GET /api/documents/stats': { body: { total: 0, storage_bytes: 0, by_category: {} } },
+    'GET /api/documents/stats': {
+      body: { total: 0, storage_bytes: 0, by_category: {} },
+    },
     'GET /api/sessions/s-1/documents': { body: [] },
     'GET /api/sessions/s-1/projects': { body: [PROJECT] },
     'GET /api/sessions/s-1/projects/p-1/section-plans': { body: [PLAN] },
@@ -326,7 +332,10 @@ test.describe('новые панели вкладки «Проекты»', () =>
     await expect(page.getByText('Список литературы')).toBeVisible()
     await expect(page.getByText(/Smith 2019/)).toBeVisible()
 
-    await page.screenshot({ path: 'e2e/__screenshots__/projects-manuscript.png', fullPage: true })
+    await page.screenshot({
+      path: 'e2e/__screenshots__/projects-manuscript.png',
+      fullPage: true,
+    })
   })
 
   test('глоссарий показывает термины и результат проверки', async ({ page }) => {
@@ -337,10 +346,15 @@ test.describe('новые панели вкладки «Проекты»', () =>
     await expect(page.getByText('биомасса').first()).toBeVisible()
     await expect(page.getByText('en: biomass')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Проверить терминологию в разделах' }).click()
+    await page
+      .getByRole('button', { name: 'Проверить терминологию в разделах' })
+      .click()
     await expect(page.getByText('Термины расходятся')).toBeVisible()
 
-    await page.screenshot({ path: 'e2e/__screenshots__/projects-glossary.png', fullPage: true })
+    await page.screenshot({
+      path: 'e2e/__screenshots__/projects-glossary.png',
+      fullPage: true,
+    })
   })
 
   test('история версий: текст версии и перевод', async ({ page }) => {
@@ -360,7 +374,10 @@ test.describe('новые панели вкладки «Проекты»', () =>
     // Перевод ушёл без ошибки — в панели нет красного сообщения.
     await expect(page.getByRole('alert')).toHaveCount(0)
 
-    await page.screenshot({ path: 'e2e/__screenshots__/projects-history.png', fullPage: true })
+    await page.screenshot({
+      path: 'e2e/__screenshots__/projects-history.png',
+      fullPage: true,
+    })
   })
 
   test('проверка готовности показывает замечания', async ({ page }) => {
@@ -375,6 +392,9 @@ test.describe('новые панели вкладки «Проекты»', () =>
     await expect(page.getByText('Проверьте перед генерацией')).toBeVisible()
     await expect(page.getByText('Мало источников: найдено 1, нужно 3')).toBeVisible()
 
-    await page.screenshot({ path: 'e2e/__screenshots__/projects-precheck.png', fullPage: true })
+    await page.screenshot({
+      path: 'e2e/__screenshots__/projects-precheck.png',
+      fullPage: true,
+    })
   })
 })

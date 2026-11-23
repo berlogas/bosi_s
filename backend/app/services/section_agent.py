@@ -14,7 +14,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    new_id,
     GenerationKind,
     Project,
     ProjectDocRole,
@@ -25,6 +24,7 @@ from app.db.models import (
     SectionVersion,
     User,
     VersionStatus,
+    new_id,
 )
 from app.services import analyses
 from app.services.generation import (
@@ -37,8 +37,7 @@ from app.services.generation import (
 from app.services.journal_styles import style_prompt
 from app.services.pqa_registry import ServiceRegistry, get_registry
 from app.services.project_sections import project_sections
-from app.services.rag_service import RagFusionService
-from app.services.rag_service import SearchMode
+from app.services.rag_service import RagFusionService, SearchMode
 
 log = logging.getLogger("boasi.services.section_agent")
 
@@ -204,15 +203,15 @@ class SectionAgent:
 
         # 3. Итеративный цикл генерации
         max_iter = self._get_max_iterations()
-        quality_thresholds = self._get_quality_thresholds()
         iteration = 0
-        current_draft = None
         critique_feedback = ""
         final_generation: GenerationResult | None = None
 
         while iteration < max_iter:
             iteration += 1
-            log.info(f"SectionAgent: iteration {iteration}/{self.max_iterations} for section '{section_plan.name}'")
+            log.info(
+                "SectionAgent: iteration %s/%s for section '%s'",
+                iteration, self.max_iterations, section_plan.name)
 
             # Обновляем заметки с фидбеком от предыдущей итерации
             effective_notes = self._combine_notes(notes, critique_feedback)
@@ -242,7 +241,6 @@ class SectionAgent:
                 question=question,
             )
 
-            current_draft = generation
             final_generation = generation
             critique_feedback = critique.feedback
 
@@ -266,7 +264,10 @@ class SectionAgent:
                 notes=notes,
                 style_guide_text=style_guide_text,
                 journal_style=journal_style,
-                sources_used=[{"index": s["index"], "dockey": s.get("dockey"), "title": s.get("title")} for s in sources],
+                sources_used=[
+                    {"index": s["index"], "dockey": s.get("dockey"),
+                     "title": s.get("title")}
+                    for s in sources],
                 retrieval_mode=mode.value,
                 evidence_k=15,
                 max_sources=10,
@@ -288,8 +289,9 @@ class SectionAgent:
     def _get_style_guide_text(self, db: Session, project: Project) -> str | None:
         if not project.style_guide_document_id:
             return None
-        from app.db.models import Document
         from pathlib import Path
+
+        from app.db.models import Document
         document = db.get(Document, project.style_guide_document_id)
         if document is None:
             return None
@@ -353,14 +355,18 @@ class SectionAgent:
 
         # Добавляем style guide если есть
         if style_guide_text:
-            prompt = f"{prompt}\n\nТРЕБОВАНИЯ ЖУРНАЛА (документ «Правила оформления»):\n{style_guide_text}"
+            prompt = (
+                f"{prompt}\n\nТРЕБОВАНИЯ ЖУРНАЛА "
+                f"(документ «Правила оформления»):\n{style_guide_text}")
 
         # Вызов LLM через PaperQA2Service с учётом стоимости
         service = self.registry.session_service(session.id)
-        text, cost_info = await service.complete_with_cost(prompt, name=f"section_{section_plan.name}")
+        text, cost_info = await service.complete_with_cost(
+            prompt, name=f"section_{section_plan.name}")
 
         # Валидация цитат
-        check = validate_citations(text, len(sources), require_any=citations_required(section_plan.name))
+        check = validate_citations(
+            text, len(sources), require_any=citations_required(section_plan.name))
         citation_map = build_citation_map(text, sources)
 
         # Сохраняем стоимость в generation для передачи в _save_version
@@ -521,9 +527,13 @@ class SectionAgent:
         if not quality_report.citations_ok:
             feedback_parts.append(f"Проблемы с цитатами: {quality_report.warnings}")
         if grounding_score is not None and grounding_score < thresholds["grounding"]:
-            feedback_parts.append(f"Недостаточное обоснование (grounding={grounding_score:.2f}): укрепите утверждения ссылками на источники")
+            feedback_parts.append(
+                f"Недостаточное обоснование (grounding={grounding_score:.2f}): "
+                "укрепите утверждения ссылками на источники")
         if completeness_score is not None and completeness_score < thresholds["completeness"]:
-            feedback_parts.append(f"Неполнота (completeness={completeness_score:.2f}): охватите все аспекты вопроса и указаний автора")
+            feedback_parts.append(
+                f"Неполнота (completeness={completeness_score:.2f}): "
+                "охватите все аспекты вопроса и указаний автора")
 
         feedback = "\n".join(feedback_parts) if feedback_parts else ""
         needs_revision = not passed and feedback != ""
@@ -550,7 +560,8 @@ class SectionAgent:
             for s in sources[:10]
         )
 
-        prompt = f"""Оцените, насколько следующий текст раздела обоснован предоставленными источниками.
+        prompt = f"""Оцените, насколько следующий текст раздела обоснован
+предоставленными источниками.
 
 ВОПРОС РАЗДЕЛА: {question}
 
@@ -620,7 +631,9 @@ class SectionAgent:
         """Базовая проверка соответствия стилю."""
         checks = {}
         checks["has_heading"] = content.strip().startswith("#")
-        checks["word_count_ok"] = section_plan.word_min <= len(content.split()) <= section_plan.word_max
+        words = len(content.split())
+        checks["word_count_ok"] = (
+            section_plan.word_min <= words <= section_plan.word_max)
         checks["has_citations"] = "[" in content and "]" in content
         return checks
 
@@ -775,7 +788,9 @@ class SectionTranslator:
             raise ValueError(f"Язык {target_language} не разрешен для проекта")
 
         # Глоссарий проекта
-        glossary = {entry.term: entry.translations.get(target_language, entry.term) for entry in project.glossary}
+        glossary = {
+            entry.term: entry.translations.get(target_language, entry.term)
+            for entry in project.glossary}
 
         # Промпт перевода
         prompt = self._build_translation_prompt(
@@ -786,7 +801,8 @@ class SectionTranslator:
         )
 
         service = self.registry.session_service(version.session_id)
-        translated_text, cost_info = await service.complete_with_cost(prompt, name="translate_section")
+        translated_text, cost_info = await service.complete_with_cost(
+            prompt, name="translate_section")
 
         # Создаем новую версию-перевод
         new_version = SectionVersion(
@@ -842,16 +858,21 @@ class SectionTranslator:
         src = lang_names.get(source_language, source_language)
         tgt = lang_names.get(target_language, target_language)
 
-        glossary_text = "\n".join(f"- {k} → {v}" for k, v in glossary.items()) if glossary else "нет"
+        glossary_text = (
+            "\n".join(f"- {k} → {v}" for k, v in glossary.items())
+            if glossary else "нет")
 
         return f"""Переведите следующий раздел научной статьи с {src} на {tgt}.
 
 СТРОГИЕ ПРАВИЛА:
-1. СОХРАНЯЙТЕ БЕЗ ИЗМЕНЕНИЙ: маркеры цитат [1], [2,3], [1-3]; структуру markdown (заголовки, списки, таблицы); 
-   математические формулы ($...$, $$...$$); имена собственные (географические названия, приборы, методы, 
+1. СОХРАНЯЙТЕ БЕЗ ИЗМЕНЕНИЙ: маркеры цитат [1], [2,3], [1-3];
+   структуру markdown (заголовки, списки, таблицы);
+   математические формулы ($...$, $$...$$); имена собственные
+   (географические названия, приборы, методы,
    аббревиатуры, химические формулы, генетические символы).
 2. ПЕРЕВОДИТЕ: только естественно-языковой текст, сохраняя формальный научный стиль.
-3. ТЕРМИНОЛОГИЯ: используйте предоставленный глоссарий; термины, отсутствующие в глоссарии, переводите 
+3. ТЕРМИНОЛОГИЯ: используйте предоставленный глоссарий; термины,
+   отсутствующие в глоссарии, переводите
    стандартными для предметной области эквивалентами.
 4. НЕТ ТВОРЧЕСКОЙ АДАПТАЦИИ — дословный, но плавный перевод.
 

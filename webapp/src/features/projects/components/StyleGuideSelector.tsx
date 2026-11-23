@@ -10,7 +10,11 @@ interface StyleGuideSelectorProps {
   readOnly?: boolean
 }
 
-export function StyleGuideSelector({ sessionId, project, readOnly = false }: StyleGuideSelectorProps) {
+export function StyleGuideSelector({
+  sessionId,
+  project,
+  readOnly = false,
+}: StyleGuideSelectorProps) {
   const styleGuideDocs = useSessionStyleGuideDocuments(sessionId)
   const setStyleGuide = useSetProjectStyleGuide(sessionId)
 
@@ -26,7 +30,10 @@ export function StyleGuideSelector({ sessionId, project, readOnly = false }: Sty
         onError: (cause) =>
           notifications.show({
             title: 'Ошибка',
-            message: cause instanceof Error ? cause.message : 'Не удалось установить style_guide',
+            message:
+              cause instanceof Error
+                ? cause.message
+                : 'Не удалось установить style_guide',
             color: 'error',
           }),
       },
@@ -47,7 +54,8 @@ export function StyleGuideSelector({ sessionId, project, readOnly = false }: Sty
       />
       {styleGuideOptions.length === 0 && (
         <Text size="sm" c="dimmed">
-          Нет документов категории "Правила оформления журнала". Добавьте документ в разделе Документы.
+          Нет документов категории "Правила оформления журнала". Добавьте документ в
+          разделе Документы.
         </Text>
       )}
     </Group>

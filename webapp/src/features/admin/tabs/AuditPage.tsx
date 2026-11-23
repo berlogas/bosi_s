@@ -16,7 +16,7 @@ import {
 } from '@mantine/core'
 import { useAuditPage } from './hooks/useAuditPage'
 import { SimpleTable } from '../components'
-import { dayWhen } from '../../../lib/format'
+import { dayWhen, fullWhen, shortWhen } from '../../../lib/format'
 
 const AUDIT_PERIODS = [
   { value: 'all', label: 'Всё время', days: 0 },
@@ -76,39 +76,49 @@ export default function AuditPage() {
   } = useAuditPage()
 
   // Все useMemo до early return
-  const columns = React.useMemo(() => [
-    { id: 'created_at', accessorKey: 'created_at', header: 'Время' },
-    {
-      id: 'actor_username',
-      accessorKey: 'actor_username',
-      header: 'Кто',
-      cell: (row: { actor_username: string | null }) => row.actor_username ?? '—',
-    },
-    {
-      id: 'action',
-      accessorKey: 'action',
-      header: 'Действие',
-      cell: (row: { action: string }) => row.action,
-    },
-    {
-      id: 'target_type',
-      accessorKey: 'target_type',
-      header: 'Цель',
-      cell: (row: { target_type: string | null }) => row.target_type ?? '—',
-    },
-    {
-      id: 'ok',
-      accessorKey: 'ok',
-      header: 'OK',
-      cell: (row: { ok: boolean }) => (row.ok ? '✓' : '✗'),
-    },
-    {
-      id: 'ip',
-      accessorKey: 'ip',
-      header: 'IP',
-      cell: (row: { ip: string | null }) => row.ip ?? '—',
-    },
-  ], [])
+  const columns = React.useMemo(
+    () => [
+      {
+        id: 'created_at',
+        accessorKey: 'created_at',
+        header: 'Время',
+        cell: (row: { created_at: string }) => (
+          <span title={fullWhen(row.created_at)}>{shortWhen(row.created_at)}</span>
+        ),
+      },
+      {
+        id: 'actor_username',
+        accessorKey: 'actor_username',
+        header: 'Кто',
+        cell: (row: { actor_username: string | null }) => row.actor_username ?? '—',
+      },
+      {
+        id: 'action',
+        accessorKey: 'action',
+        header: 'Действие',
+        cell: (row: { action: string }) => row.action,
+      },
+      {
+        id: 'target_type',
+        accessorKey: 'target_type',
+        header: 'Цель',
+        cell: (row: { target_type: string | null }) => row.target_type ?? '—',
+      },
+      {
+        id: 'ok',
+        accessorKey: 'ok',
+        header: 'OK',
+        cell: (row: { ok: boolean }) => (row.ok ? '✓' : '✗'),
+      },
+      {
+        id: 'ip',
+        accessorKey: 'ip',
+        header: 'IP',
+        cell: (row: { ip: string | null }) => row.ip ?? '—',
+      },
+    ],
+    [],
+  )
 
   if (isLoading) return <Text c="dimmed">Загрузка...</Text>
   if (isError) return <Alert color="red">{errorText(error, 'Ошибка загрузки')}</Alert>
@@ -122,7 +132,7 @@ export default function AuditPage() {
           label="Период"
           aria-label="Фильтр: период журнала"
           data={AUDIT_PERIODS.map(({ value, label }) => ({ value, label }))}
-          value={dateFrom ? 'custom' : (oldestAt ? 'all' : 'all')}
+          value={dateFrom ? 'custom' : oldestAt ? 'all' : 'all'}
           onChange={(value) => {
             if (!value) return
             if (value === 'all') {
@@ -194,7 +204,9 @@ export default function AuditPage() {
       </Group>
 
       {data.length === 0 && !isLoading && (
-        <Text c="dimmed" role="status">Записей аудита нет.</Text>
+        <Text c="dimmed" role="status">
+          Записей аудита нет.
+        </Text>
       )}
 
       {data.length > 0 && (

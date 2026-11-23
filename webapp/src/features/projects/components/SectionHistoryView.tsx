@@ -39,8 +39,16 @@ interface SectionHistoryViewProps {
   planId: string
 }
 
-export function SectionHistoryView({ sessionId, projectId, planId }: SectionHistoryViewProps) {
-  const { data: tree, isLoading, error } = useSectionHistory(sessionId, projectId, planId)
+export function SectionHistoryView({
+  sessionId,
+  projectId,
+  planId,
+}: SectionHistoryViewProps) {
+  const {
+    data: tree,
+    isLoading,
+    error,
+  } = useSectionHistory(sessionId, projectId, planId)
   const rollback = useRollbackSection(sessionId, projectId)
   const approve = useApproveSection(sessionId, projectId)
   const translate = useTranslateSectionV2(sessionId, projectId)
@@ -72,15 +80,27 @@ export function SectionHistoryView({ sessionId, projectId, planId }: SectionHist
   )
 
   if (isLoading) {
-    return <div style={{ padding: 16, color: 'var(--mantine-color-gray-5)' }}>Загрузка истории…</div>
+    return (
+      <div style={{ padding: 16, color: 'var(--mantine-color-gray-5)' }}>
+        Загрузка истории…
+      </div>
+    )
   }
 
   if (error) {
-    return <div style={{ padding: 16, color: 'var(--mantine-color-red-6)' }}>Ошибка загрузки истории</div>
+    return (
+      <div style={{ padding: 16, color: 'var(--mantine-color-red-6)' }}>
+        Ошибка загрузки истории
+      </div>
+    )
   }
 
   if (!tree || tree.roots.length === 0) {
-    return <div style={{ padding: 16, color: 'var(--mantine-color-gray-5)' }}>Нет версий для этого раздела</div>
+    return (
+      <div style={{ padding: 16, color: 'var(--mantine-color-gray-5)' }}>
+        Нет версий для этого раздела
+      </div>
+    )
   }
 
   const selected = versions.find((v) => v.id === selectedVersionId) ?? null
@@ -244,9 +264,7 @@ export function SectionHistoryView({ sessionId, projectId, planId }: SectionHist
               w={280}
             />
           </Group>
-          {diff.data && (
-            <SemanticDiffView diff={diff.data} />
-          )}
+          {diff.data && <SemanticDiffView diff={diff.data} />}
           {diff.isError && (
             <Alert color="red" role="alert">
               {diff.error instanceof Error

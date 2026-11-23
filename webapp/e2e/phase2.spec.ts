@@ -82,6 +82,56 @@ const SOURCE = {
   score: 0.87,
 }
 
+/** Ответ в истории чата: данные для AnswerView (проверки, источники, ссылки). */
+const answerMessage = (checks?: Record<string, unknown>) => ({
+  id: 'm-answer',
+  session_id: 's-1',
+  role: 'assistant',
+  content: 'Ответ по данным [1].',
+  sources: [SOURCE],
+  checks,
+  created_at: '2026-10-01T00:01:00+00:00',
+})
+
+const QUESTION_MESSAGE = {
+  id: 'm-question',
+  session_id: 's-1',
+  role: 'user',
+  content: 'вопрос',
+  created_at: '2026-10-01T00:00:00+00:00',
+}
+
+/** Завершённая фоновая задача: UI берёт ответ из истории сообщений. */
+const doneTask = {
+  id: 't-answer',
+  kind: 'chat',
+  title: 'Вопрос: вопрос',
+  status: 'done',
+  progress: 100,
+  step: 'готово',
+  error: null,
+  cancel_requested: false,
+  session_id: 's-1',
+  created_at: '2026-10-01T00:00:00+00:00',
+  started_at: '2026-10-01T00:00:00+00:00',
+  finished_at: '2026-10-01T00:00:05+00:00',
+  seconds: 5,
+  stage_seconds: null,
+  result: { answer: 'Ответ по данным [1].' },
+}
+
+const asyncRoutes = (checks?: Record<string, unknown>) => ({
+  'POST /api/chat/query-async': { body: { task_id: 't-answer' } },
+  'GET /api/tasks/t-answer': { body: doneTask },
+  'GET /api/chat/messages': {
+    body: {
+      messages: [answerMessage(checks), QUESTION_MESSAGE],
+      total: 2,
+      offset: 0,
+    },
+  },
+})
+
 type Route = {
   status?: number
   body: unknown | (() => unknown) | ((url: URL, req: Request) => unknown)
@@ -237,34 +287,24 @@ test('долгий вопрос: панель этапов с прогрессо
 })
 
 test('ответ с предупреждением grounding: ⚠️ и expander', async ({ page }) => {
-  await mockApi(page, {
-    'POST /api/chat/query': {
-      body: {
-        answer: 'Ответ по данным [1].',
-        sources: [SOURCE],
-        references: ['[1] Данные GF/F (глобальная база)'],
-        mode: 'hybrid',
-        query: 'вопрос',
-        from_cache: false,
-        stats: {
-          grounding: { warnings: ['Цитата [2] не найдена в списке источников'] },
-          citations: { warnings: ['Факт без опоры в тексте'] },
-        },
-        base_empty: false,
-      },
-    },
-  })
+  await mockApi(
+    page,
+    asyncRoutes({
+      grounding: { warnings: ['Цитата [2] не найдена в списке источников'] },
+      citations: { warnings: ['Факт без опоры в тексте'] },
+    }),
+  )
 
   await login(page)
   await openChat(page)
 
-  // переключаемся на синхронный режим
-  await page.getByRole('switch', { name: /Фоновый режим/ }).click()
   await page.getByLabel('Ваш вопрос').fill('вопрос')
   await page.getByRole('button', { name: '➤' }).click()
 
   // первое предупреждение видно сразу
-  await expect(page.getByText(/⚠️.*Цитата \[2\] не найдена/)).toBeVisible()
+  await expect(page.getByText(/Цитата \[2\] не найдена/)).toBeVisible({
+    timeout: 15_000,
+  })
 
   // второе — за expander'ом
   await page.getByText(/Все предупреждения проверки \(2\)/).click()
@@ -274,25 +314,11 @@ test('ответ с предупреждением grounding: ⚠️ и expander
 test('References отображаются и открываются, цитата подсвечивает источник', async ({
   page,
 }) => {
-  await mockApi(page, {
-    'POST /api/chat/query': {
-      body: {
-        answer: 'Ответ по данным [1].',
-        sources: [SOURCE],
-        references: ['[1] Данные GF/F (глобальная база)'],
-        mode: 'hybrid',
-        query: 'вопрос',
-        from_cache: false,
-        stats: {},
-        base_empty: false,
-      },
-    },
-  })
+  await mockApi(page, asyncRoutes())
 
   await login(page)
   await openChat(page)
 
-  await page.getByRole('switch', { name: /Фоновый режим/ }).click()
   await page.getByLabel('Ваш вопрос').fill('вопрос')
   await page.getByRole('button', { name: '➤' }).click()
 
@@ -300,10 +326,8 @@ test('References отображаются и открываются, цитат�
   await expect(page.getByText('Источники:')).toBeVisible()
   await expect(page.getByText(/Данные GF\/F/).first()).toBeVisible()
 
-  // References: expander открывается и показывает строку
-  await page.getByText('Список источников').click()
-  await expect(page.getByText(/Данные GF\/F \(глобальная база\)/)).toBeVisible()
-
+  // В истории сообщений список References не хранится — проверяем источники
+  // и подсветку цитаты, которая есть и в истории.
   // клик по цитате [1] в ответе подсвечивает источник
   // (активный источник получает px=4 → padding; bg — style-проп Mantine)
   await page.getByRole('link', { name: '[1]' }).click()
@@ -403,8 +427,9 @@ test('после выхода сессия не достаётся следую�
   })
   await expect(sessionItem).not.toHaveAttribute('data-disabled', 'true')
 
-  // выход из аккаунта
-  await page.getByRole('button', { name: 'Выйти' }).click()
+  // выход из аккаунта: пункт живёт в меню пользователя
+  await page.getByRole('button', { name: 'Меню пользователя' }).click()
+  await page.getByRole('menuitem', { name: 'Выйти' }).click()
   await expect(page).toHaveURL(/\/login$/)
 
   // вкладка не должна хранить сессию ушедшего

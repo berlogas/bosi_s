@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, status
+from sqlalchemy.orm import Session
 
 from app.api.admin import _client_meta
 from app.core.security import require_admin
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/pqa", tags=["pqa"], dependencies=[Depends(requir
 async def reindex_index(
     payload: ReindexRequest,
     request: Request,
-    db=Depends(get_db),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Полная переиндексация коллекции.
 

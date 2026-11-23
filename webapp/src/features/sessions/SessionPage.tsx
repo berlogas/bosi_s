@@ -168,128 +168,133 @@ export function SessionPage() {
     <BreadcrumbProvider>
       <Stack
         gap="md"
-        style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+        style={{
+          height: '100%',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
       >
-      {/* Крошки только здесь: «Панель / Сессия / вкладка» — реальная иерархия.
+        {/* Крошки только здесь: «Панель / Сессия / вкладка» — реальная иерархия.
           На остальных страницах PageHeader один, крошки дублировали бы его. */}
-      <SessionBreadcrumb
-        sessionId={session.id}
-        sessionTitle={session.title}
-        activeTab={activeTab}
-      />
-      <Group justify="space-between" align="flex-start">
-        <Stack gap={4}>
-          <Title order={3}>{session.title}</Title>
-          <Text size="sm" c="dimmed">
-            Автор: {session.owner_username}
-            {session.owner_full_name ? ` (${session.owner_full_name})` : ''}
-          </Text>
-          <Text size="sm" c="dimmed">
-            Статус: {sessionStatusLabel(session.status)} · Срок хранения:{' '}
-            {ttlLabel(session.days_left)}
-          </Text>
-          <Limits
-            documents={session.summary.documents}
-            documentsLimit={session.summary.documents_limit}
-            storageBytes={session.summary.storage_bytes}
-            storageLimitBytes={session.summary.storage_limit_bytes}
-          />
-        </Stack>
-
-        <Group gap="xs">
-          <Button
-            size="xs"
-            variant="light"
-            disabled={readOnly || session.status === 'paused'}
-            onClick={() => void handlePause()}
-          >
-            Пауза
-          </Button>
-          <Button
-            size="xs"
-            variant="light"
-            color="error"
-            disabled={readOnly}
-            onClick={() => setConfirmOpened(true)}
-          >
-            Архив
-          </Button>
-          <Button size="xs" variant="default" onClick={() => navigate('/')}>
-            ← Информационная панель
-          </Button>
-        </Group>
-      </Group>
-
-      {actionError && (
-        <Alert color="error" role="alert">
-          {actionError}
-        </Alert>
-      )}
-
-      {session.status === 'paused' && (
-        <Alert color="warning" title="Сессия на паузе">
-          <Group justify="space-between" align="center" wrap="wrap">
-            <Text size="sm">
-              Работа приостановлена. Возобновите сессию, чтобы вернуться к сохранённой
-              вкладке и восстановить индекс документов.
+        <SessionBreadcrumb
+          sessionId={session.id}
+          sessionTitle={session.title}
+          activeTab={activeTab}
+        />
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4}>
+            <Title order={3}>{session.title}</Title>
+            <Text size="sm" c="dimmed">
+              Автор: {session.owner_username}
+              {session.owner_full_name ? ` (${session.owner_full_name})` : ''}
             </Text>
-            <Button size="xs" loading={resume.isPending} onClick={handleResume}>
-              Возобновить
-            </Button>
-          </Group>
-        </Alert>
-      )}
+            <Text size="sm" c="dimmed">
+              Статус: {sessionStatusLabel(session.status)} · Срок хранения:{' '}
+              {ttlLabel(session.days_left)}
+            </Text>
+            <Limits
+              documents={session.summary.documents}
+              documentsLimit={session.summary.documents_limit}
+              storageBytes={session.summary.storage_bytes}
+              storageLimitBytes={session.summary.storage_limit_bytes}
+            />
+          </Stack>
 
-      {readOnly && (
-        <Alert color="warning">Сессия в архиве — доступно только чтение.</Alert>
-      )}
-
-      <Tabs
-        value={activeTab}
-        keepMounted={false}
-        onChange={(value) => navigate(`/s/${sessionId}/${value}`)}
-      >
-        <Tabs.List>
-          {TABS.map((tab) => (
-            <Tabs.Tab key={tab} value={tab}>
-              {TAB_LABELS[tab]}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
-      </Tabs>
-
-      {/* вкладка рендерится маршрутом; sessionId пробрасывается через context
-          не стал — Outlet получает его из params. flex: 1 — вкладка забирает
-          всё оставшееся место под чат/документы/проекты. */}
-      <Box style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <Outlet context={{ session, readOnly }} />
-      </Box>
-
-      <Modal
-        opened={confirmOpened}
-        onClose={() => setConfirmOpened(false)}
-        title="Подтвердите: сессия уйдёт в архив"
-        centered
-      >
-        <Stack>
-          <Text size="sm">
-            Архивировать сессию? Она станет только для чтения: вернуть её из интерфейса
-            будет нельзя.
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setConfirmOpened(false)}>
-              Отмена
+          <Group gap="xs">
+            <Button
+              size="xs"
+              variant="light"
+              disabled={readOnly || session.status === 'paused'}
+              onClick={() => void handlePause()}
+            >
+              Пауза
             </Button>
             <Button
+              size="xs"
+              variant="light"
               color="error"
-              loading={archive.isPending}
-              onClick={handleArchiveConfirm}
+              disabled={readOnly}
+              onClick={() => setConfirmOpened(true)}
             >
-              Да, в архив
+              Архив
+            </Button>
+            <Button size="xs" variant="default" onClick={() => navigate('/')}>
+              ← Информационная панель
             </Button>
           </Group>
-        </Stack>
-      </Modal>
+        </Group>
+
+        {actionError && (
+          <Alert color="error" role="alert">
+            {actionError}
+          </Alert>
+        )}
+
+        {session.status === 'paused' && (
+          <Alert color="warning" title="Сессия на паузе">
+            <Group justify="space-between" align="center" wrap="wrap">
+              <Text size="sm">
+                Работа приостановлена. Возобновите сессию, чтобы вернуться к сохранённой
+                вкладке и восстановить индекс документов.
+              </Text>
+              <Button size="xs" loading={resume.isPending} onClick={handleResume}>
+                Возобновить
+              </Button>
+            </Group>
+          </Alert>
+        )}
+
+        {readOnly && (
+          <Alert color="warning">Сессия в архиве — доступно только чтение.</Alert>
+        )}
+
+        <Tabs
+          value={activeTab}
+          keepMounted={false}
+          onChange={(value) => navigate(`/s/${sessionId}/${value}`)}
+        >
+          <Tabs.List>
+            {TABS.map((tab) => (
+              <Tabs.Tab key={tab} value={tab}>
+                {TAB_LABELS[tab]}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs>
+
+        {/* вкладка рендерится маршрутом; sessionId пробрасывается через context
+          не стал — Outlet получает его из params. flex: 1 — вкладка забирает
+          всё оставшееся место под чат/документы/проекты. */}
+        <Box style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <Outlet context={{ session, readOnly }} />
+        </Box>
+
+        <Modal
+          opened={confirmOpened}
+          onClose={() => setConfirmOpened(false)}
+          title="Подтвердите: сессия уйдёт в архив"
+          centered
+        >
+          <Stack>
+            <Text size="sm">
+              Архивировать сессию? Она станет только для чтения: вернуть её из
+              интерфейса будет нельзя.
+            </Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setConfirmOpened(false)}>
+                Отмена
+              </Button>
+              <Button
+                color="error"
+                loading={archive.isPending}
+                onClick={handleArchiveConfirm}
+              >
+                Да, в архив
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
       </Stack>
     </BreadcrumbProvider>
   )

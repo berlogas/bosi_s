@@ -1,4 +1,11 @@
-import { useProjects as useProjectsQuery, useJournalStyles, useCreateProject, usePatchProject, useDeleteProject, useReorderProjects } from '../queries'
+import {
+  useProjects as useProjectsQuery,
+  useJournalStyles,
+  useCreateProject,
+  usePatchProject,
+  useDeleteProject,
+  useReorderProjects,
+} from '../queries'
 import { useMemo, useCallback } from 'react'
 
 import type { ProjectOut } from '../../../api/types'
@@ -40,15 +47,18 @@ export function useProjects(sessionId: string | null) {
       return list.filter(
         (project) =>
           project.title.toLowerCase().includes(query) ||
-          ((project.sections as Array<{ name: string }> | undefined)?.some?.((s) => s.name.toLowerCase().includes(query)) ?? false),
+          ((project.sections as Array<{ name: string }> | undefined)?.some?.((s) =>
+            s.name.toLowerCase().includes(query),
+          ) ??
+            false),
       )
     },
-    [list]
+    [list],
   )
 
   const journalChoices = useMemo(
     () => (styles.data ?? []).map((item) => ({ value: item.key, label: item.title })),
-    [styles.data]
+    [styles.data],
   )
 
   return {
@@ -70,8 +80,5 @@ export function useProjects(sessionId: string | null) {
  */
 export function useProjectTitles(sessionId: string | null) {
   const { data } = useProjectsQuery(sessionId)
-  return useMemo(
-    () => (data ?? []).map((p) => ({ id: p.id, title: p.title })),
-    [data]
-  )
+  return useMemo(() => (data ?? []).map((p) => ({ id: p.id, title: p.title })), [data])
 }

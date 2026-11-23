@@ -391,16 +391,16 @@ async def test_generate_async_body_survives_request_session_close(
     assert captured["plans"] >= 0
 
 
-async def _wait_task(tasks, task_id: str, timeout: float = 10.0):
+async def _wait_task(tasks, task_id: str, wait_seconds: float = 10.0):
     import asyncio
 
-    deadline = asyncio.get_running_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + wait_seconds
     while asyncio.get_running_loop().time() < deadline:
         task = tasks.get(task_id)
         if task is not None and task.finished:
             return task
         await asyncio.sleep(0.01)
-    raise AssertionError(f"задача {task_id} не завершилась за {timeout} с")
+    raise AssertionError(f"задача {task_id} не завершилась за {wait_seconds} с")
 
 
 async def test_generation_writes_into_section_plan(client, researcher,

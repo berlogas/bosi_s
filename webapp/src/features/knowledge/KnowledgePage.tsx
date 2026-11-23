@@ -101,8 +101,9 @@ export function KnowledgePage() {
             документов: {visibleDocuments.length}
           </Badge>
           <Badge size="lg" variant="light" color="gray">
-            объём: {formatBytes(
-              visibleDocuments.reduce((sum, d) => sum + (d.size_bytes || 0), 0)
+            объём:{' '}
+            {formatBytes(
+              visibleDocuments.reduce((sum, d) => sum + (d.size_bytes || 0), 0),
             )}
           </Badge>
         </Group>

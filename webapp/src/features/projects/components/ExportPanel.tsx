@@ -1,13 +1,38 @@
 import { Group, Paper, Select, Button, Text } from '@mantine/core'
-import { IconDownload, IconFileWord, IconFileCode, IconArchive } from '@tabler/icons-react'
+import {
+  IconDownload,
+  IconFileWord,
+  IconFileCode,
+  IconArchive,
+} from '@tabler/icons-react'
 import React, { useState } from 'react'
 import { useExportProject } from '../queries'
 import type { ExportFormat, ProjectOut } from '../../../api/types'
 
-const EXPORT_FORMATS: { value: ExportFormat; label: string; hint: string; icon: React.ReactNode }[] = [
-  { value: 'docx', label: 'Word (.docx)', hint: 'готовый файл для журнала', icon: <IconFileWord size={14} /> },
-  { value: 'markdown', label: 'Markdown (.md)', hint: 'для репозитория или вики', icon: <IconFileCode size={14} /> },
-  { value: 'zip', label: 'ZIP', hint: 'статья + библиография + исходники', icon: <IconArchive size={14} /> },
+const EXPORT_FORMATS: {
+  value: ExportFormat
+  label: string
+  hint: string
+  icon: React.ReactNode
+}[] = [
+  {
+    value: 'docx',
+    label: 'Word (.docx)',
+    hint: 'готовый файл для журнала',
+    icon: <IconFileWord size={14} />,
+  },
+  {
+    value: 'markdown',
+    label: 'Markdown (.md)',
+    hint: 'для репозитория или вики',
+    icon: <IconFileCode size={14} />,
+  },
+  {
+    value: 'zip',
+    label: 'ZIP',
+    hint: 'статья + библиография + исходники',
+    icon: <IconArchive size={14} />,
+  },
 ]
 
 interface ExportPanelProps {
@@ -31,7 +56,9 @@ export function ExportPanel({ sessionId, project }: ExportPanelProps) {
       {
         onSuccess: ({ filename }) => setMessage(`Файл скачан: ${filename}`),
         onError: (cause) =>
-          setError(cause instanceof Error ? cause.message : 'Не удалось выгрузить файл'),
+          setError(
+            cause instanceof Error ? cause.message : 'Не удалось выгрузить файл',
+          ),
       },
     )
   }

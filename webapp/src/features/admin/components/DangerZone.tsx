@@ -85,7 +85,16 @@ export function DangerZone({
   return (
     <>
       {trigger}
-      <Modal opened={opened} onClose={() => { setOpened(false); setInput('') }} title={label} centered size="sm">
+      <Modal
+        opened={opened}
+        onClose={() => {
+          setOpened(false)
+          setInput('')
+        }}
+        title={label}
+        centered
+        size="sm"
+      >
         <Stack gap="md">
           <Alert color="red" title="Действие необратимо">
             Введите <b>{confirmText}</b> для подтверждения.
@@ -104,7 +113,13 @@ export function DangerZone({
             autoFocus
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => { setOpened(false); setInput('') }}>
+            <Button
+              variant="default"
+              onClick={() => {
+                setOpened(false)
+                setInput('')
+              }}
+            >
               Отмена
             </Button>
             <Button color={confirmColor} disabled={!canConfirm} onClick={handleConfirm}>

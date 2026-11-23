@@ -64,9 +64,7 @@ export function AsyncBoundary<T>({
   if (error) {
     return (
       <Alert color="error" role="alert">
-        <Text size="sm">
-          {error instanceof Error ? error.message : String(error)}
-        </Text>
+        <Text size="sm">{error instanceof Error ? error.message : String(error)}</Text>
         {onRetry && (
           <Group justify="flex-end" mt="xs">
             <Button

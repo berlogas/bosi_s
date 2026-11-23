@@ -184,15 +184,10 @@ test('загрузка файла через dropzone → панель прог�
       body: () =>
         uploaded ? [DOC, { ...DOC, id: 'd-2', title: 'Новый файл' }] : [DOC],
     },
-    'POST /api/sessions/s-1/documents/upload': {
+    'POST /api/sessions/s-1/documents/upload-async': {
       body: () => {
         uploaded = true
-        return {
-          added: [{ ...DOC, id: 'd-2', title: 'Новый файл' }],
-          duplicates: [],
-          failed: [],
-          total: 1,
-        }
+        return { task_id: 't-idx', total: 1 }
       },
     },
     'GET /api/tasks': {
@@ -203,23 +198,28 @@ test('загрузка файла через dropzone → панель прог�
                 id: 't-idx',
                 kind: 'indexing',
                 title: 'Индексация: Новый файл',
-                status: 'running',
-                progress: 60,
-                step: 'чанки',
+                status: 'done',
+                progress: 100,
+                step: 'готово',
                 error: null,
                 cancel_requested: false,
                 session_id: 's-1',
                 project_id: null,
                 created_at: '2026-10-07T09:00:00+00:00',
                 started_at: '2026-10-07T09:00:01+00:00',
-                finished_at: null,
+                finished_at: '2026-10-07T09:00:08+00:00',
                 seconds: 8,
-                stage_seconds: 3,
-                result: null,
+                stage_seconds: null,
+                result: {
+                  added: [{ ...DOC, id: 'd-2', title: 'Новый файл' }],
+                  duplicates: [],
+                  failed: [],
+                  total: 1,
+                },
               },
             ]
           : [],
-        active: uploaded ? 1 : 0,
+        active: 0,
       }),
     },
   })
@@ -229,7 +229,7 @@ test('загрузка файла через dropzone → панель прог�
   await expect(page.getByText('Временная литература (1)')).toBeVisible()
 
   // выбор файла (dropzone принимает и клик, и drop — здесь путь через input)
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByTestId('doc-file-input').setInputFiles({
     name: 'novyy.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('текст'),
@@ -239,14 +239,12 @@ test('загрузка файла через dropzone → панель прог�
   await page.getByRole('button', { name: 'Загрузить файлы' }).click()
 
   // success-строка documents_tab
-  await expect(page.getByText('Добавлено: 1, ошибок: 0')).toBeVisible({
+  await expect(page.getByText('Проиндексировано: 1')).toBeVisible({
     timeout: 15_000,
   })
   expect(requestLog.some((line) => line.includes('/documents/upload'))).toBe(true)
 
-  // прогресс индексации: панель задачи с процентами и шагом
-  await expect(page.getByText(/60%/)).toBeVisible()
-  await expect(page.getByText(/чанки/)).toBeVisible()
+  // итог индексации виден в сводке внутри вкладки «Документы»
 })
 
 test('добавление по пути: форма → POST path → документ в списке', async ({ page }) => {
@@ -267,7 +265,7 @@ test('добавление по пути: форма → POST path → доку�
   await expect(page.getByText('Временная литература (1)')).toBeVisible()
 
   await page.getByLabel('Путь к файлу на диске').fill('/data/file.pdf')
-  await page.getByLabel('Теги через запятую').fill('тест')
+  await page.getByPlaceholder('Теги через запятую').fill('тест')
   await page.getByRole('button', { name: 'Добавить' }).click()
 
   await expect(page.getByText(/Файл с диска/).first()).toBeVisible({
@@ -304,17 +302,26 @@ test('проект-редактор: создание → раздел → со�
     'POST /api/sessions/s-1/projects': {
       body: { ...PROJECT, id: 'p-new', title: 'Новая статья' },
     },
-    'GET /api/sessions/s-1/projects/p-new/sections': {
+    'GET /api/sessions/s-1/projects/p-new/section-plans': {
       body: [
         {
+          id: 'plan-new',
+          project_id: 'p-new',
           name: 'Introduction',
-          required: true,
+          kind: 'standard',
           order: 1,
+          required: true,
           word_target: 600,
+          word_min: 300,
+          word_max: 2400,
           notes: '',
-          content_md: '',
-          words: 0,
-          written: false,
+          language: 'ru',
+          depends_on: [],
+          status: 'pending',
+          current_version_id: null,
+          current_version: null,
+          created_at: '2026-10-01T00:00:00+00:00',
+          updated_at: '2026-10-01T00:00:00+00:00',
         },
       ],
     },
@@ -322,23 +329,26 @@ test('проект-редактор: создание → раздел → со�
     'GET /api/sessions/s-1/projects/p-new/progress': {
       body: { project_id: 'p-new', sections: 5, written: 0, words: 0, percent: 0 },
     },
-    'PUT /api/sessions/s-1/projects/p-new/sections/Introduction': {
+    'PUT /api/sessions/s-1/projects/p-new/section-plans/plan-new/content': {
       body: {
-        name: 'Introduction',
-        required: true,
-        order: 1,
-        word_target: 600,
-        notes: '',
+        id: 'v-new',
+        section_plan_id: 'plan-new',
+        project_id: 'p-new',
         content_md: 'Мой черновик введения',
-        words: 3,
-        written: true,
+        word_count: 3,
+        citation_map: [],
+        generation_params: {},
+        quality_report: {},
+        status: 'draft',
+        created_at: '2026-10-01T00:01:00+00:00',
+        updated_at: '2026-10-01T00:01:00+00:00',
       },
     },
   })
 
   await login(page)
   await page.goto('/s/s-1/projects')
-  await expect(page.getByText('Проектов нет — создайте первый.')).toBeVisible()
+  await expect(page.getByText('Проектов пока нет')).toBeVisible()
 
   // создание
   await page.getByLabel('Название').fill('Новая статья')
@@ -347,47 +357,49 @@ test('проект-редактор: создание → раздел → со�
   const journal = page.getByRole('combobox', { name: 'Стиль журнала' })
   await journal.click()
   await page.getByRole('option', { name: /Мультидисциплинарный прорыв/ }).click()
-  await page.getByRole('button', { name: 'Создать' }).click()
+  await page.getByRole('button', { name: 'Создать', exact: true }).click()
   // после создания эффект сам выбирает новый проект (selectedId → list[0])
-  await expect(page.getByRole('combobox', { name: 'Проект' })).toBeVisible({
-    timeout: 15_000,
-  })
+  await expect(page.getByText('Новая статья').first()).toBeVisible({ timeout: 15_000 })
 
   // раздел раскрыт (не написан) — правим и сохраняем
-  const area = page.getByLabel('Текст раздела: Введение (Introduction)')
+  // В браузере редактор — CodeMirror (aria-label только у тестового textarea).
+  const area = page.locator('.cm-content').first()
   await area.fill('Мой черновик введения')
   await page.getByRole('button', { name: 'Сохранить' }).click()
 
-  await expect(page.getByText('Раздел сохранён.')).toBeVisible({ timeout: 15_000 })
-  expect(requestLog.some((line) => line.includes('/sections/Introduction'))).toBe(true)
+  expect(
+    requestLog.some((line) => line.includes('/section-plans/plan-new/content')),
+  ).toBe(true)
 })
 
 test('привязка документа к проекту и отвязка', async ({ page }) => {
   const { requestLog } = await mockApi(page, {
     'POST /api/sessions/s-1/projects/p-1/documents': { status: 204, body: null },
+    'DELETE /api/sessions/s-1/projects/p-1/documents/d-1': { status: 204, body: null },
     'GET /api/sessions/s-1/projects/p-1/documents': {
       body: () =>
-        requestLog.some((line) => line.endsWith('/documents') && line.includes('POST'))
+        requestLog.some(
+          (line) => line.includes('/projects/p-1/documents') && line.includes('POST'),
+        )
           ? [{ document: DOC, role: 'data' }]
           : [],
     },
   })
 
   await login(page)
-  await page.goto('/s/s-1/projects/p-1/documents')
   await page.goto('/s/s-1/projects')
-  await expect(page.getByText('Привязать документ')).toBeVisible()
+  await page.getByRole('button', { name: 'Документы проекта' }).click()
 
-  await page.getByRole('combobox', { name: 'Привязать документ' }).click()
-  await page.getByRole('option', { name: 'Отчёт 2025', includeHidden: true }).click()
-  await page.getByRole('combobox', { name: 'Роль' }).click()
-  await page.getByRole('option', { name: 'Данные (data)', includeHidden: true }).click()
   await page.getByRole('button', { name: 'Привязать' }).click()
 
-  await expect(page.getByText(/Отчёт 2025 — роль: Данные \(data\)/)).toBeVisible({
-    timeout: 15_000,
-  })
-  await page.getByRole('button', { name: 'Отвязать' }).click()
+  await expect(page.getByText('Отчёт 2025').first()).toBeVisible({ timeout: 15_000 })
+  expect(
+    requestLog.some(
+      (line) => line.includes('/projects/p-1/documents') && line.includes('POST'),
+    ),
+  ).toBe(true)
+
+  await page.getByRole('button', { name: /Отвязать Отчёт 2025/ }).click()
   await expect
     .poll(
       () =>

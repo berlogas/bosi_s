@@ -130,7 +130,9 @@ const MANUSCRIPT = {
     language: 'ru',
   },
   sections: [{ id: 'plan-1', name: 'Introduction', word_count: 3 }],
-  bibliography: [{ index: 1, title: 'Smith 2019', dockey: 'abcd1234', citation: 'Smith, 2019' }],
+  bibliography: [
+    { index: 1, title: 'Smith 2019', dockey: 'abcd1234', citation: 'Smith, 2019' },
+  ],
   warnings: [],
 }
 
@@ -195,7 +197,9 @@ function baseRoutes(overrides: Record<string, unknown> = {}) {
       'GET /api/sessions/s-1/projects/p-1/manuscript': MANUSCRIPT,
       'GET /api/sessions/s-1/projects/p-1/terminology-check': {
         consistent: false,
-        section_terminology: [{ section: 'Introduction', term: 'биомасса', expected: 'biomass' }],
+        section_terminology: [
+          { section: 'Introduction', term: 'биомасса', expected: 'biomass' },
+        ],
         global_terminology: [],
         recommendations: [],
       },
@@ -213,9 +217,7 @@ async function waitForProject() {
 
 /** Открыть аккордеон «Сборка статьи». */
 async function openManuscriptPanel() {
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Сборка статьи' }),
-  )
+  await userEvent.click(await screen.findByRole('button', { name: 'Сборка статьи' }))
 }
 
 beforeEach(() => {
@@ -237,17 +239,13 @@ describe('сборка статьи', () => {
     await openManuscriptPanel()
 
     // Запрос на манускрипт уходит только после нажатия кнопки.
-    expect(
-      calls.filter((c) => c.url.includes('/manuscript')),
-    ).toHaveLength(0)
+    expect(calls.filter((c) => c.url.includes('/manuscript'))).toHaveLength(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Собрать статью' }))
 
     expect(await screen.findByText(/разделов: 1/)).toBeInTheDocument()
     expect(await screen.findByText(/слов: 3/)).toBeInTheDocument()
-    expect(
-      calls.filter((c) => c.url.includes('/manuscript')),
-    ).not.toHaveLength(0)
+    expect(calls.filter((c) => c.url.includes('/manuscript'))).not.toHaveLength(0)
   })
 
   it('собранный текст и список литературы показываются', async () => {
@@ -291,7 +289,9 @@ describe('глоссарий терминов', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Добавить' }))
 
     await waitFor(() => {
-      const call = calls.find((c) => c.init.method === 'POST' && c.url.includes('/glossary'))
+      const call = calls.find(
+        (c) => c.init.method === 'POST' && c.url.includes('/glossary'),
+      )
       expect(call).toBeDefined()
       expect(JSON.parse(String(call?.init.body))).toEqual({
         term: 'прилив',
@@ -343,14 +343,14 @@ describe('история версий раздела', () => {
     await waitForProject()
 
     await userEvent.click(await screen.findByRole('button', { name: 'История версий' }))
-    await userEvent.click(
-      await screen.findByLabelText('Язык перевода раздела'),
-    )
+    await userEvent.click(await screen.findByLabelText('Язык перевода раздела'))
     await userEvent.click(await screen.findByRole('option', { name: 'English (en)' }))
     await userEvent.click(screen.getByRole('button', { name: 'Перевести раздел' }))
 
     await waitFor(() => {
-      const call = calls.find((c) => c.init.method === 'POST' && c.url.includes('/translate'))
+      const call = calls.find(
+        (c) => c.init.method === 'POST' && c.url.includes('/translate'),
+      )
       expect(call).toBeDefined()
       expect(JSON.parse(String(call?.init.body))).toMatchObject({
         target_language: 'en',
@@ -411,18 +411,11 @@ describe('проверка готовности к генерации', () => {
     await waitForProject()
 
     // До нажатия запрос не уходит.
-    expect(
-      calls.filter((c) => c.url.includes('/pre-generation-check')),
-    ).toHaveLength(0)
+    expect(calls.filter((c) => c.url.includes('/pre-generation-check'))).toHaveLength(0)
 
-    await userEvent.type(
-      await screen.findByLabelText('Вопрос или тема'),
-      'О приливах',
-    )
+    await userEvent.type(await screen.findByLabelText('Вопрос или тема'), 'О приливах')
     // Проверка идёт по разделу — выбираем его.
-    await userEvent.click(
-      await screen.findByRole('combobox', { name: 'Раздел' }),
-    )
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Раздел' }))
     await userEvent.click(
       await screen.findByRole('option', { name: 'Introduction', hidden: true }),
     )

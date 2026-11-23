@@ -296,7 +296,7 @@ def test_embedding_model_load_count_metric(
     assert len(calls) == 1
 
     # Другая модель — снова промах кэша
-    m3 = pqa_profile._cached_embedding_model("model-b", "{}")
+    pqa_profile._cached_embedding_model("model-b", "{}")
     assert pqa_profile.embedding_model_load_count() == 2
     assert len(calls) == 2
 

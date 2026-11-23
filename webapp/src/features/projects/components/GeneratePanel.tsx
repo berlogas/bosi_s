@@ -1,4 +1,13 @@
-import { Stack, Group, Select, TextInput, Button, Alert, Text, Tabs } from '@mantine/core'
+import {
+  Stack,
+  Group,
+  Select,
+  TextInput,
+  Button,
+  Alert,
+  Text,
+  Tabs,
+} from '@mantine/core'
 import { IconSparkles, IconSearch, IconHistory } from '@tabler/icons-react'
 import React, { useState } from 'react'
 import { useGenerateSectionV2, useSectionPlans, usePreGenerationCheck } from '../hooks'
@@ -15,8 +24,14 @@ interface GeneratePanelProps {
   readOnly?: boolean
 }
 
-export function GeneratePanel({ sessionId, project, readOnly = false }: GeneratePanelProps) {
-  const [activeTab, setActiveTab] = useState<'generate' | 'analyze' | 'history'>('generate')
+export function GeneratePanel({
+  sessionId,
+  project,
+  readOnly = false,
+}: GeneratePanelProps) {
+  const [activeTab, setActiveTab] = useState<'generate' | 'analyze' | 'history'>(
+    'generate',
+  )
   const [kind, setKind] = useState<string>('section')
   const [question, setQuestion] = useState('')
   const [section, setSection] = useState('')
@@ -34,10 +49,14 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
   )
 
   const generateV2 = useGenerateSectionV2(sessionId, project.id)
-  const { data: sectionPlans, isLoading: plansLoading } = useSectionPlans(sessionId, project.id)
-  const draftAnalysis = React.useRef(
-     
-    () => import('../../../api/client').then((m) => m.client.draftAnalysis(sessionId, project.id))
+  const { data: sectionPlans, isLoading: plansLoading } = useSectionPlans(
+    sessionId,
+    project.id,
+  )
+  const draftAnalysis = React.useRef(() =>
+    import('../../../api/client').then((m) =>
+      m.client.draftAnalysis(sessionId, project.id),
+    ),
   ).current
 
   const [draftAnalysisLoading, setDraftAnalysisLoading] = useState(false)
@@ -76,19 +95,24 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
     setPanelError(null)
     setResult(null)
     const plan = (sectionPlans ?? []).find((p) => p.name === section)
-    const target = kind === 'section' ? section : SECTION_FOR_KIND[kind] ?? kind
-    generateV2.mutate({
-      section: target,
-      question: question.trim(),
-      word_target: kind === 'section' ? plan?.word_target : undefined,
-      // Вид из выпадающего списка едет в запрос: у каждого вида своя
-      // постановка задачи (обзор литературы, сверка, обсуждение…).
-      kind,
-    }, {
-      onSuccess: (data) => setResult(data),
-      onError: (cause) =>
-        setPanelError(cause instanceof Error ? cause.message : 'Генерация не удалась'),
-    })
+    const target = kind === 'section' ? section : (SECTION_FOR_KIND[kind] ?? kind)
+    generateV2.mutate(
+      {
+        section: target,
+        question: question.trim(),
+        word_target: kind === 'section' ? plan?.word_target : undefined,
+        // Вид из выпадающего списка едет в запрос: у каждого вида своя
+        // постановка задачи (обзор литературы, сверка, обсуждение…).
+        kind,
+      },
+      {
+        onSuccess: (data) => setResult(data),
+        onError: (cause) =>
+          setPanelError(
+            cause instanceof Error ? cause.message : 'Генерация не удалась',
+          ),
+      },
+    )
   }
 
   const sectionChoices = (sectionPlans ?? []).map((p) => ({
@@ -125,12 +149,20 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
   }
 
   if (plansLoading) {
-    return <Text size="sm" c="dimmed">Загрузка разделов…</Text>
+    return (
+      <Text size="sm" c="dimmed">
+        Загрузка разделов…
+      </Text>
+    )
   }
 
   return (
     <Stack gap="xs">
-      <Tabs value={activeTab} onChange={(value) => setActiveTab(value as "generate" | "analyze" | "history")} variant="default">
+      <Tabs
+        value={activeTab}
+        onChange={(value) => setActiveTab(value as 'generate' | 'analyze' | 'history')}
+        variant="default"
+      >
         <Tabs.List>
           <Tabs.Tab value="generate">
             <Group gap="xs">
@@ -181,7 +213,10 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
                 />
               )}
               {kind === 'section' && sectionChoices.length === 0 && (
-                <Text size="sm" c="dimmed">Нет разделов для генерации. Создайте план в разделе «План разделов» или нажмите «Предложить по стилю журнала».</Text>
+                <Text size="sm" c="dimmed">
+                  Нет разделов для генерации. Создайте план в разделе «План разделов»
+                  или нажмите «Предложить по стилю журнала».
+                </Text>
               )}
               <TextInput
                 label="Вопрос или тема"
@@ -192,7 +227,9 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
               />
               <Button
                 onClick={run}
-                disabled={readOnly || !question.trim() || (kind === 'section' && !section)}
+                disabled={
+                  readOnly || !question.trim() || (kind === 'section' && !section)
+                }
                 loading={generateV2.isPending}
                 leftSection={<IconSparkles size={14} />}
               >
@@ -201,7 +238,9 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
               <Button
                 variant="subtle"
                 onClick={() => setCheckEnabled(true)}
-                disabled={readOnly || !question.trim() || (kind === 'section' && !section)}
+                disabled={
+                  readOnly || !question.trim() || (kind === 'section' && !section)
+                }
                 loading={preCheck.isFetching}
               >
                 Проверить готовность
@@ -231,7 +270,11 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
               </Alert>
             )}
 
-            {panelError && <Alert color="error" role="alert">{panelError}</Alert>}
+            {panelError && (
+              <Alert color="error" role="alert">
+                {panelError}
+              </Alert>
+            )}
 
             {generateV2.isPending && (
               <Text size="sm" c="dimmed">
@@ -247,8 +290,12 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
                     content_md: result.content_md,
                     citations_ok: result.quality_report.citations_ok,
                     warnings: result.quality_report.warnings,
-                    references: result.citation_map.map((c: { docname?: string | null; title?: string | null; marker: string }) =>
-                      `${c.docname || c.title || 'источник'} [${c.marker}]`,
+                    references: result.citation_map.map(
+                      (c: {
+                        docname?: string | null
+                        title?: string | null
+                        marker: string
+                      }) => `${c.docname || c.title || 'источник'} [${c.marker}]`,
                     ),
                   }}
                 />
@@ -271,10 +318,16 @@ export function GeneratePanel({ sessionId, project, readOnly = false }: Generate
               </Button>
             </Group>
 
-            {panelError && <Alert color="error" role="alert">{panelError}</Alert>}
+            {panelError && (
+              <Alert color="error" role="alert">
+                {panelError}
+              </Alert>
+            )}
 
             {draftAnalysisLoading && (
-              <Text size="sm" c="dimmed">Анализирую черновик…</Text>
+              <Text size="sm" c="dimmed">
+                Анализирую черновик…
+              </Text>
             )}
 
             {analysis && (

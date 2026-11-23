@@ -45,11 +45,7 @@ export function SessionBreadcrumb({
         <Anchor component={Link} to={`/s/${sessionId}/chat`} size="sm">
           {sessionTitle || 'Сессия'}
         </Anchor>
-        <Anchor
-          component={Link}
-          to={`/s/${sessionId}/${activeTab}`}
-          size="sm"
-        >
+        <Anchor component={Link} to={`/s/${sessionId}/${activeTab}`} size="sm">
           {TAB_LABELS[activeTab]}
         </Anchor>
         {isProjectsTab && activeProjectTitle && (

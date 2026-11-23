@@ -62,7 +62,9 @@ function VersionNodeItem({
       <Group
         align="center"
         style={{
-          backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : 'transparent',
+          backgroundColor: isSelected
+            ? 'var(--mantine-color-blue-light)'
+            : 'transparent',
           borderRadius: 4,
           padding: '4px 8px',
           cursor: 'pointer',
@@ -74,25 +76,31 @@ function VersionNodeItem({
           <UnstyledButton
             size={16}
             p={0}
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
             aria-label="Toggle"
           >
-            {node.children.length > 0 ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+            {node.children.length > 0 ? (
+              <IconChevronDown size={14} />
+            ) : (
+              <IconChevronRight size={14} />
+            )}
           </UnstyledButton>
         )}
         <IconFileText size={14} color={isSelected ? 'blue' : 'gray'} />
         <Text size="sm" fw={isSelected ? 600 : 400} style={{ flex: 1 }}>
-          {version.language.toUpperCase()}{version.source_language && ` (из ${version.source_language})`}
+          {version.language.toUpperCase()}
+          {version.source_language && ` (из ${version.source_language})`}
         </Text>
-        <Badge
-          variant="light"
-          color={statusColors[version.status] || 'gray'}
-          size="sm"
-        >
+        <Badge variant="light" color={statusColors[version.status] || 'gray'} size="sm">
           {statusLabels[version.status] || version.status}
         </Badge>
         <Text size="xs" c="dimmed">
-          {formatDistanceToNow(new Date(version.created_at), { addSuffix: true, locale: ru })}
+          {formatDistanceToNow(new Date(version.created_at), {
+            addSuffix: true,
+            locale: ru,
+          })}
         </Text>
         <Text size="xs" c="dimmed">
           {version.word_count} слов

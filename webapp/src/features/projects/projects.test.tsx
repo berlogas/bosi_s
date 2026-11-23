@@ -139,7 +139,9 @@ const JOURNAL_STYLES = [
       'TARGET AUDIENCE: Multidisciplinary scientists. Avoid narrow jargon.',
       'TONE: Engaging, concise, active voice.',
     ],
-    templates: [{ label: 'Abstract и Introduction', sections: ['abstract', 'introduction'] }],
+    templates: [
+      { label: 'Abstract и Introduction', sections: ['abstract', 'introduction'] },
+    ],
   },
 ]
 
@@ -202,7 +204,9 @@ describe('вкладка Проекты', () => {
     mockApi(baseRoutes().routes)
     renderApp()
 
-    expect(await screen.findByText('Как работать с проектом статьи')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Как работать с проектом статьи'),
+    ).toBeInTheDocument()
     expect(screen.getByText(/Привяжите документы с ролью/)).toBeInTheDocument()
     expect(screen.getByText(/обязана ставить ссылки на источники/)).toBeInTheDocument()
     expect(screen.getByText(/Разбор черновика/)).toBeInTheDocument()
@@ -228,7 +232,11 @@ describe('вкладка Проекты', () => {
   it('создание проекта уходит с названием и журналом', async () => {
     const { routes } = baseRoutes({
       'GET /api/sessions/s-1/projects': [],
-      'POST /api/sessions/s-1/projects': { ...PROJECT, id: 'p-new', title: 'Новый проект' },
+      'POST /api/sessions/s-1/projects': {
+        ...PROJECT,
+        id: 'p-new',
+        title: 'Новый проект',
+      },
     })
     const { calls } = mockApi(routes)
 
@@ -246,7 +254,9 @@ describe('вкладка Проекты', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
 
     await waitFor(() => {
-      const call = calls.find((c) => c.url.endsWith('/projects') && c.init.method === 'POST')
+      const call = calls.find(
+        (c) => c.url.endsWith('/projects') && c.init.method === 'POST',
+      )
       expect(call).toBeDefined()
       expect(JSON.parse(String(call?.init.body))).toEqual({
         title: 'Новый проект',
@@ -347,9 +357,7 @@ describe('вкладка Проекты', () => {
     renderApp()
     await waitForProject()
 
-    await userEvent.click(
-      screen.getAllByRole('button', { name: 'История версий' })[0],
-    )
+    await userEvent.click(screen.getAllByRole('button', { name: 'История версий' })[0])
 
     expect(await screen.findByText(/Версия от/)).toBeInTheDocument()
     // Текст версии показывается и в открытой панели, и в общем списке истории.
@@ -375,10 +383,12 @@ describe('вкладка Проекты', () => {
     })
     await userEvent.click(statusBox)
     await userEvent.click(
-      (await screen.findAllByRole('option', {
-        name: 'Написание текста (drafting)',
-        hidden: true,
-      }))[0],
+      (
+        await screen.findAllByRole('option', {
+          name: 'Написание текста (drafting)',
+          hidden: true,
+        })
+      )[0],
     )
 
     await waitFor(() => {
@@ -460,11 +470,13 @@ describe('вкладка Проекты', () => {
     await waitForProject()
 
     // Выпадающий список «Вид» — Mantine Select, варианты живут в портале.
-    const kindBox = screen.getAllByRole('combobox').find((box) =>
-      document
-        .querySelector(`label[for="${box.id}"]`)
-        ?.textContent?.startsWith('Вид'),
-    )
+    const kindBox = screen
+      .getAllByRole('combobox')
+      .find((box) =>
+        document
+          .querySelector(`label[for="${box.id}"]`)
+          ?.textContent?.startsWith('Вид'),
+      )
     expect(kindBox).toBeDefined()
     await userEvent.click(kindBox as HTMLElement)
     await userEvent.click(
@@ -488,7 +500,6 @@ describe('вкладка Проекты', () => {
     })
   })
 
-
   it('план разделов: перегенерация идёт фоновой задачей и показывает итог', async () => {
     let polls = 0
     const makeTask = (patch: Record<string, unknown> = {}) => ({
@@ -511,34 +522,38 @@ describe('вкладка Проекты', () => {
       result: null,
       ...patch,
     })
-    const { calls } = mockApi(baseRoutes({
-      'POST /api/sessions/s-1/projects/p-1/batch-regenerate': { task_id: 'regen-1' },
-      'GET /api/tasks/regen-1': () => {
-        polls += 1
-        return json(polls < 2
-          ? makeTask()
-          : makeTask({
-              status: 'done',
-              progress: 100,
-              step: 'готово',
-              result: {
-                total: 1,
-                regenerated: [{ section: 'Introduction', version_id: 'v-2', word_count: 10 }],
-                skipped: [],
-                failed: [],
-              },
-            }))
-      },
-    }).routes)
+    const { calls } = mockApi(
+      baseRoutes({
+        'POST /api/sessions/s-1/projects/p-1/batch-regenerate': { task_id: 'regen-1' },
+        'GET /api/tasks/regen-1': () => {
+          polls += 1
+          return json(
+            polls < 2
+              ? makeTask()
+              : makeTask({
+                  status: 'done',
+                  progress: 100,
+                  step: 'готово',
+                  result: {
+                    total: 1,
+                    regenerated: [
+                      { section: 'Introduction', version_id: 'v-2', word_count: 10 },
+                    ],
+                    skipped: [],
+                    failed: [],
+                  },
+                }),
+          )
+        },
+      }).routes,
+    )
 
     renderApp()
     await waitForProject()
     await userEvent.click(
       await screen.findByRole('button', { name: 'Документы проекта' }),
     )
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'План разделов' }),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: 'План разделов' }))
     await userEvent.click(
       await screen.findByRole('button', { name: 'Перегенерировать устаревшие' }),
     )
@@ -552,7 +567,10 @@ describe('вкладка Проекты', () => {
 
   it('план разделов: «Добавить раздел» создаёт раздел', async () => {
     const { routes } = baseRoutes({
-      'POST /api/sessions/s-1/projects/p-1/section-plans': { id: 'plan-2', name: 'Методы' },
+      'POST /api/sessions/s-1/projects/p-1/section-plans': {
+        id: 'plan-2',
+        name: 'Методы',
+      },
     })
     const { calls } = mockApi(routes)
 
@@ -562,24 +580,18 @@ describe('вкладка Проекты', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: 'Документы проекта' }),
     )
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'План разделов' }),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: 'План разделов' }))
     await userEvent.click(
       await screen.findByRole('button', { name: 'Добавить раздел' }),
     )
     // В модалке своё поле «Название» — ищем внутри окна, а не по всей странице.
     const dialog = await screen.findByRole('dialog')
-    await userEvent.type(
-      within(dialog).getByLabelText('Название'),
-      'Методы',
-    )
+    await userEvent.type(within(dialog).getByLabelText('Название'), 'Методы')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => {
       const sent = calls.find(
-        (c) =>
-          c.init.method === 'POST' && c.url.endsWith('/section-plans'),
+        (c) => c.init.method === 'POST' && c.url.endsWith('/section-plans'),
       )
       expect(sent, 'POST /section-plans не ушёл').toBeDefined()
       const body = JSON.parse(String(sent?.init.body)) as Record<string, unknown>
@@ -597,25 +609,23 @@ describe('вкладка Проекты', () => {
     renderApp()
     await waitForProject()
 
-    await userEvent.click(
-      screen.getAllByRole('button', { name: 'История версий' })[0],
-    )
+    await userEvent.click(screen.getAllByRole('button', { name: 'История версий' })[0])
     expect(await screen.findByText(/Версия от/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Одобрить' }))
     await waitFor(() =>
-      expect(
-        calls.some((c) => c.url.includes('/section-plans/plan-1/approve')),
-      ).toBe(true),
+      expect(calls.some((c) => c.url.includes('/section-plans/plan-1/approve'))).toBe(
+        true,
+      ),
     )
 
     await userEvent.click(
       screen.getByRole('button', { name: 'Откатить к этой версии' }),
     )
     await waitFor(() =>
-      expect(
-        calls.some((c) => c.url.includes('/section-plans/plan-1/rollback')),
-      ).toBe(true),
+      expect(calls.some((c) => c.url.includes('/section-plans/plan-1/rollback'))).toBe(
+        true,
+      ),
     )
   })
 
@@ -635,7 +645,7 @@ describe('вкладка Проекты', () => {
         status: 200,
         headers: {
           'Content-Disposition':
-            "attachment; filename=\"article.docx\"; filename*=UTF-8''%D0%91%D0%B0%D0%BD%D0%BA%D0%B0.docx",
+            'attachment; filename="article.docx"; filename*=UTF-8\'\'%D0%91%D0%B0%D0%BD%D0%BA%D0%B0.docx',
           'Content-Type': 'application/octet-stream',
         },
       }),

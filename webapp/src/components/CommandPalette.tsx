@@ -28,7 +28,7 @@ interface CommandAction {
   description?: string
   icon: React.ReactNode
   onClick: () => void
-  keywords?: string | string[]  // для поиска в Spotlight
+  keywords?: string | string[] // для поиска в Spotlight
 }
 
 interface CommandGroup {
@@ -51,7 +51,7 @@ function makeAction(
   icon: React.ReactNode,
   path: string,
   navigate: (path: string) => void,
-  keywords?: string | string[]
+  keywords?: string | string[],
 ): CommandAction {
   return {
     id,
@@ -88,7 +88,11 @@ export function CommandPalette() {
       // Фильтруем только активные сессии и сортируем по последней активности
       const activeSessions = sessionsData
         .filter((s) => s.status === 'active')
-        .sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.last_activity_at).getTime() -
+            new Date(a.last_activity_at).getTime(),
+        )
         .slice(0, 10)
       setRecentSessions(activeSessions)
     }
@@ -120,7 +124,7 @@ export function CommandPalette() {
       'Дашборд и создание сессий',
       <IconHome size={16} />,
       '/',
-      navigate
+      navigate,
     ),
     makeAction(
       'knowledge',
@@ -128,86 +132,91 @@ export function CommandPalette() {
       'Глобальный корпус документов',
       <IconDatabase size={16} />,
       '/knowledge',
-      navigate
+      navigate,
     ),
   ])
 
   // Недавние сессии
-  const sessionActions = recentSessions.length > 0
-    ? makeGroup('Недавние сессии', recentSessions.map((s) =>
-        makeAction(
-          `session-${s.id}`,
-          `${s.title || 'Без названия'}  ·  ${new Date(s.last_activity_at).toLocaleString()}`,
-          `${s.title || 'Без названия'}  ·  Статус: ${s.status}`,
-          <IconClock size={16} />,
-          `/s/${s.id}/chat`,
-          navigate,
-          [s.title, s.id]
+  const sessionActions =
+    recentSessions.length > 0
+      ? makeGroup(
+          'Недавние сессии',
+          recentSessions.map((s) =>
+            makeAction(
+              `session-${s.id}`,
+              `${s.title || 'Без названия'}  ·  ${new Date(s.last_activity_at).toLocaleString()}`,
+              `${s.title || 'Без названия'}  ·  Статус: ${s.status}`,
+              <IconClock size={16} />,
+              `/s/${s.id}/chat`,
+              navigate,
+              [s.title, s.id],
+            ),
+          ),
         )
-      ))
-    : null
+      : null
 
   // Администрирование
-  const adminActions = user?.role === 'admin'
-    ? makeGroup('Администрирование', [
-        makeAction(
-          'users',
-          'Пользователи',
-          'Администраторы и исследователи',
-          <IconUsers size={16} />,
-          '/admin/users',
-          navigate
-        ),
-        makeAction(
-          'documents',
-          'Глобальная база',
-          'Документы базы знаний',
-          <IconDatabase size={16} />,
-          '/admin/documents',
-          navigate
-        ),
-        makeAction(
-          'tasks',
-          'Задачи',
-          'Фоновые задачи и индексация',
-          <IconListCheck size={16} />,
-          '/admin/tasks',
-          navigate
-        ),
-        makeAction(
-          'sessions',
-          'Сессии',
-          'Активные и архивные сессии',
-          <IconLayoutDashboard size={16} />,
-          '/admin/sessions',
-          navigate
-        ),
-        makeAction(
-          'audit',
-          'Аудит',
-          'Журнал действий администраторов',
-          <IconFileAnalytics size={16} />,
-          '/admin/audit',
-          navigate
-        ),
-        makeAction(
-          'maintenance',
-          'Обслуживание',
-          'Бэкапы и сброс состояния',
-          <IconAdjustments size={16} />,
-          '/admin/maintenance',
-          navigate
-        ),
-        makeAction(
-          'create-user',
-          'Создать пользователя',
-          'Новая учётная запись',
-          <IconPlus size={16} />,
-          '/admin/users',
-          navigate
-        ),
-      ])
-    : null
+  const adminActions =
+    user?.role === 'admin'
+      ? makeGroup('Администрирование', [
+          makeAction(
+            'users',
+            'Пользователи',
+            'Администраторы и исследователи',
+            <IconUsers size={16} />,
+            '/admin/users',
+            navigate,
+          ),
+          makeAction(
+            'documents',
+            'Глобальная база',
+            'Документы базы знаний',
+            <IconDatabase size={16} />,
+            '/admin/documents',
+            navigate,
+          ),
+          makeAction(
+            'tasks',
+            'Задачи',
+            'Фоновые задачи и индексация',
+            <IconListCheck size={16} />,
+            '/admin/tasks',
+            navigate,
+          ),
+          makeAction(
+            'sessions',
+            'Сессии',
+            'Активные и архивные сессии',
+            <IconLayoutDashboard size={16} />,
+            '/admin/sessions',
+            navigate,
+          ),
+          makeAction(
+            'audit',
+            'Аудит',
+            'Журнал действий администраторов',
+            <IconFileAnalytics size={16} />,
+            '/admin/audit',
+            navigate,
+          ),
+          makeAction(
+            'maintenance',
+            'Обслуживание',
+            'Бэкапы и сброс состояния',
+            <IconAdjustments size={16} />,
+            '/admin/maintenance',
+            navigate,
+          ),
+          makeAction(
+            'create-user',
+            'Создать пользователя',
+            'Новая учётная запись',
+            <IconPlus size={16} />,
+            '/admin/users',
+            navigate,
+          ),
+        ])
+      : null
 
   const allActions: SpotlightAction[] = [
     navigationActions,
